@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="CommonHelp/CommonHelp.csproj" />
+  <Project Path="YTMusic.Tests/YTMusic.Tests.csproj" />
+  <Project Path="YTMusic/YTMusic.csproj" />
+</Solution>

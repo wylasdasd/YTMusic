@@ -1,0 +1,84 @@
+@page "/downloads"
+@inject IJSRuntime JSRuntime
+@inject ISnackbar Snackbar
+<MudText Typo="Typo.h4" GutterBottom="true">Downloaded Music</MudText>
+
+@if (ViewModel.IsLoading)
+{
+    <div class="d-flex justify-center mt-8">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+    </div>
+}
+else if (!ViewModel.Files.Any())
+{
+    <MudAlert Severity="Severity.Info" Class="mt-4">No downloaded music found. Go search and download some songs!</MudAlert>
+}
+else
+{
+    <div class="d-flex flex-column gap-4 mt-4">
+        @foreach (var file in ViewModel.Files)
+        {
+            <MudPaper Elevation="2" Class="pa-4 d-flex align-center">
+                @if (!string.IsNullOrEmpty(file.ThumbnailUrl))
+                {
+                    <MudImage Src="@file.ThumbnailUrl" Width="60" Height="60" ObjectFit="ObjectFit.Cover" Class="rounded mr-4" />
+                }
+                else
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.MusicNote" Size="Size.Large" Class="mr-4" Color="Color.Primary" />
+                }
+
+                <div class="d-flex flex-column flex-grow-1" style="overflow: hidden;">
+                    <MudText Typo="Typo.subtitle1" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        @file.Title
+                    </MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">@file.Author</MudText>
+                </div>
+
+                <MudIconButton
+                Icon="@(ViewModel.FavoriteFilePaths.Contains(file.LocalFilePath) ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                Color="@(ViewModel.FavoriteFilePaths.Contains(file.LocalFilePath) ? Color.Error : Color.Default)"
+                OnClick="@(async () => await ViewModel.OpenFavoriteDialogAsync(file))" aria-label="Toggle Favorite" />
+
+                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Default"
+                               OnClick="@(() => CopyToClipboardAsync(file.LocalFilePath))" aria-label="Copy Path" />
+
+                <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Color="Color.Primary"
+                               OnClick="@(() => PlayLocalFile(file))" aria-label="Play" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                               OnClick="@(() => ViewModel.DeleteFileAsync(file))" aria-label="Delete" />
+            </MudPaper>
+        }
+    </div>
+}
+
+@code {
+    [Inject] private DownloadsVM ViewModel { get; set; } = default!;
+    [Inject] private YTMusic.Services.MusicPlayerService PlayerService { get; set; } = default!;
+    [Inject] private NavigationManager NavigationManager { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ViewModel.StateHasChanged = StateHasChanged;
+        await ViewModel.LoadFilesAsync();
+    }
+
+    private async Task PlayLocalFile(YTMusic.Services.DownloadedTrack file)
+    {
+        await PlayerService.PlayLocalFileAsync(file.LocalFilePath, file.Title);
+        NavigationManager.NavigateTo("/player");
+    }
+
+    private async Task CopyToClipboardAsync(string text)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            Snackbar.Add("Path copied to clipboard!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to copy: {ex.Message}", Severity.Error);
+        }
+    }
+}

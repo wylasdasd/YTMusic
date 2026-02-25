@@ -1,0 +1,62 @@
+@page "/transfers"
+@using System.Linq
+@using YTMusic.Services
+@implements IDisposable
+
+<MudText Typo="Typo.h4" GutterBottom="true">Transfers</MudText>
+
+@if (!ViewModel.ActiveDownloads.Any())
+{
+    <MudAlert Severity="Severity.Info" Class="mt-4">No active downloads.</MudAlert>
+}
+else
+{
+    <div class="d-flex flex-column gap-4 mt-4">
+        @foreach (var task in ViewModel.ActiveDownloads.Reverse())
+        {
+            <MudPaper Elevation="2" Class="pa-4">
+                <div class="d-flex justify-space-between align-center mb-2">
+                    <MudText Typo="Typo.subtitle1" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%;">
+                        @task.Title
+                    </MudText>
+                    <MudChip Size="Size.Small" Color="GetStatusColor(task.Status)" T="string">
+                        @(task.IsVideo ? "Video" : "Audio") - @task.Status.ToString()
+                    </MudChip>
+                </div>
+                
+                @if (task.Status == DownloadStatus.Downloading)
+                {
+                    <MudProgressLinear Color="Color.Primary" Value="@(task.Progress * 100)" Class="my-2" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@((task.Progress * 100).ToString("F1"))%</MudText>
+                }
+                else if (task.Status == DownloadStatus.Failed)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Error">@task.ErrorMessage</MudText>
+                }
+            </MudPaper>
+        }
+    </div>
+}
+
+@code {
+    [Inject] private TransfersVM ViewModel { get; set; } = default!;
+
+    protected override void OnInitialized()
+    {
+        ViewModel.StateHasChanged = StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        ViewModel.Dispose();
+    }
+
+    private Color GetStatusColor(DownloadStatus status) => status switch
+    {
+        DownloadStatus.Pending => Color.Default,
+        DownloadStatus.Downloading => Color.Info,
+        DownloadStatus.Completed => Color.Success,
+        DownloadStatus.Failed => Color.Error,
+        _ => Color.Default
+    };
+}

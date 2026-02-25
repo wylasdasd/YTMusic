@@ -1,0 +1,256 @@
+@page "/player"
+@using YTMusic.Services
+@using MudBlazor
+@using YTMusic.Components.Dialogs
+@inject MusicPlayerService PlayerService
+@inject IJSRuntime JSRuntime
+@inject IDialogService DialogService
+@inject IFavoriteService FavoriteService
+@inject IDownloadManagerService DownloadManager
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    @if (PlayerService.CurrentVideo?.VideoId != "local")
+    {
+        <div class="d-flex justify-end mb-2">
+            <MudSwitch @bind-Value="PlayerService.UseWebM" Label="High Quality (WebM/Opus)" Color="Color.Primary" />
+        </div>
+    }
+
+    @if (PlayerService.CurrentVideo != null)
+    {
+        <MudCard Elevation="4" Class="pa-6">
+            <MudCardMedia Image="@PlayerService.CurrentVideo.ThumbnailUrl" Height="300"
+                          Style="border-radius: 8px; background-size: cover; background-position: center;" />
+
+            <MudCardContent Class="text-center mt-4">
+                @if (!string.IsNullOrEmpty(PlayerService.CurrentPlaylistName))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Primary" Style="font-weight: bold; text-transform: uppercase;">
+                        正在播放: @PlayerService.CurrentPlaylistName
+                    </MudText>
+                }
+                <MudText Typo="Typo.h5"
+                         Style="font-weight: bold; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    @PlayerService.CurrentVideo.Title
+                </MudText>
+                <MudText Typo="Typo.subtitle1" Color="Color.Secondary">
+                    @PlayerService.CurrentVideo.Author
+                </MudText>
+            </MudCardContent>
+
+            <div class="px-4 mt-2">
+                <MudSlider T="double" Value="@PlayerService.CurrentTime" Max="@PlayerService.Duration"
+                           ValueChanged="OnSliderValueChanged" Immediate="false" Color="Color.Primary" />
+                <div class="d-flex justify-space-between mt-1">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@FormatTime(PlayerService.CurrentTime)</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@FormatTime(PlayerService.Duration)</MudText>
+                </div>
+            </div>
+
+            <MudCardActions Class="d-flex align-center position-relative mt-2" Style="width: 100%;">
+                <div style="position: absolute; left: 16px; display: flex; align-items: center;">
+                    <MudIconButton
+                    Icon="@(IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                    Color="@(IsFavorite ? Color.Error : Color.Default)" OnClick="OpenFavoriteDialogAsync"
+                    aria-label="Toggle Favorite" />
+                    <MudMenu Icon="@Icons.Material.Filled.Download" Color="Color.Primary" AnchorOrigin="Origin.BottomRight"
+                             TransformOrigin="Origin.TopRight" aria-label="Download">
+                        <MudMenuItem OnClick="@(() => Download(false))">Download Audio</MudMenuItem>
+                        <MudMenuItem OnClick="@(() => Download(true))">Download Video</MudMenuItem>
+                    </MudMenu>
+                </div>
+
+                <div class="d-flex align-center justify-center gap-4 flex-grow-1">
+                    <MudIconButton Icon="@Icons.Material.Filled.SkipPrevious" Size="Size.Large" Variant="Variant.Text"
+                                   OnClick="PlayPreviousTrack" Disabled="@(PlayerService.Playlist.Count == 0)" />
+
+                    @if (PlayerService.IsLoading)
+                    {
+                        <MudProgressCircular Size="Size.Large" Indeterminate="true" Class="mx-2" />
+                    }
+                    else
+                    {
+                        <MudIconButton
+                        Icon="@(PlayerService.IsPlaying ? Icons.Material.Filled.PauseCircle : Icons.Material.Filled.PlayCircle)"
+                        Size="Size.Large" Color="Color.Primary" OnClick="TogglePlay"
+                        Style="width: 64px; height: 64px; font-size: 3rem;" />
+                    }
+
+                    <MudIconButton Icon="@Icons.Material.Filled.SkipNext" Size="Size.Large" Variant="Variant.Text"
+                                   OnClick="PlayNextTrack" Disabled="@(PlayerService.Playlist.Count == 0)" />
+                </div>
+
+                <div style="position: absolute; right: 16px; display: flex; align-items: center;">
+                    <MudIconButton Icon="@GetPlaybackModeIcon(PlayerService.CurrentMode)" Color="Color.Default"
+                                   OnClick="TogglePlaybackMode" aria-label="Toggle Playback Mode"
+                                   Disabled="@(PlayerService.Playlist.Count == 0)" />
+                </div>
+            </MudCardActions>
+        </MudCard>
+    }
+    else
+    {
+        <div class="d-flex flex-column align-center justify-center" style="height: 50vh;">
+            <MudIcon Icon="@Icons.Material.Filled.MusicOff" Style="font-size: 4rem;" Color="Color.Secondary" Class="mb-4" />
+            <MudText Typo="Typo.h5" Color="Color.Secondary">No track is currently playing</MudText>
+        </div>
+    }
+</MudContainer>
+
+@code {
+    private bool IsFavorite = false;
+    private string? _currentCheckedVideoId;
+
+    protected override void OnInitialized()
+    {
+        PlayerService.OnChange += OnStateChanged;
+        PlayerService.OnTimeChanged += OnTimeChanged;
+        _ = CheckFavoriteStatusAsync();
+    }
+
+    private void OnStateChanged()
+    {
+        _ = CheckFavoriteStatusAsync();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnTimeChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CheckFavoriteStatusAsync()
+    {
+        var currentVideo = PlayerService.CurrentVideo;
+        if (currentVideo == null)
+        {
+            IsFavorite = false;
+            _currentCheckedVideoId = null;
+            return;
+        }
+
+        var trackingId = !string.IsNullOrEmpty(currentVideo.LocalFilePath) ? currentVideo.LocalFilePath : currentVideo.VideoId;
+        if (_currentCheckedVideoId == trackingId)
+        {
+            return; // unchanged, do not query DB again
+        }
+
+        _currentCheckedVideoId = trackingId;
+
+        if (!string.IsNullOrEmpty(currentVideo.LocalFilePath))
+        {
+            var track = await FavoriteService.GetTrackByFilePathAsync(currentVideo.LocalFilePath);
+            IsFavorite = track != null;
+        }
+        else
+        {
+            var folders = await FavoriteService.GetFavoriteFolderIdsForVideoAsync(currentVideo.VideoId);
+            IsFavorite = folders.Any();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OpenFavoriteDialogAsync()
+    {
+        var currentVideo = PlayerService.CurrentVideo;
+        if (currentVideo == null) return;
+
+        string videoId = currentVideo.VideoId;
+
+        if (!string.IsNullOrEmpty(currentVideo.LocalFilePath))
+        {
+            var existingTrack = await FavoriteService.GetTrackByFilePathAsync(currentVideo.LocalFilePath);
+            videoId = existingTrack?.VideoId ?? Guid.NewGuid().ToString("N").Substring(0, 11);
+        }
+
+        var parameters = new DialogParameters
+        {
+            { "VideoId", videoId },
+            { "Title", currentVideo.Title },
+            { "Author", currentVideo.Author },
+            { "ThumbnailUrl", currentVideo.ThumbnailUrl },
+            { "LocalFilePath", currentVideo.LocalFilePath }
+        };
+
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<YTMusic.Components.Dialogs.FavoriteFolderDialog>("Add to Favorite Folder",
+parameters, options);
+        await dialog.Result;
+
+        // Force a re-check
+        _currentCheckedVideoId = null;
+        await CheckFavoriteStatusAsync();
+    }
+
+    private async Task TogglePlay()
+    {
+        if (PlayerService.IsPlaying)
+            await JSRuntime.InvokeVoidAsync("audioPlayer.pause");
+        else
+            await JSRuntime.InvokeVoidAsync("audioPlayer.play");
+    }
+
+    private async Task PlayNextTrack()
+    {
+        await PlayerService.PlayNextAsync();
+    }
+
+    private async Task PlayPreviousTrack()
+    {
+        await PlayerService.PlayPreviousAsync();
+    }
+
+    private void TogglePlaybackMode()
+    {
+        PlayerService.TogglePlaybackMode();
+        StateHasChanged(); // Ensure UI updates
+    }
+
+    private string GetPlaybackModeIcon(MusicPlayerService.PlaybackMode mode)
+    {
+        return mode switch
+        {
+            MusicPlayerService.PlaybackMode.Sequential => Icons.Material.Filled.Repeat,
+            MusicPlayerService.PlaybackMode.Random => Icons.Material.Filled.Shuffle,
+            MusicPlayerService.PlaybackMode.SingleLoop => Icons.Material.Filled.RepeatOne,
+            _ => Icons.Material.Filled.Repeat
+        };
+    }
+
+    private async Task OnSliderValueChanged(double value)
+    {
+        await JSRuntime.InvokeVoidAsync("audioPlayer.setCurrentTime", value);
+    }
+
+    private string FormatTime(double seconds)
+    {
+        if (double.IsNaN(seconds) || double.IsInfinity(seconds)) return "00:00";
+        var ts = TimeSpan.FromSeconds(seconds);
+        return ts.ToString(@"mm\:ss");
+    }
+
+    private void Download(bool isVideo)
+    {
+        var currentVideo = PlayerService.CurrentVideo;
+        if (currentVideo == null) return;
+
+        // Exclude local files from downloading since they already exist
+        if (currentVideo.VideoId == "local")
+        {
+            Snackbar.Add("This file is already downloaded.", Severity.Warning);
+            return;
+        }
+
+        DownloadManager.StartDownload(currentVideo.VideoId, currentVideo.Title, isVideo);
+        Snackbar.Add($"Started downloading: {currentVideo.Title}", Severity.Success);
+    }
+
+    public void Dispose()
+    {
+        PlayerService.OnChange -= OnStateChanged;
+        PlayerService.OnTimeChanged -= OnTimeChanged;
+    }
+}

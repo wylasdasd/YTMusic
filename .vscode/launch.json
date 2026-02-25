@@ -1,0 +1,32 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": ".NET MAUI Windows (YTMusic)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/YTMusic/bin/Debug/net10.0-windows10.0.19041.0/win-x64/YTMusic.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}/YTMusic",
+            "console": "internalConsole",
+            "stopAtEntry": false
+        },
+        {
+            "name": ".NET Core Launch (console) - Tests",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build-tests",
+            "program": "${workspaceFolder}/YTMusic.Tests/bin/Debug/net10.0/YTMusic.Tests.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/YTMusic.Tests",
+            "console": "internalConsole",
+            "stopAtEntry": false
+        },
+        {
+            "name": ".NET Core Attach",
+            "type": "coreclr",
+            "request": "attach"
+        }
+    ]
+}

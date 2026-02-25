@@ -1,0 +1,96 @@
+@using YTMusic.Services
+@inject MusicPlayerService PlayerService
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+
+<!-- Persistent audio element across navigation -->
+<audio @ref="_audioElement" autoplay style="display:none;" />
+
+@code {
+    private ElementReference _audioElement;
+    private DotNetObjectReference<GlobalAudioPlayer>? _objRef;
+    private string? _lastUrl = null;
+
+    protected override void OnInitialized()
+    {
+        PlayerService.OnChange += OnPlayerStateChanged;
+        PlayerService.OnRequestReplay += OnRequestReplay;
+    }
+
+    private async void OnRequestReplay()
+    {
+        await InvokeAsync(async () =>
+        {
+            await JSRuntime.InvokeVoidAsync("audioPlayer.setCurrentTime", 0);
+            await JSRuntime.InvokeVoidAsync("audioPlayer.play");
+        });
+    }
+
+    private async void OnPlayerStateChanged()
+    {
+        await InvokeAsync(async () =>
+        {
+            if (PlayerService.CurrentStreamUrl != null && PlayerService.CurrentStreamUrl != _lastUrl)
+            {
+                _lastUrl = PlayerService.CurrentStreamUrl;
+                await JSRuntime.InvokeVoidAsync("audioPlayer.loadAndPlay", PlayerService.CurrentStreamUrl,
+PlayerService.IsCurrentStreamWebM);
+            }
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _objRef = DotNetObjectReference.Create(this);
+            await JSRuntime.InvokeVoidAsync("audioPlayer.init", _audioElement, _objRef);
+
+            if (PlayerService.CurrentStreamUrl != null)
+            {
+                _lastUrl = PlayerService.CurrentStreamUrl;
+                await JSRuntime.InvokeVoidAsync("audioPlayer.loadAndPlay", PlayerService.CurrentStreamUrl,
+PlayerService.IsCurrentStreamWebM);
+            }
+        }
+    }
+
+    [JSInvokable]
+    public void OnTimeUpdate(double currentTime)
+    {
+        PlayerService.UpdateTime(currentTime);
+    }
+
+    [JSInvokable]
+    public void OnLoadedMetadata(double duration)
+    {
+        PlayerService.UpdateDuration(duration);
+    }
+
+    [JSInvokable]
+    public async Task OnEnded()
+    {
+        await PlayerService.OnTrackEndedAsync();
+    }
+
+    [JSInvokable]
+    public void OnPlayStateChanged(bool isPlaying)
+    {
+        PlayerService.SetPlayingState(isPlaying);
+    }
+
+    public void Dispose()
+    {
+        PlayerService.OnChange -= OnPlayerStateChanged;
+        PlayerService.OnRequestReplay -= OnRequestReplay;
+        if (_objRef != null)
+        {
+            _objRef.Dispose();
+            try
+            {
+                _ = JSRuntime.InvokeVoidAsync("audioPlayer.dispose");
+            }
+            catch { }
+        }
+    }
+}

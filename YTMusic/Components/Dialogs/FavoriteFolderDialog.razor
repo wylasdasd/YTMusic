@@ -1,0 +1,151 @@
+@using YTMusic.Services
+@using MudBlazor
+@using Microsoft.AspNetCore.Components
+@inject IFavoriteService FavoriteService
+@inject ISnackbar Snackbar
+<MudDialog>
+    <DialogContent>
+        <div class="d-flex align-center gap-4 mb-4">
+            @if (!string.IsNullOrEmpty(ThumbnailUrl))
+            {
+                <MudImage Src="@ThumbnailUrl" Width="80" Height="45" ObjectFit="ObjectFit.Cover" Elevation="1" />
+            }
+            <div>
+                <MudText Typo="Typo.subtitle1"
+                         Style="font-weight: 500; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;">
+                    @Title</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">@Author</MudText>
+                </div>
+            </div>
+
+            @if (Folders == null)
+            {
+                <div class="d-flex justify-center my-4">
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                </div>
+            }
+            else if (Folders.Count == 0)
+            {
+                <MudText Color="Color.Secondary" Class="my-2">No folders available.</MudText>
+            }
+            else
+            {
+                <MudList T="int" Class="py-0 mb-4" Style="max-height: 250px; overflow-y: auto;">
+                    @foreach (var folder in Folders)
+                    {
+                        bool isChecked = SelectedFolderIds.Contains(folder.Id);
+                        <MudListItem OnClick="() => ToggleFolderSelectionAsync(folder.Id)">
+                            <div class="d-flex align-center w-100">
+                                <MudCheckBox T="bool" Value="@isChecked"
+                                             ValueChanged="@((val) => ToggleFolderSelectionAsync(folder.Id))" Color="Color.Primary"
+                                             Class="mr-3" />
+                                <MudText>@folder.Name</MudText>
+                            </div>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+
+            <MudDivider Class="my-2" />
+
+            <div class="d-flex align-center mt-4">
+                <MudTextField @bind-Value="NewFolderName" Label="New Folder Name" Variant="Variant.Outlined"
+                              Margin="Margin.Dense" Class="flex-grow-1" />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="ml-2" OnClick="CreateNewFolderAsync"
+                           Disabled="@string.IsNullOrWhiteSpace(NewFolderName)">
+                    Create
+                </MudButton>
+            </div>
+        </DialogContent>
+        <DialogActions>
+            <MudButton OnClick="CloseDialog" Color="Color.Primary">Close</MudButton>
+        </DialogActions>
+    </MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string VideoId { get; set; } = string.Empty;
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string Author { get; set; } = string.Empty;
+    [Parameter] public string? ThumbnailUrl { get; set; }
+    [Parameter] public string? LocalFilePath { get; set; }
+
+    private List<FavoriteFolder>? Folders;
+    private HashSet<int> SelectedFolderIds = new();
+    private string NewFolderName = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        if (string.IsNullOrEmpty(VideoId)) return;
+
+        var allFolders = await FavoriteService.GetFoldersAsync();
+        Folders = allFolders;
+
+        var activeIds = await FavoriteService.GetFavoriteFolderIdsForVideoAsync(VideoId);
+        SelectedFolderIds = new HashSet<int>(activeIds);
+    }
+
+    private async Task ToggleFolderSelectionAsync(int folderId)
+    {
+        try
+        {
+            if (SelectedFolderIds.Contains(folderId))
+            {
+                await FavoriteService.RemoveFromFavoritesAsync(VideoId, folderId);
+                SelectedFolderIds.Remove(folderId);
+            }
+            else
+            {
+                await FavoriteService.AddToFavoritesAsync(
+                    videoId: VideoId,
+                    title: Title,
+                    author: Author,
+                    thumbnailUrl: ThumbnailUrl,
+                    folderId: folderId,
+                    localFilePath: LocalFilePath
+                );
+                SelectedFolderIds.Add(folderId);
+            }
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to update folder: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task CreateNewFolderAsync()
+    {
+        if (string.IsNullOrWhiteSpace(NewFolderName)) return;
+
+        try
+        {
+            var newFolder = await FavoriteService.CreateFolderAsync(NewFolderName.Trim());
+            if (Folders != null)
+            {
+                Folders.Add(newFolder);
+            }
+
+            await ToggleFolderSelectionAsync(newFolder.Id);
+
+            NewFolderName = string.Empty;
+            Snackbar.Add("Folder created", Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to create folder: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void CloseDialog()
+    {
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+}

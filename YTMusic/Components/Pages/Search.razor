@@ -1,0 +1,78 @@
+@page "/"
+@page "/search"
+@using YTMusic.Services
+
+<MudText Typo="Typo.h4" GutterBottom="true">Search YouTube Music</MudText>
+
+<MudGrid>
+    <MudItem xs="12" sm="8" md="6">
+        <MudTextField @bind-Value="ViewModel.Query" Label="Search for songs or artists" Variant="Variant.Outlined"
+                      Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search"
+                      OnAdornmentClick="ViewModel.SearchAsync"
+                      OnKeyDown="@(async e => { if (e.Key == "Enter") await ViewModel.SearchAsync(); })" />
+    </MudItem>
+</MudGrid>
+
+@if (ViewModel.Videos.Any())
+{
+    <MudGrid Class="mt-4">
+        @foreach (var video in ViewModel.Videos)
+        {
+            <MudItem xs="12" sm="6" md="4" lg="3">
+                <MudCard Elevation="2" Style="height: 100%; display: flex; flex-direction: column; cursor: pointer;"
+                         @onclick="@(() => PlayAndNavigate(video))">
+                    <MudCardMedia Image="@video.Thumbnails.FirstOrDefault()?.Url" Height="150" Style="position: relative;">
+                    </MudCardMedia>
+                    <MudCardContent Style="flex-grow: 1;">
+                        <MudText Typo="Typo.subtitle1"
+                                 Style="display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;">
+                            @video.Title</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">@video.Author.ChannelTitle</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Tertiary">@video.Duration</MudText>
+                        </MudCardContent>
+                        <MudCardActions>
+                            <MudIconButton Icon="@Icons.Material.Filled.PlayCircle" Color="Color.Primary" aria-label="Play" />
+                            <MudSpacer />
+                            <MudIconButton
+                            Icon="@(ViewModel.FavoriteVideoIds.Contains(video.Id.Value) ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                            Color="@(ViewModel.FavoriteVideoIds.Contains(video.Id.Value) ? Color.Error : Color.Default)"
+                            OnClick="@(async (e) => await ViewModel.OpenFavoriteDialogAsync(video))"
+                            aria-label="Toggle Favorite" />
+                            <div @onclick:stopPropagation="true">
+                                <MudMenu Icon="@Icons.Material.Filled.Download" Color="Color.Primary"
+                                         AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" aria-label="Download">
+                                    <MudMenuItem OnClick="@(() => ViewModel.Download(video, false))">Download Audio (Default)
+                                    </MudMenuItem>
+                                    <MudMenuItem OnClick="@(() => ViewModel.Download(video, true))">Download Video</MudMenuItem>
+                                </MudMenu>
+                            </div>
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+
+        @if (ViewModel.HasMore)
+        {
+            <div class="d-flex justify-center mt-6 mb-6">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ViewModel.LoadNextPageAsync"
+                           Disabled="ViewModel.IsSearching">
+                    @if (ViewModel.IsSearching)
+                    {
+                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                        <MudText Class="ms-2">Loading...</MudText>
+                    }
+                    else
+                    {
+                        <MudText>Load More</MudText>
+                    }
+                </MudButton>
+            </div>
+        }
+    }
+    else if (ViewModel.IsSearching)
+    {
+        <div class="d-flex justify-center mt-8">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+        </div>
+    }

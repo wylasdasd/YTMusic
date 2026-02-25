@@ -1,0 +1,125 @@
+@inherits LayoutComponentBase
+@using MudBlazor
+@using YTMusic.Services
+@inject GlobalStateService GlobalState
+@implements IDisposable
+
+<MudThemeProvider Theme="@_customTheme" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudPopoverProvider />
+
+<MudLayout>
+    <MudOverlay Visible="GlobalState.IsLoading" DarkBackground="true" Absolute="false" ZIndex="9999">
+        <div class="d-flex flex-column align-center justify-center">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+            <MudText Typo="Typo.h6" Color="Color.Primary" Class="mt-4">Loading...</MudText>
+        </div>
+    </MudOverlay>
+
+    <MudAppBar Elevation="1" Color="Color.Surface" Fixed="true">
+        <MudText Typo="Typo.h6" Class="w-100 text-center" Style="font-weight: bold;">YTMusic</MudText>
+    </MudAppBar>
+
+    <MudMainContent Style="padding-bottom: 72px;">
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="my-4 pt-4">
+            @Body
+        </MudContainer>
+        <GlobalAudioPlayer />
+    </MudMainContent>
+
+</MudLayout>
+
+<MudPaper Elevation="8" Class="d-flex justify-space-around align-center py-2"
+          Style="position: fixed; bottom: 0; left: 0; width: 100vw; z-index: 2000; border-radius: 0; background-color: var(--mud-palette-surface);">
+    <div @onclick='() => NavigateToTab("")' class="d-flex flex-column align-center pa-1"
+         style="cursor: pointer; min-width: 60px;">
+        <MudIcon Icon="@Icons.Material.Filled.Search"
+                 Color="@(SelectedNavValue == "Search" ? Color.Primary : Color.Default)" />
+        <MudText Typo="Typo.caption" Style="font-size: 0.65rem;"
+                 Color="@(SelectedNavValue == "Search" ? Color.Primary : Color.Default)">Search</MudText>
+    </div>
+    <div @onclick='() => NavigateToTab("favorites")' class="d-flex flex-column align-center pa-1"
+         style="cursor: pointer; min-width: 60px;">
+        <MudIcon Icon="@Icons.Material.Filled.Favorite"
+                 Color="@(SelectedNavValue == "Favorites" ? Color.Primary : Color.Default)" />
+        <MudText Typo="Typo.caption" Style="font-size: 0.65rem;"
+                 Color="@(SelectedNavValue == "Favorites" ? Color.Primary : Color.Default)">Favorites</MudText>
+    </div>
+    <div @onclick='() => NavigateToTab("player")' class="d-flex flex-column align-center pa-1"
+         style="cursor: pointer; min-width: 60px;">
+        <MudIcon Icon="@Icons.Material.Filled.PlayCircle"
+                 Color="@(SelectedNavValue == "Player" ? Color.Primary : Color.Default)" />
+        <MudText Typo="Typo.caption" Style="font-size: 0.65rem;"
+                 Color="@(SelectedNavValue == "Player" ? Color.Primary : Color.Default)">Player</MudText>
+    </div>
+    <div @onclick='() => NavigateToTab("downloads")' class="d-flex flex-column align-center pa-1"
+         style="cursor: pointer; min-width: 60px;">
+        <MudIcon Icon="@Icons.Material.Filled.LibraryMusic"
+                 Color="@(SelectedNavValue == "Downloads" ? Color.Primary : Color.Default)" />
+        <MudText Typo="Typo.caption" Style="font-size: 0.65rem;"
+                 Color="@(SelectedNavValue == "Downloads" ? Color.Primary : Color.Default)">Downloads</MudText>
+    </div>
+    <div @onclick='() => NavigateToTab("transfers")' class="d-flex flex-column align-center pa-1"
+         style="cursor: pointer; min-width: 60px;">
+        <MudIcon Icon="@Icons.Material.Filled.CloudDownload"
+                 Color="@(SelectedNavValue == "Transfers" ? Color.Primary : Color.Default)" />
+        <MudText Typo="Typo.caption" Style="font-size: 0.65rem;"
+                 Color="@(SelectedNavValue == "Transfers" ? Color.Primary : Color.Default)">Transfers</MudText>
+    </div>
+</MudPaper>
+
+@code {
+    [Inject] private NavigationManager NavigationManager { get; set; } = default!;
+
+    public string SelectedNavValue { get; set; } = "Search";
+
+    protected override void OnInitialized()
+    {
+        GlobalState.OnChange += StateHasChanged;
+        UpdateSelectedNavValue();
+        NavigationManager.LocationChanged += (s, e) => { UpdateSelectedNavValue(); InvokeAsync(StateHasChanged); };
+    }
+
+    private void UpdateSelectedNavValue()
+    {
+        var uri = NavigationManager.ToBaseRelativePath(NavigationManager.Uri).ToLower();
+        if (uri.Contains("favorites")) SelectedNavValue = "Favorites";
+        else if (uri.Contains("player")) SelectedNavValue = "Player";
+        else if (uri.Contains("downloads")) SelectedNavValue = "Downloads";
+        else if (uri.Contains("transfers")) SelectedNavValue = "Transfers";
+        else SelectedNavValue = "Search";
+    }
+
+    private void NavigateToTab(string route)
+    {
+        NavigationManager.NavigateTo(route);
+    }
+
+    public void Dispose()
+    {
+        GlobalState.OnChange -= StateHasChanged;
+    }
+
+    private MudTheme _customTheme = new()
+    {
+        PaletteLight = new PaletteLight()
+        {
+            Primary = "#111111",
+            Secondary = "#0E7490",
+            Tertiary = "#F59E0B",
+            Surface = "#FFFFFF",
+            Background = "#F6F7FB",
+            TextPrimary = "#0F172A",
+            TextSecondary = "#475569",
+            Divider = "#E2E8F0"
+        },
+        PaletteDark = new PaletteDark()
+        {
+            // Optional: you can define a dark theme palette here later if you want Dark Mode
+            Primary = "#111111",
+            Secondary = "#0E7490",
+            Tertiary = "#F59E0B"
+        }
+    };
+}
