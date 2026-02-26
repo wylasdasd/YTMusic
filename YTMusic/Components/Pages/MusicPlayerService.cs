@@ -8,6 +8,8 @@ using YoutubeExplode;
 using YoutubeExplode.Videos;
 using YoutubeExplode.Videos.Streams;
 using YoutubeExplode.Search;
+using CommonTool.TimeHelps;
+using CommonTool.ArrayHelps;
 
 namespace YTMusic.Services
 {
@@ -368,7 +370,7 @@ namespace YTMusic.Services
                 _fileProxy.ContentType = IsCurrentStreamWebM ? "audio/webm" : (filePath.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ? "audio/mpeg" : "audio/mp4");
                 _fileProxy.CurrentFilePath = filePath;
                 
-                CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+                CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
                 IsPlaying = true;
             }
             catch (Exception ex)
@@ -402,7 +404,6 @@ namespace YTMusic.Services
             CurrentPlaylistName = playlistName;
             CurrentPlaylistIndex = startIndex;
             CurrentMode = mode;
-            
             GenerateShuffleIndices();
 
             await PlayInternalAsync(Playlist[CurrentPlaylistIndex]);
@@ -410,29 +411,16 @@ namespace YTMusic.Services
 
         private void GenerateShuffleIndices()
         {
-            _shuffleIndices.Clear();
-            if (Playlist.Count == 0) return;
 
             var indices = Enumerable.Range(0, Playlist.Count).ToList();
             
-            // Remove the current index so it's the first one to play in random mode
             if (CurrentPlaylistIndex >= 0 && CurrentPlaylistIndex < Playlist.Count)
             {
-                indices.Remove(CurrentPlaylistIndex);
-            }
-
-            // Shuffle remaining
-            int n = indices.Count;
-            while (n > 1)
-            {
-                n--;
-                int k = _random.Next(n + 1);
-                var value = indices[k];
-                indices[k] = indices[n];
-                indices[n] = value;
+                indices.RemoveAt(CurrentPlaylistIndex);
             }
 
             _shuffleIndices.Add(CurrentPlaylistIndex);
+            indices.Shuffle();
             _shuffleIndices.AddRange(indices);
         }
 
@@ -586,7 +574,7 @@ namespace YTMusic.Services
                     _proxy.CurrentStreamInfo = streamInfo;
                     
                     // Add a cache buster so the browser doesn't cache the old proxy response
-                    CurrentStreamUrl = $"{_proxy.ProxyUrl}?t={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+                    CurrentStreamUrl = $"{_proxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
                     IsPlaying = true;
                 }
             }

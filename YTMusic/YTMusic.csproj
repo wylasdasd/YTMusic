@@ -68,4 +68,8 @@
         <PackageReference Include="YoutubeExplode" Version="6.5.7" />
     </ItemGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="..\CommonHelp\CommonHelp.csproj" />
+    </ItemGroup>
+
 </Project>
