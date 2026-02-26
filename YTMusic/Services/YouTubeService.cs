@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using CommonTool.FileHelps;
 using YoutubeExplode;
 using YoutubeExplode.Common;
 using YoutubeExplode.Search;
@@ -71,12 +72,9 @@ namespace YTMusic.Services
             }
 
             string musicDirectory = Path.Combine(baseDirectory, "DownloadedMusic");
-            if (!Directory.Exists(musicDirectory))
-            {
-                Directory.CreateDirectory(musicDirectory);
-            }
+            FileHelp.EnsureDirectoryExists(musicDirectory);
 
-            string safeFileName = string.Join("_", fileName.Split(Path.GetInvalidFileNameChars()));
+            string safeFileName = FileHelp.SafeFileName(fileName);
             string filePath = Path.Combine(musicDirectory, $"{safeFileName}.{streamInfo.Container.Name}");
 
             await _youtubeClient.Videos.Streams.DownloadAsync(streamInfo, filePath, progress);

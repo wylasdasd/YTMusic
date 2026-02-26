@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using Dapper;
+using CommonTool.FileHelps;
 
 namespace YTMusic.Services
 {
@@ -63,7 +64,9 @@ namespace YTMusic.Services
                 baseDirectory = Environment.CurrentDirectory;
             }
 
-            string dbPath = Path.Combine(baseDirectory, "YTMusicFavorites.db3");
+            string dbDir = baseDirectory;
+            FileHelp.EnsureDirectoryExists(dbDir);
+            string dbPath = Path.Combine(dbDir, "YTMusicFavorites.db3");
             _connectionString = $"Data Source={dbPath}";
 
             InitializeDatabase();
@@ -224,10 +227,7 @@ namespace YTMusic.Services
             string selectSql = "SELECT LocalFilePath FROM FavoriteTracks WHERE VideoId = @VideoId AND FolderId = @FolderId;";
             var path = await connection.ExecuteScalarAsync<string>(selectSql, new { VideoId = videoId, FolderId = folderId });
             
-            if (!string.IsNullOrEmpty(path) && File.Exists(path))
-            {
-                try { File.Delete(path); } catch { }
-            }
+             FileHelp.DeleteIfExists(path);
 
             await RemoveFromFavoritesAsync(videoId, folderId);
         }

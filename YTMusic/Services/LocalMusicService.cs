@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using Dapper;
+using CommonTool.FileHelps;
 
 namespace YTMusic.Services
 {
@@ -18,7 +19,9 @@ namespace YTMusic.Services
             _favoriteService = favoriteService;
             
             SQLitePCL.Batteries_V2.Init();
-            string dbPath = Path.Combine(GetBaseDirectory(), "YTMusicDownloads.db3");
+            string dbDir = GetBaseDirectory();
+            FileHelp.EnsureDirectoryExists(dbDir);
+            string dbPath = Path.Combine(dbDir, "YTMusicDownloads.db3");
             _connectionString = $"Data Source={dbPath}";
             InitializeDatabase();
         }
@@ -93,10 +96,7 @@ namespace YTMusic.Services
             using var connection = new SqliteConnection(_connectionString);
             await connection.ExecuteAsync("DELETE FROM DownloadedTracks WHERE VideoId = @VideoId;", new { VideoId = videoId });
             
-            if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
-            {
-                try { File.Delete(filePath); } catch { }
-            }
+                FileHelp.DeleteIfExists(filePath);
         }
 
         public Task<IReadOnlyList<LocalAudioFile>> GetDownloadedAudioFilesAsync()
@@ -127,10 +127,7 @@ namespace YTMusic.Services
 
         public async Task DeleteAudioFileAsync(string filePath)
         {
-            if (File.Exists(filePath))
-            {
-                File.Delete(filePath);
-            }
+            FileHelp.DeleteIfExists(filePath);
             await _favoriteService.RemoveTrackByFilePathAsync(filePath);
         }
     }
