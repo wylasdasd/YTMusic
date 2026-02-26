@@ -116,8 +116,20 @@
         InvokeAsync(StateHasChanged);
     }
 
+    private DateTime _lastSliderInteraction = DateTime.MinValue;
+    private double _lastReportedTime = 0;
+
     private void OnTimeChanged()
     {
+        // Skip updates if user just interacted with the slider (avoid jump-back)
+        if (DateTime.UtcNow - _lastSliderInteraction < TimeSpan.FromSeconds(1.5))
+            return;
+
+        // Throttling: only update UI if time changed significantly (e.g. 250ms+)
+        if (Math.Abs(PlayerService.CurrentTime - _lastReportedTime) < 0.25)
+            return;
+
+        _lastReportedTime = PlayerService.CurrentTime;
         InvokeAsync(StateHasChanged);
     }
 
@@ -222,7 +234,10 @@ parameters, options);
 
     private async Task OnSliderValueChanged(double value)
     {
+        _lastSliderInteraction = DateTime.UtcNow;
+        _lastReportedTime = value;
         await JSRuntime.InvokeVoidAsync("audioPlayer.setCurrentTime", value);
+        StateHasChanged(); // Force update to reflect manual seek immediately
     }
 
     private string FormatTime(double seconds)

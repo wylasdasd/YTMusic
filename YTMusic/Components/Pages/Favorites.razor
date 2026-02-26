@@ -69,7 +69,8 @@ else
                             <MudIconButton Icon="@Icons.Material.Filled.PlayCircle" Color="Color.Primary" aria-label="Play" />
                             <MudSpacer />
                             <MudIconButton Icon="@Icons.Material.Filled.Favorite" Color="Color.Primary"
-                                           OnClick="@((e) => { ViewModel.RemoveFavoriteAsync(track); })" aria-label="Remove from favorites" />
+                                           OnClick="@(async (e) => { await ViewModel.RemoveFavoriteAsync(track); })"
+                                           aria-label="Remove from favorites" />
                         </MudCardActions>
                     </MudCard>
                 </MudItem>

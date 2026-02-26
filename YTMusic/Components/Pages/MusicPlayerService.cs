@@ -3,6 +3,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.IO;
 using YoutubeExplode;
 using YoutubeExplode.Videos;
@@ -28,6 +30,7 @@ namespace YTMusic.Services
         private readonly CancellationTokenSource _cts;
         private readonly int _port;
         private readonly YoutubeClient _youtubeClient;
+        private static readonly HttpClient _httpClient = new HttpClient();
 
         public string ProxyUrl { get; private set; }
         public IStreamInfo? CurrentStreamInfo { get; set; }
@@ -86,9 +89,15 @@ namespace YTMusic.Services
                 long end = streamInfo.Size.Bytes - 1;
                 bool isRange = false;
 
-                if (request.Headers["Range"] != null)
+                if (streamInfo == null)
                 {
-                    var rangeHeader = request.Headers["Range"];
+                    response.StatusCode = 404;
+                    return;
+                }
+
+                var rangeHeader = request.Headers["Range"];
+                if (rangeHeader != null)
+                {
                     var range = rangeHeader.Replace("bytes=", "").Split('-');
                     start = long.Parse(range[0]);
                     if (range.Length > 1 && !string.IsNullOrEmpty(range[1]))
@@ -112,26 +121,39 @@ namespace YTMusic.Services
                     return;
                 }
 
-                using var youtubeStream = await _youtubeClient.Videos.Streams.GetAsync(streamInfo);
+                using var requestMessage = new HttpRequestMessage(HttpMethod.Get, streamInfo.Url);
                 
-                if (start > 0 && youtubeStream.CanSeek)
+                if (isRange)
                 {
-                    youtubeStream.Seek(start, SeekOrigin.Begin);
+                    requestMessage.Headers.Range = new RangeHeaderValue(start, end);
                 }
+                
+                using var upstreamResponse = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, _cts.Token);
+                
+                // Propagate actual headers from upstream if possible
+                if (upstreamResponse.Content.Headers.ContentType != null)
+                    response.ContentType = upstreamResponse.Content.Headers.ContentType.ToString();
+                
+                if (upstreamResponse.Content.Headers.ContentLength.HasValue)
+                    response.ContentLength64 = upstreamResponse.Content.Headers.ContentLength.Value;
+
+                if (upstreamResponse.StatusCode == HttpStatusCode.PartialContent && upstreamResponse.Content.Headers.ContentRange != null)
+                {
+                    response.StatusCode = (int)HttpStatusCode.PartialContent;
+                    response.AddHeader("Content-Range", upstreamResponse.Content.Headers.ContentRange.ToString());
+                }
+                else
+                {
+                    response.StatusCode = (int)upstreamResponse.StatusCode;
+                }
+
+                using var youtubeStream = await upstreamResponse.Content.ReadAsStreamAsync(_cts.Token);
 
                 var buffer = new byte[81920];
                 int read;
-                long totalRead = 0;
-                
-                while (totalRead < length && !_cts.IsCancellationRequested)
+                while ((read = await youtubeStream.ReadAsync(buffer, 0, buffer.Length, _cts.Token)) > 0 && !_cts.IsCancellationRequested)
                 {
-                    int bytesToRead = (int)Math.Min(buffer.Length, length - totalRead);
-                    read = await youtubeStream.ReadAsync(buffer, 0, bytesToRead, _cts.Token);
-                    
-                    if (read == 0) break;
-                    
                     await response.OutputStream.WriteAsync(buffer, 0, read);
-                    totalRead += read;
                 }
             }
             catch (Exception)
@@ -213,11 +235,10 @@ namespace YTMusic.Services
 
                 long start = 0;
                 long end = fileInfo.Length - 1;
-                bool isRange = false;
 
-                if (request.Headers["Range"] != null)
+                var rangeHeader = request.Headers["Range"];
+                if (rangeHeader != null)
                 {
-                    var rangeHeader = request.Headers["Range"];
                     var range = rangeHeader.Replace("bytes=", "").Split('-');
                     start = long.Parse(range[0]);
                     if (range.Length > 1 && !string.IsNullOrEmpty(range[1]))
@@ -226,7 +247,6 @@ namespace YTMusic.Services
                     }
                     response.StatusCode = 206;
                     response.AddHeader("Content-Range", $"bytes {start}-{end}/{fileInfo.Length}");
-                    isRange = true;
                 }
                 else
                 {
