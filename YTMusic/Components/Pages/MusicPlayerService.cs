@@ -306,6 +306,7 @@ namespace YTMusic.Services
         private readonly YoutubeClient _youtubeClient;
         private LocalAudioProxy? _proxy;
         private LocalFileProxy? _fileProxy;
+        private readonly SemaphoreSlim _fileProxyInitLock = new SemaphoreSlim(1, 1);
         
         public event Action? OnChange;
         public event Action? OnTimeChanged;
@@ -371,7 +372,7 @@ namespace YTMusic.Services
             await PlayInternalAsync(playingItem);
         }
 
-        public Task PlayLocalFileAsync(string filePath, string title)
+        public async Task PlayLocalFileAsync(string filePath, string title)
         {
             ClearPlaylist();
             CurrentMode = PlaybackMode.SingleLoop;
@@ -391,22 +392,14 @@ namespace YTMusic.Services
             {
                 if (!File.Exists(filePath))
                 {
-                    return Task.CompletedTask;
+                    return;
                 }
 
                 IsCurrentStreamWebM = filePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
-
-                if (OperatingSystem.IsAndroid())
-                {
-                    CurrentStreamUrl = new Uri(filePath).AbsoluteUri;
-                }
-                else
-                {
-                    EnsureProxiesCreated();
-                    _fileProxy!.ContentType = IsCurrentStreamWebM ? "audio/webm" : (filePath.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ? "audio/mpeg" : "audio/mp4");
-                    _fileProxy.CurrentFilePath = filePath;
-                    CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
-                }
+                await EnsureFileProxyCreatedAsync();
+                _fileProxy!.ContentType = IsCurrentStreamWebM ? "audio/webm" : (filePath.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ? "audio/mpeg" : "audio/mp4");
+                _fileProxy.CurrentFilePath = filePath;
+                CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
 
                 IsPlaying = true;
             }
@@ -419,8 +412,6 @@ namespace YTMusic.Services
                 IsLoading = false;
                 NotifyStateChanged();
             }
-            
-            return Task.CompletedTask;
         }
 
         public void ClearPlaylist()
@@ -595,17 +586,10 @@ namespace YTMusic.Services
 
                     IsCurrentStreamWebM = video.LocalFilePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
 
-                    if (OperatingSystem.IsAndroid())
-                    {
-                        CurrentStreamUrl = new Uri(video.LocalFilePath).AbsoluteUri;
-                    }
-                    else
-                    {
-                        EnsureProxiesCreated();
-                        _fileProxy!.ContentType = IsCurrentStreamWebM ? "audio/webm" : (video.LocalFilePath.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ? "audio/mpeg" : "audio/mp4");
-                        _fileProxy.CurrentFilePath = video.LocalFilePath;
-                        CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
-                    }
+                    await EnsureFileProxyCreatedAsync();
+                    _fileProxy!.ContentType = IsCurrentStreamWebM ? "audio/webm" : (video.LocalFilePath.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ? "audio/mpeg" : "audio/mp4");
+                    _fileProxy.CurrentFilePath = video.LocalFilePath;
+                    CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
 
                     IsPlaying = true;
                     return;
@@ -666,6 +650,36 @@ namespace YTMusic.Services
         {
             _proxy ??= new LocalAudioProxy(_youtubeClient);
             _fileProxy ??= new LocalFileProxy();
+        }
+
+        private async Task EnsureFileProxyCreatedAsync()
+        {
+            if (_fileProxy != null)
+            {
+                return;
+            }
+
+            await _fileProxyInitLock.WaitAsync();
+            try
+            {
+                if (_fileProxy != null)
+                {
+                    return;
+                }
+
+                if (OperatingSystem.IsAndroid())
+                {
+                    _fileProxy = await Task.Run(() => new LocalFileProxy());
+                }
+                else
+                {
+                    _fileProxy = new LocalFileProxy();
+                }
+            }
+            finally
+            {
+                _fileProxyInitLock.Release();
+            }
         }
 
         private async Task<IStreamInfo?> GetPreferredAudioStreamInfoAsync(string videoId, bool useWebM)

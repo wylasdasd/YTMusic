@@ -44,7 +44,7 @@ namespace YTMusic.Services
         {
             var streamManifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId);
             IStreamInfo? streamInfo;
-            
+
             if (isVideo)
             {
                 streamInfo = streamManifest.GetMuxedStreams().GetWithHighestVideoQuality();
@@ -59,19 +59,7 @@ namespace YTMusic.Services
                 throw new InvalidOperationException($"No {(isVideo ? "video" : "audio")} stream found.");
             }
 
-            string baseDirectory;
-            try
-            {
-                // Cross-platform application data directory
-                baseDirectory = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            }
-            catch
-            {
-                // Fallback for Unit Tests or when directory is inaccessible
-                baseDirectory = Environment.CurrentDirectory;
-            }
-
-            string musicDirectory = Path.Combine(baseDirectory, "DownloadedMusic");
+            string musicDirectory = StoragePaths.GetDownloadedMusicDirectory();
             FileHelp.EnsureDirectoryExists(musicDirectory);
 
             string safeFileName = FileHelp.SafeFileName(fileName);

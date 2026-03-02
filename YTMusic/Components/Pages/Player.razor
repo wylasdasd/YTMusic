@@ -49,20 +49,26 @@
                 </div>
             </div>
 
-            <MudCardActions Class="d-flex align-center position-relative mt-2" Style="width: 100%;">
-                <div style="position: absolute; left: 16px; display: flex; align-items: center;">
-                    <MudIconButton
-                    Icon="@(IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
-                    Color="@(IsFavorite ? Color.Error : Color.Default)" OnClick="OpenFavoriteDialogAsync"
-                    aria-label="Toggle Favorite" />
-                    <MudMenu Icon="@Icons.Material.Filled.Download" Color="Color.Primary" AnchorOrigin="Origin.BottomRight"
-                             TransformOrigin="Origin.TopRight" aria-label="Download">
-                        <MudMenuItem OnClick="@(() => Download(false))">Download Audio</MudMenuItem>
-                        <MudMenuItem OnClick="@(() => Download(true))">Download Video</MudMenuItem>
-                    </MudMenu>
+            <MudCardActions Class="mt-2" Style="width: 100%; display: flex; flex-direction: column; gap: 4px;">
+                <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                    <div class="d-flex align-center">
+                        <MudIconButton
+                        Icon="@(IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                        Color="@(IsFavorite ? Color.Error : Color.Default)" OnClick="OpenFavoriteDialogAsync"
+                        aria-label="Toggle Favorite" />
+                        <MudMenu Icon="@Icons.Material.Filled.Download" Color="Color.Primary" AnchorOrigin="Origin.BottomRight"
+                                 TransformOrigin="Origin.TopRight" aria-label="Download">
+                            <MudMenuItem OnClick="@(() => Download(false))">Download Audio</MudMenuItem>
+                            <MudMenuItem OnClick="@(() => Download(true))">Download Video</MudMenuItem>
+                        </MudMenu>
+                    </div>
+
+                    <MudIconButton Icon="@GetPlaybackModeIcon(PlayerService.CurrentMode)" Color="Color.Default"
+                                   OnClick="TogglePlaybackMode" aria-label="Toggle Playback Mode"
+                                   Disabled="@(PlayerService.Playlist.Count == 0)" />
                 </div>
 
-                <div class="d-flex align-center justify-center gap-4 flex-grow-1">
+                <div class="d-flex align-center justify-center" style="width: 100%; gap: 14px;">
                     <MudIconButton Icon="@Icons.Material.Filled.SkipPrevious" Size="Size.Large" Variant="Variant.Text"
                                    OnClick="PlayPreviousTrack" Disabled="@(PlayerService.Playlist.Count == 0)" />
 
@@ -80,12 +86,6 @@
 
                     <MudIconButton Icon="@Icons.Material.Filled.SkipNext" Size="Size.Large" Variant="Variant.Text"
                                    OnClick="PlayNextTrack" Disabled="@(PlayerService.Playlist.Count == 0)" />
-                </div>
-
-                <div style="position: absolute; right: 16px; display: flex; align-items: center;">
-                    <MudIconButton Icon="@GetPlaybackModeIcon(PlayerService.CurrentMode)" Color="Color.Default"
-                                   OnClick="TogglePlaybackMode" aria-label="Toggle Playback Mode"
-                                   Disabled="@(PlayerService.Playlist.Count == 0)" />
                 </div>
             </MudCardActions>
         </MudCard>

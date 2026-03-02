@@ -55,7 +55,7 @@ namespace YTMusic.Services
 
         private string GetMusicDirectory()
         {
-            return Path.Combine(GetBaseDirectory(), "DownloadedMusic");
+            return StoragePaths.GetDownloadedMusicDirectory();
         }
 
         public async Task<IReadOnlyList<DownloadedTrack>> GetDownloadedTracksAsync()
