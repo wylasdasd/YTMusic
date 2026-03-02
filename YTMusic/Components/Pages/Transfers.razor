@@ -43,7 +43,7 @@ else
 
     protected override void OnInitialized()
     {
-        ViewModel.StateHasChanged = StateHasChanged;
+        ViewModel.StateHasChanged = () => InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()

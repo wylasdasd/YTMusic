@@ -42,42 +42,45 @@ namespace YTMusic.Services
             taskInfo.Status = DownloadStatus.Downloading;
             OnDownloadsChanged?.Invoke();
 
-            try
+            await Task.Run(async () =>
             {
-                var progress = new Progress<double>(p => 
+                try
                 {
-                    taskInfo.Progress = p;
+                    var progress = new Progress<double>(p => 
+                    {
+                        taskInfo.Progress = p;
+                        OnDownloadsChanged?.Invoke();
+                    });
+
+                    string filePath = await _youTubeService.DownloadAsync(taskInfo.VideoId, taskInfo.Title, taskInfo.IsVideo, progress);
+
+                    // Add to Download History Database
+                    await _localMusicService.AddDownloadedTrackAsync(new DownloadedTrack
+                    {
+                        VideoId = taskInfo.VideoId,
+                        Title = taskInfo.Title,
+                        Author = "Unknown Artist", // Can be enhanced later to fetch real author
+                        ThumbnailUrl = $"https://img.youtube.com/vi/{taskInfo.VideoId}/mqdefault.jpg",
+                        LocalFilePath = filePath,
+                        DownloadedDate = DateTime.UtcNow
+                    });
+
+                    // Update favorite if it's there
+                    await _favoriteService.UpdateLocalFilePathAsync(taskInfo.VideoId, filePath);
+
+                    taskInfo.Status = DownloadStatus.Completed;
+                    taskInfo.Progress = 1.0;
+                }
+                catch (Exception ex)
+                {
+                    taskInfo.Status = DownloadStatus.Failed;
+                    taskInfo.ErrorMessage = ex.Message;
+                }
+                finally
+                {
                     OnDownloadsChanged?.Invoke();
-                });
-
-                string filePath = await _youTubeService.DownloadAsync(taskInfo.VideoId, taskInfo.Title, taskInfo.IsVideo, progress);
-
-                // Add to Download History Database
-                await _localMusicService.AddDownloadedTrackAsync(new DownloadedTrack
-                {
-                    VideoId = taskInfo.VideoId,
-                    Title = taskInfo.Title,
-                    Author = "Unknown Artist", // Can be enhanced later to fetch real author
-                    ThumbnailUrl = $"https://img.youtube.com/vi/{taskInfo.VideoId}/mqdefault.jpg",
-                    LocalFilePath = filePath,
-                    DownloadedDate = DateTime.UtcNow
-                });
-
-                // Update favorite if it's there
-                await _favoriteService.UpdateLocalFilePathAsync(taskInfo.VideoId, filePath);
-
-                taskInfo.Status = DownloadStatus.Completed;
-                taskInfo.Progress = 1.0;
-            }
-            catch (Exception ex)
-            {
-                taskInfo.Status = DownloadStatus.Failed;
-                taskInfo.ErrorMessage = ex.Message;
-            }
-            finally
-            {
-                OnDownloadsChanged?.Invoke();
-            }
+                }
+            });
         }
     }
 }
