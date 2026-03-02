@@ -1,5 +1,6 @@
 # 意图
 不想给youtube music 充钱，所以才开发了这个。使用自己挂vpn
+已适配安卓 和 win 。ios mac 没适配（我不用苹果）
 # YTMusic
 
 YTMusic 是一款基于 **.NET MAUI** 和 **Blazor Hybrid** 构建的跨平台音乐流媒体与下载应用。它利用庞大的 YouTube 曲库，让您可以直接在设备上搜索、播放和下载音乐与视频。
