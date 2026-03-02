@@ -12,7 +12,7 @@ window.audioPlayer = {
         this.activePlayer = element;
 
         if (typeof OGVPlayer !== 'undefined') {
-            OGVLoader.base = 'https://cdnjs.cloudflare.com/ajax/libs/ogv.js/1.10.0'; // Updated version
+            OGVLoader.base = 'https://cdnjs.cloudflare.com/ajax/libs/ogv.js/1.8.9';
             this.ogvPlayer = new OGVPlayer();
         }
 
