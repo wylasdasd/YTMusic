@@ -3,7 +3,6 @@
 @using MudBlazor
 @using YTMusic.Components.Dialogs
 @inject MusicPlayerService PlayerService
-@inject IJSRuntime JSRuntime
 @inject IDialogService DialogService
 @inject IFavoriteService FavoriteService
 @inject IDownloadManagerService DownloadManager
@@ -200,9 +199,9 @@ parameters, options);
     private async Task TogglePlay()
     {
         if (PlayerService.IsPlaying)
-            await JSRuntime.InvokeVoidAsync("audioPlayer.pause");
+            await PlayerService.PauseAsync();
         else
-            await JSRuntime.InvokeVoidAsync("audioPlayer.play");
+            await PlayerService.ResumeAsync();
     }
 
     private async Task PlayNextTrack()
@@ -236,7 +235,7 @@ parameters, options);
     {
         _lastSliderInteraction = DateTime.UtcNow;
         _lastReportedTime = value;
-        await JSRuntime.InvokeVoidAsync("audioPlayer.setCurrentTime", value);
+        await PlayerService.SeekAsync(value);
         StateHasChanged(); // Force update to reflect manual seek immediately
     }
 
