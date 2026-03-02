@@ -5,6 +5,36 @@ window.audioPlayer = {
     activePlayer: null,
     isSeeking: false,
     seekTimer: null,
+    describeMediaError: function (player) {
+        if (!player || !player.error) return "none";
+        const code = player.error.code;
+        const map = {
+            1: "MEDIA_ERR_ABORTED",
+            2: "MEDIA_ERR_NETWORK",
+            3: "MEDIA_ERR_DECODE",
+            4: "MEDIA_ERR_SRC_NOT_SUPPORTED"
+        };
+        return `${map[code] || "UNKNOWN"}(${code})`;
+    },
+    reportError: function (tag, player, err) {
+        const payload = {
+            tag: tag,
+            errName: err && err.name ? err.name : "",
+            errMessage: err && err.message ? err.message : String(err || ""),
+            mediaError: this.describeMediaError(player),
+            src: player && player.currentSrc ? player.currentSrc : (player && player.src ? player.src : ""),
+            readyState: player && typeof player.readyState === "number" ? player.readyState : -1,
+            networkState: player && typeof player.networkState === "number" ? player.networkState : -1,
+            paused: !!(player && player.paused),
+            ended: !!(player && player.ended),
+            currentTime: player && typeof player.currentTime === "number" ? player.currentTime : 0
+        };
+
+        console.error("audioPlayer diagnostic:", payload);
+        if (this.dotNetHelper) {
+            this.dotNetHelper.invokeMethodAsync('OnPlaybackError', JSON.stringify(payload));
+        }
+    },
 
     init: function (element, helper) {
         this.dotNetHelper = helper;
@@ -52,6 +82,15 @@ window.audioPlayer = {
                 window.audioPlayer.dotNetHelper.invokeMethodAsync('OnPlayStateChanged', false);
             }
         };
+        player.onerror = function () {
+            window.audioPlayer.reportError("media.onerror", player, player.error || new Error("media element error"));
+        };
+        player.onstalled = function () {
+            console.warn("audioPlayer stalled", { src: player.currentSrc || player.src || "" });
+        };
+        player.onwaiting = function () {
+            console.warn("audioPlayer waiting", { src: player.currentSrc || player.src || "" });
+        };
     },
 
     loadAndPlay: function (url, isWebM) {
@@ -71,12 +110,12 @@ window.audioPlayer = {
         }
 
         this.activePlayer.src = url;
-        this.activePlayer.play().catch(e => console.error("Play error:", e));
+        this.activePlayer.play().catch(e => this.reportError("loadAndPlay.play", this.activePlayer, e));
     },
 
     play: function () {
         if (this.activePlayer) {
-            this.activePlayer.play().catch(e => console.error("Play error:", e));
+            this.activePlayer.play().catch(e => this.reportError("play", this.activePlayer, e));
         }
     },
     pause: function () {

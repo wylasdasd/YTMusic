@@ -79,6 +79,12 @@ PlayerService.IsCurrentStreamWebM);
         PlayerService.SetPlayingState(isPlaying);
     }
 
+    [JSInvokable]
+    public void OnPlaybackError(string details)
+    {
+        Console.WriteLine($"[AudioPlaybackError] {details}");
+    }
+
     public void Dispose()
     {
         PlayerService.OnChange -= OnPlayerStateChanged;

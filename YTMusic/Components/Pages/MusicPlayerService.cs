@@ -304,8 +304,8 @@ namespace YTMusic.Services
     public class MusicPlayerService
     {
         private readonly YoutubeClient _youtubeClient;
-        private readonly LocalAudioProxy _proxy;
-        private readonly LocalFileProxy _fileProxy;
+        private LocalAudioProxy? _proxy;
+        private LocalFileProxy? _fileProxy;
         
         public event Action? OnChange;
         public event Action? OnTimeChanged;
@@ -331,8 +331,11 @@ namespace YTMusic.Services
         public MusicPlayerService()
         {
             _youtubeClient = new YoutubeClient();
-            _proxy = new LocalAudioProxy(_youtubeClient);
-            _fileProxy = new LocalFileProxy();
+            if (!OperatingSystem.IsAndroid())
+            {
+                _proxy = new LocalAudioProxy(_youtubeClient);
+                _fileProxy = new LocalFileProxy();
+            }
         }
 
         public async Task PlayAsync(VideoSearchResult video)
@@ -386,11 +389,25 @@ namespace YTMusic.Services
 
             try
             {
+                if (!File.Exists(filePath))
+                {
+                    return Task.CompletedTask;
+                }
+
                 IsCurrentStreamWebM = filePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
-                _fileProxy.ContentType = IsCurrentStreamWebM ? "audio/webm" : (filePath.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ? "audio/mpeg" : "audio/mp4");
-                _fileProxy.CurrentFilePath = filePath;
-                
-                CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
+
+                if (OperatingSystem.IsAndroid())
+                {
+                    CurrentStreamUrl = new Uri(filePath).AbsoluteUri;
+                }
+                else
+                {
+                    EnsureProxiesCreated();
+                    _fileProxy!.ContentType = IsCurrentStreamWebM ? "audio/webm" : (filePath.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ? "audio/mpeg" : "audio/mp4");
+                    _fileProxy.CurrentFilePath = filePath;
+                    CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
+                }
+
                 IsPlaying = true;
             }
             catch (Exception ex)
@@ -569,32 +586,49 @@ namespace YTMusic.Services
                 IsPlaying = false; // Reset playing state while loading
                 NotifyStateChanged();
 
-                // 获取流媒体清单
-                var streamManifest = await _youtubeClient.Videos.Streams.GetManifestAsync(video.VideoId);
-                
-                IStreamInfo? streamInfo = null;
+                if (!string.IsNullOrEmpty(video.LocalFilePath))
+                {
+                    if (!File.Exists(video.LocalFilePath))
+                    {
+                        return;
+                    }
 
-                if (UseWebM)
-                {
-                    // 使用 WebM / 最高音质
-                    streamInfo = streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate();
+                    IsCurrentStreamWebM = video.LocalFilePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
+
+                    if (OperatingSystem.IsAndroid())
+                    {
+                        CurrentStreamUrl = new Uri(video.LocalFilePath).AbsoluteUri;
+                    }
+                    else
+                    {
+                        EnsureProxiesCreated();
+                        _fileProxy!.ContentType = IsCurrentStreamWebM ? "audio/webm" : (video.LocalFilePath.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ? "audio/mpeg" : "audio/mp4");
+                        _fileProxy.CurrentFilePath = video.LocalFilePath;
+                        CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
+                    }
+
+                    IsPlaying = true;
+                    return;
                 }
-                else
-                {
-                    // 获取兼容性最好的音频流 (优先 MP4/AAC, 其次再选其他最高音质)
-                    streamInfo = streamManifest.GetAudioOnlyStreams()
-                        .Where(s => s.Container == Container.Mp4)
-                        .GetWithHighestBitrate() ?? streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate();
-                }
+
+                var streamInfo = await GetPreferredAudioStreamInfoAsync(video.VideoId, UseWebM);
 
                 if (streamInfo != null)
                 {
                     IsCurrentStreamWebM = streamInfo.Container.Name.ToLower().Contains("webm");
-                    _proxy.ContentType = IsCurrentStreamWebM ? "audio/webm" : "audio/mp4";
-                    _proxy.CurrentStreamInfo = streamInfo;
-                    
-                    // Add a cache buster so the browser doesn't cache the old proxy response
-                    CurrentStreamUrl = $"{_proxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
+
+                    if (OperatingSystem.IsAndroid())
+                    {
+                        CurrentStreamUrl = streamInfo.Url;
+                    }
+                    else
+                    {
+                        EnsureProxiesCreated();
+                        _proxy!.ContentType = IsCurrentStreamWebM ? "audio/webm" : "audio/mp4";
+                        _proxy.CurrentStreamInfo = streamInfo;
+                        CurrentStreamUrl = $"{_proxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
+                    }
+
                     IsPlaying = true;
                 }
             }
@@ -626,6 +660,43 @@ namespace YTMusic.Services
         {
             Duration = duration > 0 ? duration : 100;
             OnTimeChanged?.Invoke();
+        }
+
+        private void EnsureProxiesCreated()
+        {
+            _proxy ??= new LocalAudioProxy(_youtubeClient);
+            _fileProxy ??= new LocalFileProxy();
+        }
+
+        private async Task<IStreamInfo?> GetPreferredAudioStreamInfoAsync(string videoId, bool useWebM)
+        {
+            if (OperatingSystem.IsAndroid())
+            {
+                // YoutubeExplode internals may hit synchronous network APIs on Android.
+                // Force manifest parsing off the UI thread to avoid NetworkOnMainThreadException.
+                return await Task.Run(async () =>
+                {
+                    var streamManifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId);
+                    if (useWebM)
+                    {
+                        return streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate();
+                    }
+
+                    return streamManifest.GetAudioOnlyStreams()
+                        .Where(s => s.Container == Container.Mp4)
+                        .GetWithHighestBitrate() ?? streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate();
+                });
+            }
+
+            var manifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId);
+            if (useWebM)
+            {
+                return manifest.GetAudioOnlyStreams().GetWithHighestBitrate();
+            }
+
+            return manifest.GetAudioOnlyStreams()
+                .Where(s => s.Container == Container.Mp4)
+                .GetWithHighestBitrate() ?? manifest.GetAudioOnlyStreams().GetWithHighestBitrate();
         }
 
         private void NotifyStateChanged() => OnChange?.Invoke();
