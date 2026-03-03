@@ -1,5 +1,5 @@
 # 意图
-不想给youtube music 充钱，所以才开发了这个。使用自己挂vpn
+不想给youtube music 充钱，所以才开发了这个。使用自己挂vpn(可以后台播放的在另一个分支，但存在首屏加载慢的问题)
 已适配安卓 和 win 。ios mac 没适配（我不用苹果）
 # YTMusic
 
