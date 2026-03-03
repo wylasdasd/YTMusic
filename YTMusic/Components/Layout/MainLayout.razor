@@ -71,6 +71,7 @@
 
 @code {
     [Inject] private NavigationManager NavigationManager { get; set; } = default!;
+    private EventHandler<LocationChangedEventArgs>? _locationChangedHandler;
 
     public string SelectedNavValue { get; set; } = "Search";
 
@@ -78,7 +79,14 @@
     {
         GlobalState.OnChange += StateHasChanged;
         UpdateSelectedNavValue();
-        NavigationManager.LocationChanged += (s, e) => { UpdateSelectedNavValue(); InvokeAsync(StateHasChanged); };
+        _locationChangedHandler = OnLocationChanged;
+        NavigationManager.LocationChanged += _locationChangedHandler;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        UpdateSelectedNavValue();
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private void UpdateSelectedNavValue()
@@ -99,6 +107,11 @@
     public void Dispose()
     {
         GlobalState.OnChange -= StateHasChanged;
+        if (_locationChangedHandler != null)
+        {
+            NavigationManager.LocationChanged -= _locationChangedHandler;
+            _locationChangedHandler = null;
+        }
     }
 
     private MudTheme _customTheme = new()

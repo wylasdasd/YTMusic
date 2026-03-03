@@ -460,15 +460,16 @@ namespace YTMusic.Services
 
         private void GenerateShuffleIndices()
         {
+            _shuffleIndices.Clear();
 
             var indices = Enumerable.Range(0, Playlist.Count).ToList();
             
             if (CurrentPlaylistIndex >= 0 && CurrentPlaylistIndex < Playlist.Count)
             {
                 indices.RemoveAt(CurrentPlaylistIndex);
+                _shuffleIndices.Add(CurrentPlaylistIndex);
             }
 
-            _shuffleIndices.Add(CurrentPlaylistIndex);
             indices.Shuffle();
             _shuffleIndices.AddRange(indices);
         }
