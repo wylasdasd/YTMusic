@@ -28,19 +28,50 @@ namespace YTMusic.Services
 
         public async Task<string?> GetAudioOnlyStreamUrlAsync(string videoId)
         {
-            var streamManifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId);
-            var audioStreamInfo = streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate();
-            return audioStreamInfo?.Url;
+            if (OperatingSystem.IsAndroid())
+            {
+                return await Task.Run(async () =>
+                {
+                    var streamManifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId);
+                    var audioStreamInfo = streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate();
+                    return audioStreamInfo?.Url;
+                });
+            }
+
+            var manifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId);
+            var streamInfo = manifest.GetAudioOnlyStreams().GetWithHighestBitrate();
+            return streamInfo?.Url;
         }
 
         public async Task<string?> GetMuxedStreamUrlAsync(string videoId)
         {
-            var streamManifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId);
-            var muxedStreamInfo = streamManifest.GetMuxedStreams().GetWithHighestVideoQuality();
-            return muxedStreamInfo?.Url;
+            if (OperatingSystem.IsAndroid())
+            {
+                return await Task.Run(async () =>
+                {
+                    var streamManifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId);
+                    var muxedStreamInfo = streamManifest.GetMuxedStreams().GetWithHighestVideoQuality();
+                    return muxedStreamInfo?.Url;
+                });
+            }
+
+            var manifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId);
+            var streamInfo = manifest.GetMuxedStreams().GetWithHighestVideoQuality();
+            return streamInfo?.Url;
         }
 
         public async Task<string> DownloadAsync(string videoId, string fileName, bool isVideo, System.IProgress<double>? progress = null)
+        {
+            if (OperatingSystem.IsAndroid())
+            {
+                // YoutubeExplode 在 Android 某些路径会命中同步网络 API，必须避开主线程。
+                return await Task.Run(() => DownloadCoreAsync(videoId, fileName, isVideo, progress));
+            }
+
+            return await DownloadCoreAsync(videoId, fileName, isVideo, progress);
+        }
+
+        private async Task<string> DownloadCoreAsync(string videoId, string fileName, bool isVideo, System.IProgress<double>? progress)
         {
             var streamManifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId);
             IStreamInfo? streamInfo;
