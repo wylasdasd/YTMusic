@@ -97,6 +97,7 @@ namespace YTMusic.Components.Pages
                     { "VideoId", file.VideoId },
                     { "Title", file.Title },
                     { "Author", file.Author },
+                    { "ThumbnailUrl", file.ThumbnailUrl },
                     { "LocalFilePath", file.LocalFilePath }
                 };
 
