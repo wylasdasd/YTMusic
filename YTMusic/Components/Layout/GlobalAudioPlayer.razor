@@ -15,6 +15,9 @@
     {
         PlayerService.OnChange += OnPlayerStateChanged;
         PlayerService.OnRequestReplay += OnRequestReplay;
+        PlayerService.OnRequestPause += OnRequestPause;
+        PlayerService.OnRequestPlay += OnRequestPlay;
+        PlayerService.OnRequestSeek += OnRequestSeek;
     }
 
     private async void OnRequestReplay()
@@ -28,6 +31,11 @@
 
     private async void OnPlayerStateChanged()
     {
+        if (PlayerService.UseNativePlayback)
+        {
+            return;
+        }
+
         await InvokeAsync(async () =>
         {
             if (PlayerService.CurrentStreamUrl != null && PlayerService.CurrentStreamUrl != _lastUrl)
@@ -46,13 +54,28 @@ PlayerService.IsCurrentStreamWebM);
             _objRef = DotNetObjectReference.Create(this);
             await JSRuntime.InvokeVoidAsync("audioPlayer.init", _audioElement, _objRef);
 
-            if (PlayerService.CurrentStreamUrl != null)
+            if (!PlayerService.UseNativePlayback && PlayerService.CurrentStreamUrl != null)
             {
                 _lastUrl = PlayerService.CurrentStreamUrl;
                 await JSRuntime.InvokeVoidAsync("audioPlayer.loadAndPlay", PlayerService.CurrentStreamUrl,
 PlayerService.IsCurrentStreamWebM);
             }
         }
+    }
+
+    private async void OnRequestPause()
+    {
+        await InvokeAsync(async () => await JSRuntime.InvokeVoidAsync("audioPlayer.pause"));
+    }
+
+    private async void OnRequestPlay()
+    {
+        await InvokeAsync(async () => await JSRuntime.InvokeVoidAsync("audioPlayer.play"));
+    }
+
+    private async void OnRequestSeek(double positionSeconds)
+    {
+        await InvokeAsync(async () => await JSRuntime.InvokeVoidAsync("audioPlayer.setCurrentTime", positionSeconds));
     }
 
     [JSInvokable]
@@ -89,6 +112,9 @@ PlayerService.IsCurrentStreamWebM);
     {
         PlayerService.OnChange -= OnPlayerStateChanged;
         PlayerService.OnRequestReplay -= OnRequestReplay;
+        PlayerService.OnRequestPause -= OnRequestPause;
+        PlayerService.OnRequestPlay -= OnRequestPlay;
+        PlayerService.OnRequestSeek -= OnRequestSeek;
         if (_objRef != null)
         {
             _objRef.Dispose();
