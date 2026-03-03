@@ -2,23 +2,29 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Android.Content;
-using Android.Media;
 using Android.OS;
 using Application = Android.App.Application;
-using Uri = Android.Net.Uri;
+using AndroidX.Media3.ExoPlayer;
+using AndroidX.Media3.Common;
+using Microsoft.Maui.ApplicationModel;
+using Object = Java.Lang.Object;
 
 namespace YTMusic.Platforms.Android.Services
 {
-    public class AndroidNativeAudioPlaybackService : YTMusic.Services.INativeAudioPlaybackService
+    public class AndroidNativeAudioPlaybackService : Object, YTMusic.Services.INativeAudioPlaybackService, IPlayerListener
     {
+        private const int PlaybackStateEnded = 4; // Media3 Player.STATE_ENDED
         private readonly Context _context;
-        private MediaPlayer? _player;
+        private IExoPlayer? _player;
         private Timer? _positionTimer;
-        private bool _isPrepared;
+        private bool _foregroundServiceStarted;
 
         public bool IsSupported => true;
+
         public event Action<double, double>? PositionChanged;
+
         public event Action<bool>? PlayingStateChanged;
+
         public event Action? PlaybackEnded;
 
         public AndroidNativeAudioPlaybackService()
@@ -28,50 +34,18 @@ namespace YTMusic.Platforms.Android.Services
 
         public async Task PlayAsync(string source, bool isLocalFile, string? title, string? artist)
         {
-            await StopAsync();
-            EnsurePlayer();
-
-            var player = _player!;
-            var preparedTcs = new TaskCompletionSource<bool>();
-
-            player.Prepared += OnPrepared;
-            player.Completion += OnCompletion;
-            player.Error += OnError;
-
-            void OnPrepared(object? sender, EventArgs args)
+            await StopAsync(); // Clean up previous player before creating a new one
+            await RunOnMainThreadAsync(() =>
             {
-                _isPrepared = true;
-                preparedTcs.TrySetResult(true);
-            }
+                EnsurePlayer();
 
-            void OnCompletion(object? sender, EventArgs args)
-            {
-                StopTimer();
-                PlayingStateChanged?.Invoke(false);
-                PlaybackEnded?.Invoke();
-            }
-
-            void OnError(object? sender, MediaPlayer.ErrorEventArgs args)
-            {
-                StopTimer();
-                _isPrepared = false;
-                preparedTcs.TrySetException(new InvalidOperationException($"Android MediaPlayer error: {args.What}/{args.Extra}"));
-            }
-
-            player.Reset();
-            _isPrepared = false;
-
-            if (isLocalFile)
-            {
-                player.SetDataSource(source);
-            }
-            else
-            {
-                player.SetDataSource(_context, Uri.Parse(source));
-            }
-
-            player.PrepareAsync();
-            await preparedTcs.Task;
+                var player = _player!;
+                var mediaItem = MediaItem.FromUri(source);
+                player.SetMediaItem(mediaItem);
+                player.Prepare();
+                player.Play();
+                StartTimer();
+            });
 
             if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
             {
@@ -86,72 +60,66 @@ namespace YTMusic.Platforms.Android.Services
                 _context.StartService(intent);
             }
 
-            player.Start();
-            PlayingStateChanged?.Invoke(true);
-            StartTimer();
+            _foregroundServiceStarted = true;
         }
 
         public Task PauseAsync()
         {
-            if (_player?.IsPlaying == true)
+            return RunOnMainThreadAsync(() =>
             {
-                _player.Pause();
-                PlayingStateChanged?.Invoke(false);
-            }
-
-            return Task.CompletedTask;
+                _player?.Pause();
+            });
         }
 
         public Task ResumeAsync()
         {
-            if (_player != null && _isPrepared && !_player.IsPlaying)
+            return RunOnMainThreadAsync(() =>
             {
-                _player.Start();
-                PlayingStateChanged?.Invoke(true);
+                _player?.Play();
                 StartTimer();
-            }
-
-            return Task.CompletedTask;
+            });
         }
 
         public Task SeekAsync(double positionSeconds)
         {
-            if (_player != null && _isPrepared)
+            return RunOnMainThreadAsync(() =>
             {
-                var positionMs = (int)Math.Max(0, positionSeconds * 1000);
-                _player.SeekTo(positionMs);
-            }
-
-            return Task.CompletedTask;
+                _player?.SeekTo((long)(positionSeconds * 1000));
+            });
         }
 
-        public Task StopAsync()
+        public async Task StopAsync()
         {
             StopTimer();
-            if (_player != null)
-            {
-                try
-                {
-                    if (_player.IsPlaying)
-                    {
-                        _player.Stop();
-                    }
-                }
-                catch { }
 
+            await RunOnMainThreadAsync(() =>
+            {
+                if (_player == null)
+                {
+                    return;
+                }
+
+                _player.Stop();
+                _player.RemoveListener(this);
                 _player.Release();
                 _player.Dispose();
                 _player = null;
-            }
+            });
 
-            _isPrepared = false;
-            PlaybackForegroundService.Stop(_context);
-            return Task.CompletedTask;
+            if (_foregroundServiceStarted)
+            {
+                PlaybackForegroundService.Stop(_context);
+                _foregroundServiceStarted = false;
+            }
         }
 
-        public void Dispose()
+        protected override void Dispose(bool disposing)
         {
-            _ = StopAsync();
+            if (disposing)
+            {
+                _ = StopAsync();
+            }
+            base.Dispose(disposing);
         }
 
         private void EnsurePlayer()
@@ -161,19 +129,8 @@ namespace YTMusic.Platforms.Android.Services
                 return;
             }
 
-            _player = new MediaPlayer();
-            if (Build.VERSION.SdkInt >= BuildVersionCodes.Lollipop)
-            {
-                var attributes = new AudioAttributes.Builder()
-                    .SetContentType(AudioContentType.Music)
-                    .SetUsage(AudioUsageKind.Media)
-                    .Build();
-                _player.SetAudioAttributes(attributes);
-            }
-            else
-            {
-                _player.SetAudioStreamType(global::Android.Media.Stream.Music);
-            }
+            _player = new ExoPlayerBuilder(_context).Build();
+            _player.AddListener(this);
         }
 
         private void StartTimer()
@@ -181,19 +138,22 @@ namespace YTMusic.Platforms.Android.Services
             StopTimer();
             _positionTimer = new Timer(_ =>
             {
-                var player = _player;
-                if (player == null || !_isPrepared)
+                _ = RunOnMainThreadAsync(() =>
                 {
-                    return;
-                }
+                    var player = _player;
+                    if (player == null || !player.IsPlaying)
+                    {
+                        return;
+                    }
 
-                try
-                {
-                    var current = player.CurrentPosition / 1000.0;
-                    var duration = Math.Max(0, player.Duration) / 1000.0;
-                    PositionChanged?.Invoke(current, duration);
-                }
-                catch { }
+                    try
+                    {
+                        var current = player.CurrentPosition / 1000.0;
+                        var duration = Math.Max(0, player.Duration) / 1000.0;
+                        PositionChanged?.Invoke(current, duration);
+                    }
+                    catch { }
+                });
             }, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(500));
         }
 
@@ -201,6 +161,32 @@ namespace YTMusic.Platforms.Android.Services
         {
             _positionTimer?.Dispose();
             _positionTimer = null;
+        }
+
+        private static Task RunOnMainThreadAsync(Action action)
+        {
+            if (MainThread.IsMainThread)
+            {
+                action();
+                return Task.CompletedTask;
+            }
+
+            return MainThread.InvokeOnMainThreadAsync(action);
+        }
+
+        public void OnIsPlayingChanged(bool isPlaying)
+        {
+            PlayingStateChanged?.Invoke(isPlaying);
+        }
+
+        public void OnPlaybackStateChanged(int playbackState)
+        {
+            if (playbackState == PlaybackStateEnded)
+            {
+                StopTimer();
+                PlayingStateChanged?.Invoke(false);
+                PlaybackEnded?.Invoke();
+            }
         }
     }
 }

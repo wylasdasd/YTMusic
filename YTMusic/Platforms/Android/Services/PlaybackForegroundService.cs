@@ -1,6 +1,7 @@
 using Android.App;
 using Android.Content;
 using Android.OS;
+using Android.Util;
 using AndroidX.Core.App;
 
 namespace YTMusic.Platforms.Android.Services
@@ -10,6 +11,7 @@ namespace YTMusic.Platforms.Android.Services
         ForegroundServiceType = global::Android.Content.PM.ForegroundService.TypeMediaPlayback)]
     public class PlaybackForegroundService : Service
     {
+        private const string LogTag = "YTMusic.PlaybackFGS";
         private const string ChannelId = "ytmusic_playback_channel";
         private const int NotificationId = 20260302;
         private const string ActionStart = "YTMusic.Playback.Start";
@@ -33,12 +35,29 @@ namespace YTMusic.Platforms.Android.Services
             var notification = new NotificationCompat.Builder(this, ChannelId)
                 .SetContentTitle(title)
                 .SetContentText(artist)
-                .SetSmallIcon(Resource.Mipmap.appicon)
+                .SetSmallIcon(global::Android.Resource.Drawable.IcMediaPlay)
                 .SetOngoing(true)
                 .SetPriority((int)NotificationPriority.Low)
+                .SetCategory(NotificationCompat.CategoryService)
                 .Build();
 
-            StartForeground(NotificationId, notification);
+            try
+            {
+                if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
+                {
+                    StartForeground(NotificationId, notification, global::Android.Content.PM.ForegroundService.TypeMediaPlayback);
+                }
+                else
+                {
+                    StartForeground(NotificationId, notification);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(LogTag, $"StartForeground failed: {ex}");
+                throw;
+            }
+
             return StartCommandResult.Sticky;
         }
 
