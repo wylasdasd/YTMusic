@@ -29,16 +29,14 @@ namespace YTMusic.Services
         private readonly HttpListener _listener;
         private readonly CancellationTokenSource _cts;
         private readonly int _port;
-        private readonly YoutubeClient _youtubeClient;
         private static readonly HttpClient _httpClient = new HttpClient();
 
         public string ProxyUrl { get; private set; }
         public IStreamInfo? CurrentStreamInfo { get; set; }
         public string ContentType { get; set; } = "audio/mp4";
 
-        public LocalAudioProxy(YoutubeClient youtubeClient)
+        public LocalAudioProxy()
         {
-            _youtubeClient = youtubeClient;
             _cts = new CancellationTokenSource();
             
             var tcpListener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
@@ -332,7 +330,6 @@ namespace YTMusic.Services
         public enum PlaybackMode { Sequential, Random, SingleLoop }
         public PlaybackMode CurrentMode { get; private set; } = PlaybackMode.Sequential;
         private List<int> _shuffleIndices = new List<int>();
-        private Random _random = new Random();
 
         public MusicPlayerService(INativeAudioPlaybackService nativeAudio)
         {
@@ -341,7 +338,7 @@ namespace YTMusic.Services
 
             if (!_nativeAudio.IsSupported && !OperatingSystem.IsAndroid())
             {
-                _proxy = new LocalAudioProxy(_youtubeClient);
+                _proxy = new LocalAudioProxy();
                 _fileProxy = new LocalFileProxy();
             }
 
@@ -735,7 +732,7 @@ namespace YTMusic.Services
 
         private void EnsureProxiesCreated()
         {
-            _proxy ??= new LocalAudioProxy(_youtubeClient);
+            _proxy ??= new LocalAudioProxy();
             _fileProxy ??= new LocalFileProxy();
         }
 
