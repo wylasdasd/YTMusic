@@ -35,6 +35,8 @@ namespace YTMusic.Services
         Task DeleteFolderAsync(int folderId);
         
         Task<List<FavoriteTrack>> GetTracksAsync(int? folderId = null, bool? isDownloaded = null);
+        Task<HashSet<string>> GetFavoritedVideoIdsAsync(IEnumerable<string> videoIds);
+        Task<HashSet<string>> GetFavoritedFilePathsAsync(IEnumerable<string> filePaths);
         Task AddToFavoritesAsync(string videoId, string title, string author, string? thumbnailUrl, int folderId = 1, string? localFilePath = null);
         Task RemoveFromFavoritesAsync(string videoId, int folderId = 1);
         Task UpdateLocalFilePathAsync(string videoId, string? localFilePath);
@@ -162,6 +164,47 @@ namespace YTMusic.Services
                 tracks = tracks.Where(t => t.IsDownloaded).ToList();
             }
             return tracks;
+        }
+
+        public async Task<HashSet<string>> GetFavoritedVideoIdsAsync(IEnumerable<string> videoIds)
+        {
+            var ids = videoIds
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct()
+                .ToArray();
+
+            if (ids.Length == 0)
+            {
+                return new HashSet<string>();
+            }
+
+            using var connection = new SqliteConnection(_connectionString);
+            const string sql = "SELECT DISTINCT VideoId FROM FavoriteTracks WHERE VideoId IN @VideoIds;";
+            var rows = await connection.QueryAsync<string>(sql, new { VideoIds = ids });
+            return rows.Where(id => !string.IsNullOrWhiteSpace(id)).ToHashSet();
+        }
+
+        public async Task<HashSet<string>> GetFavoritedFilePathsAsync(IEnumerable<string> filePaths)
+        {
+            var paths = filePaths
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct()
+                .ToArray();
+
+            if (paths.Length == 0)
+            {
+                return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            using var connection = new SqliteConnection(_connectionString);
+            const string sql = @"
+                SELECT DISTINCT LocalFilePath
+                FROM FavoriteTracks
+                WHERE LocalFilePath IS NOT NULL
+                  AND LocalFilePath != ''
+                  AND LocalFilePath IN @FilePaths;";
+            var rows = await connection.QueryAsync<string>(sql, new { FilePaths = paths });
+            return rows.Where(path => !string.IsNullOrWhiteSpace(path)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
 
         public async Task AddToFavoritesAsync(string videoId, string title, string author, string? thumbnailUrl, int folderId = 1, string? localFilePath = null)

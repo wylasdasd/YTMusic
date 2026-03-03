@@ -111,13 +111,21 @@ namespace YTMusic.Components.Pages
                     loaded++;
                 }
                 
-                // Fetch favorite states for these new videos across all folders
+                // Fetch favorite states for these new videos in one batch query
+                var newVideoIds = newVideos
+                    .Select(video => video.Id.Value)
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct()
+                    .ToArray();
+
+                var favoritedIds = await _favoriteService.GetFavoritedVideoIdsAsync(newVideoIds);
+                foreach (var videoId in favoritedIds)
+                {
+                    FavoriteVideoIds.Add(videoId);
+                }
+
                 foreach (var video in newVideos)
                 {
-                    if (await _favoriteService.IsFavoriteInAnyFolderAsync(video.Id.Value))
-                    {
-                        FavoriteVideoIds.Add(video.Id.Value);
-                    }
                     Videos.Add(video);
                 }
 

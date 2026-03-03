@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
@@ -40,14 +41,17 @@ namespace YTMusic.Components.Pages
                 Files = new List<DownloadedTrack>(files);
                 FavoriteFilePaths.Clear();
 
-                // Check which local files are already favorited
-                foreach (var file in Files)
+                // Batch query favorite status for local files
+                var filePaths = Files
+                    .Select(file => file.LocalFilePath)
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                var favoritedPaths = await _favoriteService.GetFavoritedFilePathsAsync(filePaths);
+
+                foreach (var path in favoritedPaths)
                 {
-                    var track = await _favoriteService.GetTrackByFilePathAsync(file.LocalFilePath);
-                    if (track != null)
-                    {
-                        FavoriteFilePaths.Add(file.LocalFilePath);
-                    }
+                    FavoriteFilePaths.Add(path);
                 }
             }
             catch (Exception ex)
