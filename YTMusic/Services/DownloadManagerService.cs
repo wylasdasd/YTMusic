@@ -81,11 +81,17 @@ namespace YTMusic.Services
                 // 进度回调由下载流触发，更新共享任务状态时加锁保证一致性。
                 var progress = new Progress<double>(p =>
                 {
+                    bool shouldNotify;
                     lock (_syncRoot)
                     {
+                        // 仅在进度有明显变化时刷新 UI，降低高频重绘开销。
+                        shouldNotify = Math.Abs(taskInfo.Progress - p) >= 0.005 || p >= 1.0;
                         taskInfo.Progress = p;
                     }
-                    NotifyDownloadsChanged();
+                    if (shouldNotify)
+                    {
+                        NotifyDownloadsChanged();
+                    }
                 });
 
                 string filePath = await _youTubeService.DownloadAsync(taskInfo.VideoId, taskInfo.Title, taskInfo.IsVideo, progress);

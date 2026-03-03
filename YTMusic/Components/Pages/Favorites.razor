@@ -50,7 +50,8 @@ else
             <MudItem xs="12" sm="6" md="4" lg="3">
                 <MudCard Elevation="2" Style="height: 100%; display: flex; flex-direction: column; cursor: pointer;"
                          @onclick="@(() => PlayTrack(track))">
-                    <MudCardMedia Image="@track.ThumbnailUrl" Height="160" Style="position: relative;">
+                    <div style="position: relative;">
+                        <MudCardMedia Image="@track.ThumbnailUrl" Height="160" />
                         @if (track.IsDownloaded)
                         {
                             <div
@@ -58,7 +59,7 @@ else
                                 <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
                             </div>
                         }
-                    </MudCardMedia>
+                    </div>
                     <MudCardContent Style="flex-grow: 1;">
                         <MudText Typo="Typo.subtitle1"
                                  Style="display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;">
