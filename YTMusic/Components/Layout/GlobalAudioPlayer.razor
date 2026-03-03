@@ -20,29 +20,45 @@
         PlayerService.OnRequestSeek += OnRequestSeek;
     }
 
-    private async void OnRequestReplay()
+    private void OnRequestReplay()
     {
-        await InvokeAsync(async () =>
+        // 事件签名是 void，使用 InvokeAsync 承载异步逻辑并在内部兜底异常，避免未观察异常。
+        _ = InvokeAsync(async () =>
         {
-            await JSRuntime.InvokeVoidAsync("audioPlayer.setCurrentTime", 0);
-            await JSRuntime.InvokeVoidAsync("audioPlayer.play");
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("audioPlayer.setCurrentTime", 0);
+                await JSRuntime.InvokeVoidAsync("audioPlayer.play");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AudioReplayError] {ex.Message}");
+            }
         });
     }
 
-    private async void OnPlayerStateChanged()
+    private void OnPlayerStateChanged()
     {
         if (PlayerService.UseNativePlayback)
         {
             return;
         }
 
-        await InvokeAsync(async () =>
+        // 仅在 URL 变化时重新 load，避免重复触发同一资源的 loadAndPlay。
+        _ = InvokeAsync(async () =>
         {
-            if (PlayerService.CurrentStreamUrl != null && PlayerService.CurrentStreamUrl != _lastUrl)
+            try
             {
-                _lastUrl = PlayerService.CurrentStreamUrl;
-                await JSRuntime.InvokeVoidAsync("audioPlayer.loadAndPlay", PlayerService.CurrentStreamUrl,
+                if (PlayerService.CurrentStreamUrl != null && PlayerService.CurrentStreamUrl != _lastUrl)
+                {
+                    _lastUrl = PlayerService.CurrentStreamUrl;
+                    await JSRuntime.InvokeVoidAsync("audioPlayer.loadAndPlay", PlayerService.CurrentStreamUrl,
 PlayerService.IsCurrentStreamWebM);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AudioStateSyncError] {ex.Message}");
             }
         });
     }
@@ -63,19 +79,49 @@ PlayerService.IsCurrentStreamWebM);
         }
     }
 
-    private async void OnRequestPause()
+    private void OnRequestPause()
     {
-        await InvokeAsync(async () => await JSRuntime.InvokeVoidAsync("audioPlayer.pause"));
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("audioPlayer.pause");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AudioPauseError] {ex.Message}");
+            }
+        });
     }
 
-    private async void OnRequestPlay()
+    private void OnRequestPlay()
     {
-        await InvokeAsync(async () => await JSRuntime.InvokeVoidAsync("audioPlayer.play"));
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("audioPlayer.play");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AudioPlayError] {ex.Message}");
+            }
+        });
     }
 
-    private async void OnRequestSeek(double positionSeconds)
+    private void OnRequestSeek(double positionSeconds)
     {
-        await InvokeAsync(async () => await JSRuntime.InvokeVoidAsync("audioPlayer.setCurrentTime", positionSeconds));
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("audioPlayer.setCurrentTime", positionSeconds);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AudioSeekError] {ex.Message}");
+            }
+        });
     }
 
     [JSInvokable]

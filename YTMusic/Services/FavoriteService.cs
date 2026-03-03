@@ -268,9 +268,13 @@ namespace YTMusic.Services
         {
             using var connection = new SqliteConnection(_connectionString);
             string selectSql = "SELECT LocalFilePath FROM FavoriteTracks WHERE VideoId = @VideoId AND FolderId = @FolderId;";
-            var path = await connection.ExecuteScalarAsync<string>(selectSql, new { VideoId = videoId, FolderId = folderId });
-            
-             FileHelp.DeleteIfExists(path);
+            var path = await connection.ExecuteScalarAsync<string?>(selectSql, new { VideoId = videoId, FolderId = folderId });
+
+            // 旧数据/异常数据可能没有路径，先判空再删文件，避免可空告警和运行时风险。
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                FileHelp.DeleteIfExists(path);
+            }
 
             await RemoveFromFavoritesAsync(videoId, folderId);
         }

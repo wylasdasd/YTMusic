@@ -5,6 +5,7 @@ namespace YTMusic.Services
     public class DownloadTaskInfo
     {
         public string Id { get; set; } = System.Guid.NewGuid().ToString();
+        public System.DateTime CreatedAtUtc { get; set; } = System.DateTime.UtcNow;
         public string VideoId { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
         public bool IsVideo { get; set; }
