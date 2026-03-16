@@ -52,8 +52,7 @@
                 if (PlayerService.CurrentStreamUrl != null && PlayerService.CurrentStreamUrl != _lastUrl)
                 {
                     _lastUrl = PlayerService.CurrentStreamUrl;
-                    await JSRuntime.InvokeVoidAsync("audioPlayer.loadAndPlay", PlayerService.CurrentStreamUrl,
-PlayerService.IsCurrentStreamWebM);
+                    await JSRuntime.InvokeVoidAsync("audioPlayer.loadAndPlay", PlayerService.CurrentStreamUrl,PlayerService.IsCurrentStreamWebM);
                 }
             }
             catch (Exception ex)
@@ -73,8 +72,7 @@ PlayerService.IsCurrentStreamWebM);
             if (!PlayerService.UseNativePlayback && PlayerService.CurrentStreamUrl != null)
             {
                 _lastUrl = PlayerService.CurrentStreamUrl;
-                await JSRuntime.InvokeVoidAsync("audioPlayer.loadAndPlay", PlayerService.CurrentStreamUrl,
-PlayerService.IsCurrentStreamWebM);
+                await JSRuntime.InvokeVoidAsync("audioPlayer.loadAndPlay", PlayerService.CurrentStreamUrl,PlayerService.IsCurrentStreamWebM);
             }
         }
     }
