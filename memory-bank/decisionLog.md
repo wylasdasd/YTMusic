@@ -23,3 +23,22 @@
 ## 2026-02-21: 本地音频/视频流代理 (历史决策)
 - **决策**: 实现 `LocalAudioProxy` 和 `LocalFileProxy`（基于 `HttpListener`）。
 - **依据**: 解决 WebView/浏览器直接访问某些 YouTube 流地址可能遇到的跨域（CORS）限制，以及方便将来处理加密流或本地文件路径。
+
+## 2026-03-17: Android 后台播放通知采用“Media3 + 手写通知兜底”混合策略
+- **决策**: 保留 `MediaSessionService/MediaSession/ExoPlayer(Media3)` 作为标准媒体架构，同时保留 `PlaybackForegroundService` 内手写前台通知更新逻辑（进度条、播放暂停、Stop）。
+- **依据**:
+  - 在当前 .NET MAUI + AndroidX.Media3 绑定环境下，尝试“纯 Media3 自动通知”后出现“无通知卡片”回归。
+  - 手写前台通知能稳定满足“必须有通知卡片/进度条”的核心诉求，且在不同 ROM 上可控性更高。
+  - 先保证可见性和稳定性，再逐步评估是否迁移到完整 Media3 `PlayerNotificationManager/MediaNotification.Provider`。
+
+## 2026-03-17: Android 13+ 通知权限作为播放前置条件
+- **决策**: 在 `MainActivity` 启动阶段显式请求 `POST_NOTIFICATIONS`；Manifest 保留 `FOREGROUND_SERVICE`、`FOREGROUND_SERVICE_MEDIA_PLAYBACK`、`POST_NOTIFICATIONS`。
+- **依据**:
+  - 用户实机验证显示：权限未授予时表现为“播放有声音但无通知/锁屏媒体控件”。
+  - 权限问题比业务代码问题更容易造成误判，必须前置处理。
+
+## 2026-03-17: 避免多套通知实现并行演进
+- **决策**: 删除无效或重复的通知权限服务抽象（DI 层），只保留单一、可验证的权限与通知链路。
+- **依据**:
+  - 本轮多次修改里，重复链路增加了排障成本，且容易出现“改了但不生效”的假象。
+  - 单链路策略更容易做 A/B 验证与回归检查。
