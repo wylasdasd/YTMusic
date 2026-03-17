@@ -13,6 +13,8 @@ namespace YTMusic.Platforms.Android.Services
         public event Action<double, double>? PositionChanged;
         public event Action<bool>? PlayingStateChanged;
         public event Action? PlaybackEnded;
+        public event Action? PreviousRequested;
+        public event Action? NextRequested;
 
         public AndroidNativeAudioPlaybackService()
         {
@@ -20,6 +22,8 @@ namespace YTMusic.Platforms.Android.Services
             PlaybackForegroundService.PositionChanged += OnPositionChanged;
             PlaybackForegroundService.PlayingStateChanged += OnPlayingStateChanged;
             PlaybackForegroundService.PlaybackEnded += OnPlaybackEnded;
+            PlaybackForegroundService.PreviousRequested += OnPreviousRequested;
+            PlaybackForegroundService.NextRequested += OnNextRequested;
         }
 
         public Task PlayAsync(string source, bool isLocalFile, string? title, string? artist, double? durationSeconds = null)
@@ -54,6 +58,8 @@ namespace YTMusic.Platforms.Android.Services
             PlaybackForegroundService.PositionChanged -= OnPositionChanged;
             PlaybackForegroundService.PlayingStateChanged -= OnPlayingStateChanged;
             PlaybackForegroundService.PlaybackEnded -= OnPlaybackEnded;
+            PlaybackForegroundService.PreviousRequested -= OnPreviousRequested;
+            PlaybackForegroundService.NextRequested -= OnNextRequested;
         }
 
         private void OnPositionChanged(double current, double duration)
@@ -69,6 +75,16 @@ namespace YTMusic.Platforms.Android.Services
         private void OnPlaybackEnded()
         {
             PlaybackEnded?.Invoke();
+        }
+
+        private void OnPreviousRequested()
+        {
+            PreviousRequested?.Invoke();
+        }
+
+        private void OnNextRequested()
+        {
+            NextRequested?.Invoke();
         }
 
         private static double? ResolveDurationSeconds(string source, bool isLocalFile, double? durationSeconds)

@@ -10,6 +10,8 @@ namespace YTMusic.Services
         public event Action<double, double>? PositionChanged;
         public event Action<bool>? PlayingStateChanged;
         public event Action? PlaybackEnded;
+        public event Action? PreviousRequested;
+        public event Action? NextRequested;
 
         public Task PlayAsync(string source, bool isLocalFile, string? title, string? artist, double? durationSeconds = null) => Task.CompletedTask;
         public Task PauseAsync() => Task.CompletedTask;

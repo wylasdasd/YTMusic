@@ -1,7 +1,9 @@
 using Android.App;
 using Android.Content;
 using Android.OS;
-using AndroidX.Core.App;
+using CoreNotificationCompat = AndroidX.Core.App.NotificationCompat;
+using NotificationManagerCompat = AndroidX.Core.App.NotificationManagerCompat;
+using MediaNotificationCompat = AndroidX.Media.App.NotificationCompat;
 using AndroidX.Media3.Common;
 using AndroidX.Media3.ExoPlayer;
 using AndroidX.Media3.Session;
@@ -22,6 +24,8 @@ namespace YTMusic.Platforms.Android.Services
         private const string ActionPause = "YTMusic.Playback.Pause";
         private const string ActionResume = "YTMusic.Playback.Resume";
         private const string ActionSeek = "YTMusic.Playback.Seek";
+        private const string ActionPrevious = "YTMusic.Playback.Previous";
+        private const string ActionNext = "YTMusic.Playback.Next";
         private const string ActionStop = "YTMusic.Playback.Stop";
 
         private const string ExtraSource = "source";
@@ -44,6 +48,8 @@ namespace YTMusic.Platforms.Android.Services
         public static event Action<double, double>? PositionChanged;
         public static event Action<bool>? PlayingStateChanged;
         public static event Action? PlaybackEnded;
+        public static event Action? PreviousRequested;
+        public static event Action? NextRequested;
 
         public override void OnCreate()
         {
@@ -221,6 +227,12 @@ namespace YTMusic.Platforms.Android.Services
                     }
                     break;
                 }
+                case ActionPrevious:
+                    PreviousRequested?.Invoke();
+                    break;
+                case ActionNext:
+                    NextRequested?.Invoke();
+                    break;
                 case ActionStop:
                     player.Stop();
                     StopPositionTimer();
@@ -391,24 +403,41 @@ namespace YTMusic.Platforms.Android.Services
                 CreateIntent(this, pauseOrResumeAction),
                 PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent);
 
-            var stopIntent = PendingIntent.GetService(
+            var previousIntent = PendingIntent.GetService(
                 this,
-                3003,
-                CreateIntent(this, ActionStop),
+                3004,
+                CreateIntent(this, ActionPrevious),
                 PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent);
 
-            var builder = new NotificationCompat.Builder(this, NotificationChannelId)
+            var nextIntent = PendingIntent.GetService(
+                this,
+                3005,
+                CreateIntent(this, ActionNext),
+                PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent);
+
+            var builder = new CoreNotificationCompat.Builder(this, NotificationChannelId)
                 .SetSmallIcon(global::Android.Resource.Drawable.IcMediaPlay)
                 .SetContentTitle(_currentTitle)
                 .SetContentText(_currentArtist)
                 .SetContentIntent(contentPendingIntent)
                 .SetVisibility((int)NotificationVisibility.Public)
-                .SetCategory(NotificationCompat.CategoryTransport)
+                .SetCategory(CoreNotificationCompat.CategoryTransport)
                 .SetOnlyAlertOnce(true)
                 .SetOngoing(isPlaying)
                 .SetPriority((int)NotificationPriority.High)
+                .AddAction(global::Android.Resource.Drawable.IcMediaRew, "Previous", previousIntent)
                 .AddAction(pauseOrResumeIcon, pauseOrResumeTitle, pauseOrResumeIntent)
-                .AddAction(global::Android.Resource.Drawable.IcMenuCloseClearCancel, "Stop", stopIntent);
+                .AddAction(global::Android.Resource.Drawable.IcMediaFf, "Next", nextIntent);
+
+            var mediaStyle = new MediaNotificationCompat.MediaStyle()
+                .SetShowActionsInCompactView(0, 1, 2);
+
+            var sessionToken = _mediaSession?.SessionCompatToken;
+            if (sessionToken != null)
+            {
+                mediaStyle.SetMediaSession(sessionToken);
+            }
+            builder.SetStyle(mediaStyle);
 
             if (durationMs > 0)
             {
