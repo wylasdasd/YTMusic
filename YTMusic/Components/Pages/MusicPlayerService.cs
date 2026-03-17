@@ -350,8 +350,6 @@ namespace YTMusic.Services
                 _nativeAudio.PositionChanged += OnNativePositionChanged;
                 _nativeAudio.PlayingStateChanged += OnNativePlayingStateChanged;
                 _nativeAudio.PlaybackEnded += OnNativePlaybackEnded;
-                _nativeAudio.PreviousRequested += OnNativePreviousRequested;
-                _nativeAudio.NextRequested += OnNativeNextRequested;
             }
         }
 
@@ -852,14 +850,5 @@ namespace YTMusic.Services
             _ = Task.Run(OnTrackEndedAsync);
         }
 
-        private void OnNativePreviousRequested()
-        {
-            _ = Task.Run(PlayPreviousAsync);
-        }
-
-        private void OnNativeNextRequested()
-        {
-            _ = Task.Run(PlayNextAsync);
-        }
     }
 }

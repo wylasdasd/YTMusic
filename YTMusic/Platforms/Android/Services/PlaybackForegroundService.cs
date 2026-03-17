@@ -3,9 +3,7 @@ using Android.Content;
 using Android.Media;
 using Android.Media.Session;
 using Android.OS;
-using CoreNotificationCompat = AndroidX.Core.App.NotificationCompat;
 using NotificationManagerCompat = AndroidX.Core.App.NotificationManagerCompat;
-using MediaNotificationCompat = AndroidX.Media.App.NotificationCompat;
 using AndroidX.Media3.Common;
 using AndroidX.Media3.ExoPlayer;
 using AndroidX.Media3.Session;
@@ -15,6 +13,7 @@ using PlatformMediaSession = Android.Media.Session.MediaSession;
 using PlatformPlaybackState = Android.Media.Session.PlaybackState;
 using PlatformPlaybackStateCode = Android.Media.Session.PlaybackStateCode;
 using AndroidMediaMetadata = Android.Media.MediaMetadata;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace YTMusic.Platforms.Android.Services
 {
@@ -53,12 +52,12 @@ namespace YTMusic.Platforms.Android.Services
         private string _currentArtist = "Playing";
         private bool _isForegroundStarted;
         private long _lastNotificationUpdateAtMs;
+        private long _lastNotifiedPositionSecond = -1;
+        private bool? _lastNotifiedPlaying;
 
         public static event Action<double, double>? PositionChanged;
         public static event Action<bool>? PlayingStateChanged;
         public static event Action? PlaybackEnded;
-        public static event Action? PreviousRequested;
-        public static event Action? NextRequested;
 
         public override void OnCreate()
         {
@@ -252,10 +251,10 @@ namespace YTMusic.Platforms.Android.Services
                     break;
                 }
                 case ActionPrevious:
-                    PreviousRequested?.Invoke();
+                    RequestPlaylistNavigation(next: false);
                     break;
                 case ActionNext:
-                    NextRequested?.Invoke();
+                    RequestPlaylistNavigation(next: true);
                     break;
                 case ActionStop:
                     player.Stop();
@@ -313,7 +312,7 @@ namespace YTMusic.Platforms.Android.Services
                     UpdatePlatformSessionState(forceMetadata: false);
                     UpdateForegroundNotification(force: false);
                 });
-            }, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(500));
+            }, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(1000));
         }
 
         private void StopPositionTimer()
@@ -343,6 +342,17 @@ namespace YTMusic.Platforms.Android.Services
             }
 
             _mainHandler?.Post(action);
+        }
+
+        private void RequestPlaylistNavigation(bool next)
+        {
+            var playerService = global::YTMusic.MauiProgram.Services?.GetService<global::YTMusic.Services.MusicPlayerService>();
+            if (playerService == null)
+            {
+                return;
+            }
+
+            _ = Task.Run(() => next ? playerService.PlayNextAsync() : playerService.PlayPreviousAsync());
         }
 
         private void UpdatePlatformSessionState(bool forceMetadata)
@@ -429,7 +439,6 @@ namespace YTMusic.Platforms.Android.Services
             {
                 return;
             }
-            _lastNotificationUpdateAtMs = now;
 
             var isPlaying = player.IsPlaying;
             var positionMs = Math.Max(0, player.CurrentPosition);
@@ -438,6 +447,16 @@ namespace YTMusic.Platforms.Android.Services
             {
                 durationMs = _expectedDurationMs;
             }
+
+            var positionSecond = positionMs / 1000;
+            if (!force && _lastNotifiedPlaying == isPlaying && _lastNotifiedPositionSecond == positionSecond)
+            {
+                return;
+            }
+
+            _lastNotificationUpdateAtMs = now;
+            _lastNotifiedPlaying = isPlaying;
+            _lastNotifiedPositionSecond = positionSecond;
 
             var notification = BuildPlaybackNotification(isPlaying, positionMs, durationMs);
             if (!_isForegroundStarted)
@@ -490,99 +509,43 @@ namespace YTMusic.Platforms.Android.Services
                 3005,
                 CreateIntent(this, ActionNext),
                 PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent);
-
-            var previousAction = new CoreNotificationCompat.Action.Builder(
+            var platformSessionToken = _platformSession?.SessionToken;
+            var previousAction = new Notification.Action.Builder(
                     global::Android.Resource.Drawable.IcMediaRew,
                     "Previous",
                     previousIntent)
                 .Build();
-
-            var playPauseAction = new CoreNotificationCompat.Action.Builder(
+            var playPauseAction = new Notification.Action.Builder(
                     pauseOrResumeIcon,
                     pauseOrResumeTitle,
                     pauseOrResumeIntent)
                 .Build();
-
-            var nextAction = new CoreNotificationCompat.Action.Builder(
+            var nextAction = new Notification.Action.Builder(
                     global::Android.Resource.Drawable.IcMediaFf,
                     "Next",
                     nextIntent)
                 .Build();
 
-            var platformSessionToken = _platformSession?.SessionToken;
-            if (Build.VERSION.SdkInt >= BuildVersionCodes.Lollipop && platformSessionToken != null)
-            {
-                var previousPlatformAction = new Notification.Action.Builder(
-                        global::Android.Resource.Drawable.IcMediaRew,
-                        "Previous",
-                        previousIntent)
-                    .Build();
-                var playPausePlatformAction = new Notification.Action.Builder(
-                        pauseOrResumeIcon,
-                        pauseOrResumeTitle,
-                        pauseOrResumeIntent)
-                    .Build();
-                var nextPlatformAction = new Notification.Action.Builder(
-                        global::Android.Resource.Drawable.IcMediaFf,
-                        "Next",
-                        nextIntent)
-                    .Build();
-
-                var platformBuilder = new Notification.Builder(this, NotificationChannelId)
-                    .SetSmallIcon(global::Android.Resource.Drawable.IcMediaPlay)
-                    .SetContentTitle(_currentTitle)
-                    .SetContentText(_currentArtist)
-                    .SetContentIntent(contentPendingIntent)
-                    .SetVisibility(NotificationVisibility.Public)
-                    .SetCategory(Notification.CategoryTransport)
-                    .SetOnlyAlertOnce(true)
-                    .SetOngoing(isPlaying);
-
-                platformBuilder
-                    .AddAction(previousPlatformAction)
-                    .AddAction(playPausePlatformAction)
-                    .AddAction(nextPlatformAction);
-
-                var style = new Notification.MediaStyle()
-                    .SetMediaSession(platformSessionToken)
-                    .SetShowActionsInCompactView(0, 1, 2);
-                platformBuilder.SetStyle(style);
-
-                if (durationMs > 0)
-                {
-                    platformBuilder.SetProgress((int)Math.Min(int.MaxValue, durationMs), (int)Math.Min(int.MaxValue, positionMs), false);
-                }
-                else
-                {
-                    platformBuilder.SetProgress(0, 0, true);
-                }
-
-                return platformBuilder.Build();
-            }
-
-            var builder = new CoreNotificationCompat.Builder(this, NotificationChannelId)
+            var builder = new Notification.Builder(this, NotificationChannelId)
                 .SetSmallIcon(global::Android.Resource.Drawable.IcMediaPlay)
                 .SetContentTitle(_currentTitle)
                 .SetContentText(_currentArtist)
                 .SetContentIntent(contentPendingIntent)
-                .SetVisibility((int)NotificationVisibility.Public)
-                .SetCategory(CoreNotificationCompat.CategoryTransport)
+                .SetVisibility(NotificationVisibility.Public)
+                .SetCategory(Notification.CategoryTransport)
                 .SetOnlyAlertOnce(true)
                 .SetOngoing(isPlaying)
-                .SetPriority((int)NotificationPriority.High)
                 .AddAction(previousAction)
                 .AddAction(playPauseAction)
                 .AddAction(nextAction);
 
-            var mediaStyle = new MediaNotificationCompat.MediaStyle()
-                .SetShowActionsInCompactView(0, 1, 2);
-
-            var sessionToken = _mediaSession?.SessionCompatToken;
-            if (sessionToken != null)
+            if (platformSessionToken != null)
             {
-                mediaStyle.SetMediaSession(sessionToken);
+                var mediaStyle = new Notification.MediaStyle()
+                    .SetMediaSession(platformSessionToken)
+                    .SetShowActionsInCompactView(0, 1, 2);
+                builder.SetStyle(mediaStyle);
             }
-            builder.SetStyle(mediaStyle);
 
             if (durationMs > 0)
             {
@@ -637,12 +600,12 @@ namespace YTMusic.Platforms.Android.Services
 
             public override void OnSkipToPrevious()
             {
-                _service.RunOnMainThread(() => PreviousRequested?.Invoke());
+                _service.RunOnMainThread(() => _service.RequestPlaylistNavigation(next: false));
             }
 
             public override void OnSkipToNext()
             {
-                _service.RunOnMainThread(() => NextRequested?.Invoke());
+                _service.RunOnMainThread(() => _service.RequestPlaylistNavigation(next: true));
             }
         }
     }
