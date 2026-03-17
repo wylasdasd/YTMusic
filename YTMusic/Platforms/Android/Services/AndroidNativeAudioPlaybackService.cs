@@ -1,4 +1,5 @@
 using Android.Content;
+using Android.Media;
 using Application = Android.App.Application;
 
 namespace YTMusic.Platforms.Android.Services
@@ -21,9 +22,10 @@ namespace YTMusic.Platforms.Android.Services
             PlaybackForegroundService.PlaybackEnded += OnPlaybackEnded;
         }
 
-        public Task PlayAsync(string source, bool isLocalFile, string? title, string? artist)
+        public Task PlayAsync(string source, bool isLocalFile, string? title, string? artist, double? durationSeconds = null)
         {
-            return PlaybackForegroundService.PlayAsync(_context, source, isLocalFile, title, artist);
+            var resolvedDuration = ResolveDurationSeconds(source, isLocalFile, durationSeconds);
+            return PlaybackForegroundService.PlayAsync(_context, source, isLocalFile, title, artist, resolvedDuration);
         }
 
         public Task PauseAsync()
@@ -67,6 +69,36 @@ namespace YTMusic.Platforms.Android.Services
         private void OnPlaybackEnded()
         {
             PlaybackEnded?.Invoke();
+        }
+
+        private static double? ResolveDurationSeconds(string source, bool isLocalFile, double? durationSeconds)
+        {
+            if (durationSeconds.HasValue && durationSeconds.Value > 0)
+            {
+                return durationSeconds;
+            }
+
+            if (!isLocalFile || string.IsNullOrWhiteSpace(source))
+            {
+                return durationSeconds;
+            }
+
+            try
+            {
+                using var retriever = new MediaMetadataRetriever();
+                retriever.SetDataSource(source);
+                var durationMsString = retriever.ExtractMetadata(MetadataKey.Duration);
+                if (long.TryParse(durationMsString, out var durationMs) && durationMs > 0)
+                {
+                    return durationMs / 1000.0;
+                }
+            }
+            catch
+            {
+                // Best-effort only.
+            }
+
+            return durationSeconds;
         }
     }
 }

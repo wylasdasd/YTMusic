@@ -22,6 +22,7 @@ namespace YTMusic.Services
         public string Author { get; set; } = string.Empty;
         public string? ThumbnailUrl { get; set; }
         public string? LocalFilePath { get; set; }
+        public double? DurationSeconds { get; set; }
     }
 
     public class LocalAudioProxy : IDisposable
@@ -303,6 +304,7 @@ namespace YTMusic.Services
     {
         private readonly YoutubeClient _youtubeClient;
         private readonly INativeAudioPlaybackService _nativeAudio;
+        private readonly ILocalMusicService _localMusicService;
         private LocalAudioProxy? _proxy;
         private LocalFileProxy? _fileProxy;
         private readonly SemaphoreSlim _fileProxyInitLock = new SemaphoreSlim(1, 1);
@@ -331,9 +333,10 @@ namespace YTMusic.Services
         public PlaybackMode CurrentMode { get; private set; } = PlaybackMode.Sequential;
         private List<int> _shuffleIndices = new List<int>();
 
-        public MusicPlayerService(INativeAudioPlaybackService nativeAudio)
+        public MusicPlayerService(INativeAudioPlaybackService nativeAudio, ILocalMusicService localMusicService)
         {
             _nativeAudio = nativeAudio;
+            _localMusicService = localMusicService;
             _youtubeClient = new YoutubeClient();
 
             if (!_nativeAudio.IsSupported && !OperatingSystem.IsAndroid())
@@ -359,7 +362,8 @@ namespace YTMusic.Services
                 VideoId = video.Id.Value,
                 Title = video.Title,
                 Author = video.Author.ChannelTitle,
-                ThumbnailUrl = video.Thumbnails.FirstOrDefault()?.Url
+                ThumbnailUrl = video.Thumbnails.FirstOrDefault()?.Url,
+                DurationSeconds = video.Duration?.TotalSeconds
             });
         }
 
@@ -372,7 +376,8 @@ namespace YTMusic.Services
                 VideoId = video.Id.Value,
                 Title = video.Title,
                 Author = video.Author.ChannelTitle,
-                ThumbnailUrl = video.Thumbnails.FirstOrDefault()?.Url
+                ThumbnailUrl = video.Thumbnails.FirstOrDefault()?.Url,
+                DurationSeconds = video.Duration?.TotalSeconds
             });
         }
 
@@ -409,10 +414,17 @@ namespace YTMusic.Services
                 IsCurrentStreamWebM = filePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
                 if (_nativeAudio.IsSupported)
                 {
+                    if (OperatingSystem.IsAndroid() && IsCurrentStreamWebM)
+                    {
+                        // For Android system media cards, local webm/opus files may not expose seek bar reliably.
+                        // Keep playback path stable here; users can re-download in mp4/m4a for proper lockscreen progress.
+                        Console.WriteLine($"[AndroidMediaPanel] local webm may not show seek bar: {filePath}");
+                    }
+
                     CurrentStreamUrl = null;
                     CurrentTime = 0;
                     Duration = 100;
-                    await _nativeAudio.PlayAsync(filePath, true, title, "Local File");
+                    await _nativeAudio.PlayAsync(filePath, true, title, "Local File", null);
                     IsPlaying = true;
                 }
                 else
@@ -621,7 +633,7 @@ namespace YTMusic.Services
                         CurrentStreamUrl = null;
                         CurrentTime = 0;
                         Duration = 100;
-                        await _nativeAudio.PlayAsync(video.LocalFilePath, true, video.Title, video.Author);
+                        await _nativeAudio.PlayAsync(video.LocalFilePath, true, video.Title, video.Author, video.DurationSeconds);
                         IsPlaying = true;
                     }
                     else
@@ -635,6 +647,33 @@ namespace YTMusic.Services
                     return;
                 }
 
+                // On Android native playback, prefer already-downloaded local files to ensure
+                // seekable media metadata for lockscreen progress controls.
+                if (_nativeAudio.IsSupported && OperatingSystem.IsAndroid())
+                {
+                    var downloaded = await _localMusicService.GetDownloadedTrackByVideoIdAsync(video.VideoId);
+                    if (downloaded != null && !string.IsNullOrWhiteSpace(downloaded.LocalFilePath))
+                    {
+                        // Some ROM/media panels don't expose lockscreen seek for webm/opus local files.
+                        // Prefer stream fallback in that case to maximize system progress UI compatibility.
+                        if (downloaded.LocalFilePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Skip local-webm fast path and continue to stream selection below.
+                        }
+                        else
+                        {
+                            video.LocalFilePath = downloaded.LocalFilePath;
+                            IsCurrentStreamWebM = video.LocalFilePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
+                            CurrentStreamUrl = null;
+                            CurrentTime = 0;
+                            Duration = 100;
+                            await _nativeAudio.PlayAsync(video.LocalFilePath, true, video.Title, video.Author, video.DurationSeconds);
+                            IsPlaying = true;
+                            return;
+                        }
+                    }
+                }
+
                 var streamInfo = await GetPreferredAudioStreamInfoAsync(video.VideoId, UseWebM);
 
                 if (streamInfo != null)
@@ -646,7 +685,7 @@ namespace YTMusic.Services
                         CurrentStreamUrl = null;
                         CurrentTime = 0;
                         Duration = 100;
-                        await _nativeAudio.PlayAsync(streamInfo.Url, false, video.Title, video.Author);
+                        await _nativeAudio.PlayAsync(streamInfo.Url, false, video.Title, video.Author, video.DurationSeconds);
                     }
                     else if (OperatingSystem.IsAndroid())
                     {

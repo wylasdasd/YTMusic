@@ -7,6 +7,7 @@ namespace YTMusic.Services
     public interface ILocalMusicService
     {
         Task<IReadOnlyList<DownloadedTrack>> GetDownloadedTracksAsync();
+        Task<DownloadedTrack?> GetDownloadedTrackByVideoIdAsync(string videoId);
         Task AddDownloadedTrackAsync(DownloadedTrack track);
         Task RemoveDownloadedTrackAsync(string videoId, string filePath);
         

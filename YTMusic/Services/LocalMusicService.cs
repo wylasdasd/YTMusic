@@ -81,6 +81,32 @@ namespace YTMusic.Services
             return validTracks;
         }
 
+        public async Task<DownloadedTrack?> GetDownloadedTrackByVideoIdAsync(string videoId)
+        {
+            if (string.IsNullOrWhiteSpace(videoId))
+            {
+                return null;
+            }
+
+            using var connection = new SqliteConnection(_connectionString);
+            var track = await connection.QueryFirstOrDefaultAsync<DownloadedTrack>(
+                "SELECT * FROM DownloadedTracks WHERE VideoId = @VideoId LIMIT 1;",
+                new { VideoId = videoId });
+
+            if (track == null)
+            {
+                return null;
+            }
+
+            if (File.Exists(track.LocalFilePath))
+            {
+                return track;
+            }
+
+            await RemoveDownloadedTrackAsync(videoId, string.Empty);
+            return null;
+        }
+
         public async Task AddDownloadedTrackAsync(DownloadedTrack track)
         {
             using var connection = new SqliteConnection(_connectionString);
