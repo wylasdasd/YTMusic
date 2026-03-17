@@ -1,77 +1,153 @@
-.page {
-    position: relative;
-    display: flex;
-    flex-direction: column;
+.ytm-shell {
+    min-height: 100vh;
+    background:
+        radial-gradient(1200px 500px at 20% -10%, rgba(255, 78, 106, 0.18), transparent 55%),
+        radial-gradient(900px 420px at 85% -15%, rgba(99, 102, 241, 0.15), transparent 52%),
+        #0D1017;
+    color: #F5F7FA;
 }
 
-main {
-    flex: 1;
+.ytm-topbar {
+    background: linear-gradient(180deg, rgba(13, 16, 23, 0.95), rgba(13, 16, 23, 0.82));
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: env(safe-area-inset-top);
 }
 
-.sidebar {
-    background-image: linear-gradient(180deg, rgb(5, 39, 103) 0%, #3a0647 70%);
-}
-
-.top-row {
-    background-color: #f7f7f7;
-    border-bottom: 1px solid #d6d5d5;
-    justify-content: flex-end;
-    height: 3.5rem;
+.ytm-topbar-inner {
+    width: min(1320px, 100%);
+    margin: 0 auto;
     display: flex;
     align-items: center;
+    min-width: 0;
+    gap: 14px;
+    padding: 8px 14px;
 }
 
-    .top-row ::deep a, .top-row ::deep .btn-link {
-        white-space: nowrap;
-        margin-left: 1.5rem;
-        text-decoration: none;
+.ytm-brand {
+    border: 0;
+    background: transparent;
+    color: #F6F8FD;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.ytm-brand ::deep .mud-icon-root {
+    color: #FF4E6A;
+    font-size: 1.6rem;
+}
+
+.ytm-search-pill {
+    flex: 1;
+    min-width: 0;
+    min-height: 42px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #C8D0DE;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 16px;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.ytm-search-pill:hover {
+    border-color: rgba(255, 78, 106, 0.65);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.ytm-avatar {
+    font-weight: 700;
+}
+
+.ytm-main {
+    padding-top: 78px;
+    padding-bottom: 96px;
+}
+
+.ytm-content {
+    width: min(1260px, 100%);
+    margin: 0 auto;
+    padding: 20px 24px 30px;
+}
+
+.ytm-bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    border-radius: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(13, 16, 23, 0.97);
+    backdrop-filter: blur(8px);
+    padding: 7px 6px calc(7px + env(safe-area-inset-bottom));
+    justify-content: space-around;
+}
+
+.ytm-bottom-item {
+    color: #AEB9D2;
+    min-width: 62px;
+    border-radius: 12px;
+    padding: 5px 8px;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    cursor: pointer;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.ytm-bottom-item.is-active {
+    color: #FFFFFF;
+    background: rgba(255, 78, 106, 0.25);
+}
+
+.ytm-bottom-item ::deep .mud-typography {
+    font-size: 0.66rem;
+}
+
+@media (max-width: 900px) {
+    .ytm-content {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+}
+
+@media (max-width: 640px) {
+    .ytm-topbar-inner {
+        padding: 8px 10px;
+        gap: 8px;
     }
 
-    .top-row ::deep a:hover, .top-row ::deep .btn-link:hover {
-        text-decoration: underline;
+    .ytm-main {
+        padding-top: calc(78px + env(safe-area-inset-top));
     }
 
-    .top-row ::deep a:first-child {
+    .ytm-brand span {
+        display: none;
+    }
+
+    .ytm-avatar {
+        display: none;
+    }
+
+    .ytm-search-pill {
+        min-height: 38px;
+        padding: 0 12px;
+    }
+
+    .ytm-search-pill span {
+        font-size: 0.85rem;
         overflow: hidden;
         text-overflow: ellipsis;
-    }
-
-@media (max-width: 640.98px) {
-    .top-row {
-        justify-content: space-between;
-    }
-
-    .top-row ::deep a, .top-row ::deep .btn-link {
-        margin-left: 0;
-    }
-}
-
-@media (min-width: 641px) {
-    .page {
-        flex-direction: row;
-    }
-
-    .sidebar {
-        width: 250px;
-        height: 100vh;
-        position: sticky;
-        top: 0;
-    }
-
-    .top-row {
-        position: sticky;
-        top: 0;
-        z-index: 1;
-    }
-
-    .top-row.auth ::deep a:first-child {
-        flex: 1;
-        text-align: right;
-        width: 0;
-    }
-
-    .top-row, article {
-        padding-left: 2rem !important;
-        padding-right: 1.5rem !important;
+        white-space: nowrap;
     }
 }
