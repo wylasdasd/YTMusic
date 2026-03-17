@@ -42,3 +42,10 @@
 - **依据**:
   - 本轮多次修改里，重复链路增加了排障成本，且容易出现“改了但不生效”的假象。
   - 单链路策略更容易做 A/B 验证与回归检查。
+
+## 2026-03-17: 某些 ROM 需“平台原生 MediaStyle + 平台 MediaSession Token”才显示上一首/下一首
+- **决策**: 在 `PlaybackForegroundService` 中保留平台级 `android.media.session.MediaSession`，并优先使用 `Notification.MediaStyle` + `SetMediaSession(platformToken)` + `SetShowActionsInCompactView(0,1,2)` 构建三键通知。
+- **依据**:
+  - 仅使用 `NotificationCompat.MediaStyle` 时，实机出现“有进度条但无上一首/下一首”。
+  - 切换到平台原生 `Notification.MediaStyle` 后，实机确认“上一首/下一首”恢复显示。
+  - 该行为与设备/ROM 渲染策略强相关，应作为已验证结论固化，避免后续误回退。

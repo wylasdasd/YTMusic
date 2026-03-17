@@ -1,5 +1,7 @@
 using Android.App;
 using Android.Content;
+using Android.Media;
+using Android.Media.Session;
 using Android.OS;
 using CoreNotificationCompat = AndroidX.Core.App.NotificationCompat;
 using NotificationManagerCompat = AndroidX.Core.App.NotificationManagerCompat;
@@ -7,6 +9,12 @@ using MediaNotificationCompat = AndroidX.Media.App.NotificationCompat;
 using AndroidX.Media3.Common;
 using AndroidX.Media3.ExoPlayer;
 using AndroidX.Media3.Session;
+using Media3Metadata = AndroidX.Media3.Common.MediaMetadata;
+using Media3Session = AndroidX.Media3.Session.MediaSession;
+using PlatformMediaSession = Android.Media.Session.MediaSession;
+using PlatformPlaybackState = Android.Media.Session.PlaybackState;
+using PlatformPlaybackStateCode = Android.Media.Session.PlaybackStateCode;
+using AndroidMediaMetadata = Android.Media.MediaMetadata;
 
 namespace YTMusic.Platforms.Android.Services
 {
@@ -36,7 +44,8 @@ namespace YTMusic.Platforms.Android.Services
         private const string ExtraDurationMs = "durationMs";
 
         private IExoPlayer? _player;
-        private MediaSession? _mediaSession;
+        private Media3Session? _mediaSession;
+        private PlatformMediaSession? _platformSession;
         private Timer? _positionTimer;
         private Handler? _mainHandler;
         private long _expectedDurationMs;
@@ -60,7 +69,12 @@ namespace YTMusic.Platforms.Android.Services
             _player.AddListener(this);
             EnsureNotificationChannel();
 
-            _mediaSession = new MediaSession.Builder(this, _player).Build();
+            _mediaSession = new Media3Session.Builder(this, _player).Build();
+            _platformSession = new PlatformMediaSession(this, "YTMusic.PlatformSession");
+            _platformSession.SetCallback(new PlatformSessionCallback(this));
+            _platformSession.SetFlags(MediaSessionFlags.HandlesMediaButtons | MediaSessionFlags.HandlesTransportControls);
+            _platformSession.Active = true;
+            UpdatePlatformSessionState(forceMetadata: true);
         }
 
         public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
@@ -70,7 +84,7 @@ namespace YTMusic.Platforms.Android.Services
             return StartCommandResult.Sticky;
         }
 
-        public override MediaSession? OnGetSession(MediaSession.ControllerInfo? controllerInfo)
+        public override Media3Session? OnGetSession(Media3Session.ControllerInfo? controllerInfo)
         {
             return _mediaSession;
         }
@@ -90,6 +104,10 @@ namespace YTMusic.Platforms.Android.Services
             _mediaSession?.Release();
             _mediaSession?.Dispose();
             _mediaSession = null;
+
+            _platformSession?.Release();
+            _platformSession?.Dispose();
+            _platformSession = null;
 
             if (_isForegroundStarted)
             {
@@ -113,6 +131,7 @@ namespace YTMusic.Platforms.Android.Services
             }
 
             PlayingStateChanged?.Invoke(isPlaying);
+            UpdatePlatformSessionState(forceMetadata: false);
             UpdateForegroundNotification(force: true);
         }
 
@@ -122,6 +141,7 @@ namespace YTMusic.Platforms.Android.Services
             {
                 StopPositionTimer();
                 PlayingStateChanged?.Invoke(false);
+                UpdatePlatformSessionState(forceMetadata: false);
                 UpdateForegroundNotification(force: true);
                 PlaybackEnded?.Invoke();
             }
@@ -192,7 +212,7 @@ namespace YTMusic.Platforms.Android.Services
                     _currentArtist = intent.GetStringExtra(ExtraArtist) ?? "Playing";
                     _expectedDurationMs = Math.Max(0, intent.GetLongExtra(ExtraDurationMs, 0));
 
-                    var mediaMetadata = new MediaMetadata.Builder()
+                    var mediaMetadata = new Media3Metadata.Builder()
                         .SetTitle(_currentTitle)
                         .SetArtist(_currentArtist)
                         .Build();
@@ -205,16 +225,19 @@ namespace YTMusic.Platforms.Android.Services
                     player.SetMediaItem(mediaItem);
                     player.Prepare();
                     player.Play();
+                    UpdatePlatformSessionState(forceMetadata: true);
                     UpdateForegroundNotification(force: true);
                     StartPositionTimer();
                     break;
                 }
                 case ActionPause:
                     player.Pause();
+                    UpdatePlatformSessionState(forceMetadata: false);
                     UpdateForegroundNotification(force: true);
                     break;
                 case ActionResume:
                     player.Play();
+                    UpdatePlatformSessionState(forceMetadata: false);
                     UpdateForegroundNotification(force: true);
                     break;
                 case ActionSeek:
@@ -223,6 +246,7 @@ namespace YTMusic.Platforms.Android.Services
                     if (seekMs >= 0)
                     {
                         player.SeekTo(seekMs);
+                        UpdatePlatformSessionState(forceMetadata: false);
                         UpdateForegroundNotification(force: true);
                     }
                     break;
@@ -237,6 +261,7 @@ namespace YTMusic.Platforms.Android.Services
                     player.Stop();
                     StopPositionTimer();
                     _expectedDurationMs = 0;
+                    UpdatePlatformSessionState(forceMetadata: false);
                     if (_isForegroundStarted)
                     {
                         StopForeground(StopForegroundFlags.Remove);
@@ -285,6 +310,7 @@ namespace YTMusic.Platforms.Android.Services
 
                     var durationSeconds = durationMs / 1000.0;
                     PositionChanged?.Invoke(currentSeconds, durationSeconds);
+                    UpdatePlatformSessionState(forceMetadata: false);
                     UpdateForegroundNotification(force: false);
                 });
             }, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(500));
@@ -317,6 +343,56 @@ namespace YTMusic.Platforms.Android.Services
             }
 
             _mainHandler?.Post(action);
+        }
+
+        private void UpdatePlatformSessionState(bool forceMetadata)
+        {
+            var player = _player;
+            var session = _platformSession;
+            if (player == null || session == null)
+            {
+                return;
+            }
+
+            var positionMs = Math.Max(0, player.CurrentPosition);
+            var durationMs = Math.Max(0, player.Duration);
+            if (durationMs <= 0 && _expectedDurationMs > 0)
+            {
+                durationMs = _expectedDurationMs;
+            }
+
+            var isPlaying = player.IsPlaying;
+            var stateCode = isPlaying ? PlatformPlaybackStateCode.Playing : PlatformPlaybackStateCode.Paused;
+            var speed = isPlaying ? 1.0f : 0.0f;
+            const long playbackActions =
+                PlatformPlaybackState.ActionPlay |
+                PlatformPlaybackState.ActionPause |
+                PlatformPlaybackState.ActionPlayPause |
+                PlatformPlaybackState.ActionSeekTo |
+                PlatformPlaybackState.ActionSkipToPrevious |
+                PlatformPlaybackState.ActionSkipToNext |
+                PlatformPlaybackState.ActionStop;
+
+            var state = new PlatformPlaybackState.Builder()
+                .SetActions(playbackActions)
+                .SetState(stateCode, positionMs, speed, SystemClock.ElapsedRealtime())
+                .Build();
+            session.SetPlaybackState(state);
+
+            if (!forceMetadata)
+            {
+                return;
+            }
+
+            var metadataBuilder = new AndroidMediaMetadata.Builder()
+                .PutString(AndroidMediaMetadata.MetadataKeyTitle, _currentTitle)
+                .PutString(AndroidMediaMetadata.MetadataKeyArtist, _currentArtist);
+            if (durationMs > 0)
+            {
+                metadataBuilder.PutLong(AndroidMediaMetadata.MetadataKeyDuration, durationMs);
+            }
+
+            session.SetMetadata(metadataBuilder.Build());
         }
 
         private void EnsureNotificationChannel()
@@ -415,6 +491,75 @@ namespace YTMusic.Platforms.Android.Services
                 CreateIntent(this, ActionNext),
                 PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent);
 
+            var previousAction = new CoreNotificationCompat.Action.Builder(
+                    global::Android.Resource.Drawable.IcMediaRew,
+                    "Previous",
+                    previousIntent)
+                .Build();
+
+            var playPauseAction = new CoreNotificationCompat.Action.Builder(
+                    pauseOrResumeIcon,
+                    pauseOrResumeTitle,
+                    pauseOrResumeIntent)
+                .Build();
+
+            var nextAction = new CoreNotificationCompat.Action.Builder(
+                    global::Android.Resource.Drawable.IcMediaFf,
+                    "Next",
+                    nextIntent)
+                .Build();
+
+            var platformSessionToken = _platformSession?.SessionToken;
+            if (Build.VERSION.SdkInt >= BuildVersionCodes.Lollipop && platformSessionToken != null)
+            {
+                var previousPlatformAction = new Notification.Action.Builder(
+                        global::Android.Resource.Drawable.IcMediaRew,
+                        "Previous",
+                        previousIntent)
+                    .Build();
+                var playPausePlatformAction = new Notification.Action.Builder(
+                        pauseOrResumeIcon,
+                        pauseOrResumeTitle,
+                        pauseOrResumeIntent)
+                    .Build();
+                var nextPlatformAction = new Notification.Action.Builder(
+                        global::Android.Resource.Drawable.IcMediaFf,
+                        "Next",
+                        nextIntent)
+                    .Build();
+
+                var platformBuilder = new Notification.Builder(this, NotificationChannelId)
+                    .SetSmallIcon(global::Android.Resource.Drawable.IcMediaPlay)
+                    .SetContentTitle(_currentTitle)
+                    .SetContentText(_currentArtist)
+                    .SetContentIntent(contentPendingIntent)
+                    .SetVisibility(NotificationVisibility.Public)
+                    .SetCategory(Notification.CategoryTransport)
+                    .SetOnlyAlertOnce(true)
+                    .SetOngoing(isPlaying);
+
+                platformBuilder
+                    .AddAction(previousPlatformAction)
+                    .AddAction(playPausePlatformAction)
+                    .AddAction(nextPlatformAction);
+
+                var style = new Notification.MediaStyle()
+                    .SetMediaSession(platformSessionToken)
+                    .SetShowActionsInCompactView(0, 1, 2);
+                platformBuilder.SetStyle(style);
+
+                if (durationMs > 0)
+                {
+                    platformBuilder.SetProgress((int)Math.Min(int.MaxValue, durationMs), (int)Math.Min(int.MaxValue, positionMs), false);
+                }
+                else
+                {
+                    platformBuilder.SetProgress(0, 0, true);
+                }
+
+                return platformBuilder.Build();
+            }
+
             var builder = new CoreNotificationCompat.Builder(this, NotificationChannelId)
                 .SetSmallIcon(global::Android.Resource.Drawable.IcMediaPlay)
                 .SetContentTitle(_currentTitle)
@@ -425,9 +570,9 @@ namespace YTMusic.Platforms.Android.Services
                 .SetOnlyAlertOnce(true)
                 .SetOngoing(isPlaying)
                 .SetPriority((int)NotificationPriority.High)
-                .AddAction(global::Android.Resource.Drawable.IcMediaRew, "Previous", previousIntent)
-                .AddAction(pauseOrResumeIcon, pauseOrResumeTitle, pauseOrResumeIntent)
-                .AddAction(global::Android.Resource.Drawable.IcMediaFf, "Next", nextIntent);
+                .AddAction(previousAction)
+                .AddAction(playPauseAction)
+                .AddAction(nextAction);
 
             var mediaStyle = new MediaNotificationCompat.MediaStyle()
                 .SetShowActionsInCompactView(0, 1, 2);
@@ -449,6 +594,56 @@ namespace YTMusic.Platforms.Android.Services
             }
 
             return builder.Build();
+        }
+
+        private sealed class PlatformSessionCallback : PlatformMediaSession.Callback
+        {
+            private readonly PlaybackForegroundService _service;
+
+            public PlatformSessionCallback(PlaybackForegroundService service)
+            {
+                _service = service;
+            }
+
+            public override void OnPlay()
+            {
+                _service.RunOnMainThread(() =>
+                {
+                    _service._player?.Play();
+                    _service.UpdatePlatformSessionState(forceMetadata: false);
+                    _service.UpdateForegroundNotification(force: true);
+                });
+            }
+
+            public override void OnPause()
+            {
+                _service.RunOnMainThread(() =>
+                {
+                    _service._player?.Pause();
+                    _service.UpdatePlatformSessionState(forceMetadata: false);
+                    _service.UpdateForegroundNotification(force: true);
+                });
+            }
+
+            public override void OnSeekTo(long pos)
+            {
+                _service.RunOnMainThread(() =>
+                {
+                    _service._player?.SeekTo(Math.Max(0, pos));
+                    _service.UpdatePlatformSessionState(forceMetadata: false);
+                    _service.UpdateForegroundNotification(force: true);
+                });
+            }
+
+            public override void OnSkipToPrevious()
+            {
+                _service.RunOnMainThread(() => PreviousRequested?.Invoke());
+            }
+
+            public override void OnSkipToNext()
+            {
+                _service.RunOnMainThread(() => NextRequested?.Invoke());
+            }
         }
     }
 }

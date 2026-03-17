@@ -11,6 +11,7 @@
 - [x] Android 13+ 通知权限请求链路恢复（`POST_NOTIFICATIONS`）。
 - [x] Android 后台播放通知链路稳定化（恢复前台通知与进度更新）。
 - [x] 清理无效通知权限服务抽象，降低排障复杂度。
+- [x] 实机确认并固化“平台原生 `Notification.MediaStyle + MediaSession.Token`”方案，恢复上一首/下一首显示。
 
 ## 进行中
 - [x] 初始化中文化 Memory Bank。
