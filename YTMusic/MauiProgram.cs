@@ -26,13 +26,10 @@ namespace YTMusic
             builder.Services.AddSingleton<MusicPlayerService>();
 #if ANDROID
             builder.Services.AddSingleton<INativeAudioPlaybackService, YTMusic.Platforms.Android.Services.AndroidNativeAudioPlaybackService>();
-            builder.Services.AddSingleton<INotificationPermissionService, YTMusic.Platforms.Android.Services.AndroidNotificationPermissionService>();
 #elif IOS
             builder.Services.AddSingleton<INativeAudioPlaybackService, YTMusic.Platforms.iOS.Services.IosNativeAudioPlaybackService>();
-            builder.Services.AddSingleton<INotificationPermissionService, NullNotificationPermissionService>();
 #else
             builder.Services.AddSingleton<INativeAudioPlaybackService, NullNativeAudioPlaybackService>();
-            builder.Services.AddSingleton<INotificationPermissionService, NullNotificationPermissionService>();
 #endif
             builder.Services.AddScoped<YTMusic.Components.Pages.SearchVM>();
             builder.Services.AddTransient<YTMusic.Components.Pages.DownloadsVM>();
