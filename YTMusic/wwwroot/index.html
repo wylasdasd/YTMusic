@@ -17,7 +17,12 @@
 
     <div class="status-bar-safe-area"></div>
 
-    <div id="app">Loading...</div>
+    <div id="app">
+        <div class="app-startup-loading" role="status" aria-live="polite" aria-label="Application loading">
+            <div class="app-startup-loading__spinner"></div>
+            <div class="app-startup-loading__text">Loading...</div>
+        </div>
+    </div>
 
     <div id="blazor-error-ui" data-nosnippet>
         An unhandled error has occurred.
