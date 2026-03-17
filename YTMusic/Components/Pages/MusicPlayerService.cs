@@ -414,13 +414,6 @@ namespace YTMusic.Services
                 IsCurrentStreamWebM = filePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
                 if (_nativeAudio.IsSupported)
                 {
-                    if (OperatingSystem.IsAndroid() && IsCurrentStreamWebM)
-                    {
-                        // For Android system media cards, local webm/opus files may not expose seek bar reliably.
-                        // Keep playback path stable here; users can re-download in mp4/m4a for proper lockscreen progress.
-                        Console.WriteLine($"[AndroidMediaPanel] local webm may not show seek bar: {filePath}");
-                    }
-
                     CurrentStreamUrl = null;
                     CurrentTime = 0;
                     Duration = 100;

@@ -2,7 +2,6 @@
 @using YTMusic.Services
 @using MudBlazor
 @using YTMusic.Components.Dialogs
-@using Microsoft.Maui.ApplicationModel
 @inject MusicPlayerService PlayerService
 @inject IDialogService DialogService
 @inject IFavoriteService FavoriteService
@@ -11,32 +10,6 @@
 @implements IDisposable
 
 <MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
-    @if (_showNotificationPermissionHint)
-    {
-        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
-            Android 通知权限未开启，锁屏/通知栏可能无法显示播放进度条。
-            <div class="mt-2 d-flex" style="gap: 8px;">
-                <MudButton Variant="Variant.Filled" Color="Color.Warning" Size="Size.Small" OnClick="RequestNotificationPermissionAsync">
-                    授权通知
-                </MudButton>
-                <MudButton Variant="Variant.Outlined" Color="Color.Warning" Size="Size.Small" OnClick="OpenAppNotificationSettingsAsync">
-                    打开系统设置
-                </MudButton>
-            </div>
-        </MudAlert>
-    }
-    else if (OperatingSystem.IsAndroid())
-    {
-        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
-            锁屏没有媒体卡片？请检查：锁屏通知已允许、系统“显示媒体控制”已开启、应用电池策略为“不限制”。
-            <div class="mt-2 d-flex" style="gap: 8px;">
-                <MudButton Variant="Variant.Outlined" Color="Color.Info" Size="Size.Small" OnClick="OpenAppNotificationSettingsAsync">
-                    打开系统设置
-                </MudButton>
-            </div>
-        </MudAlert>
-    }
-
     @if (PlayerService.CurrentVideo?.VideoId != "local")
     {
         <div class="d-flex justify-end mb-2">
@@ -128,14 +101,12 @@
 @code {
     private bool IsFavorite = false;
     private string? _currentCheckedVideoId;
-    private bool _showNotificationPermissionHint;
 
     protected override void OnInitialized()
     {
         PlayerService.OnChange += OnStateChanged;
         PlayerService.OnTimeChanged += OnTimeChanged;
         _ = CheckFavoriteStatusAsync();
-        _ = RefreshNotificationPermissionHintAsync(requestPermission: false);
     }
 
     private void OnStateChanged()
@@ -227,8 +198,6 @@ parameters, options);
 
     private async Task TogglePlay()
     {
-        await RefreshNotificationPermissionHintAsync(requestPermission: false);
-
         if (PlayerService.IsPlaying)
             await PlayerService.PauseAsync();
         else
@@ -291,59 +260,6 @@ parameters, options);
 
         DownloadManager.StartDownload(currentVideo.VideoId, currentVideo.Title, isVideo);
         Snackbar.Add($"Started downloading: {currentVideo.Title}", Severity.Success);
-    }
-
-    private async Task RequestNotificationPermissionAsync()
-    {
-        await RefreshNotificationPermissionHintAsync(requestPermission: true);
-        if (!_showNotificationPermissionHint)
-        {
-            Snackbar.Add("通知权限已开启。", Severity.Success);
-        }
-    }
-
-    private Task OpenAppNotificationSettingsAsync()
-    {
-        try
-        {
-            AppInfo.Current.ShowSettingsUI();
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"无法打开系统设置: {ex.Message}", Severity.Error);
-        }
-
-        return Task.CompletedTask;
-    }
-
-    private async Task RefreshNotificationPermissionHintAsync(bool requestPermission)
-    {
-        if (!OperatingSystem.IsAndroid())
-        {
-            _showNotificationPermissionHint = false;
-            return;
-        }
-
-        try
-        {
-            PermissionStatus status;
-            if (requestPermission)
-            {
-                status = await Permissions.RequestAsync<Permissions.PostNotifications>();
-            }
-            else
-            {
-                status = await Permissions.CheckStatusAsync<Permissions.PostNotifications>();
-            }
-
-            _showNotificationPermissionHint = status != PermissionStatus.Granted;
-        }
-        catch
-        {
-            _showNotificationPermissionHint = false;
-        }
-
-        await InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()
