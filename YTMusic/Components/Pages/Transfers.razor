@@ -3,8 +3,6 @@
 @using YTMusic.Services
 @implements IDisposable
 
-<MudText Typo="Typo.h4" GutterBottom="true">Transfers</MudText>
-
 @if (!ViewModel.ActiveDownloads.Any())
 {
     <MudAlert Severity="Severity.Info" Class="mt-4">No active downloads.</MudAlert>

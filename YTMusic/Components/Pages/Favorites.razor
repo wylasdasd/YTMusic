@@ -2,8 +2,6 @@
 @using YTMusic.Services
 @implements IDisposable
 
-<MudText Typo="Typo.h4" GutterBottom="true">Favorites</MudText>
-
 <div class="d-flex align-center mb-4 gap-4">
     <MudSelect T="int" Value="ViewModel.SelectedFolderId" ValueChanged="ViewModel.SetFolderAsync" Label="Folder"
                Variant="Variant.Outlined" Style="max-width: 200px;">
