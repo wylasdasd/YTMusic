@@ -1,39 +1,56 @@
-# YTMusic：Agent 约定
+# YTMusic：Agent 约定（当前代码基线）
 
 ## 仓库结构
-- `YTMusic/`：.NET MAUI Blazor 应用（Razor 组件位于 `YTMusic/Components/`）
+- `YTMusic/`：.NET MAUI Blazor 主应用
+  - `Components/Layout/`：全局布局（`MainLayout.razor`、`GlobalAudioPlayer.razor`）
+  - `Components/Pages/`：页面组件与对应 VM
+  - `Services/`：业务服务（播放器、下载、全局状态等）
+  - `wwwroot/js/`：前端脚本（含 `ytmLayout.js`、`audioPlayer.js`）
 - `CommonHelp/`：共享类库
 
-## 构建
+## 构建与验证
 - Windows 快速构建：`dotnet build YTMusic/YTMusic.csproj -c Debug -f net10.0-windows10.0.19041.0`
-- 构建整个解决方案：`dotnet build YTMusic/YTMusic.slnx -c Debug`
+- 若可执行文件被占用（VS 正在调试），使用临时输出验证：
+  - `dotnet build YTMusic/YTMusic.csproj -c Debug -f net10.0-windows10.0.19041.0 -o YTMusic/bin/Debug/net10.0-windows10.0.19041.0/win-x64-temp`
 
-## 约定
-- C# 命名空间与 `RootNamespace`（`YTMusic`）及目录结构保持一致
-- Razor 组件命名空间与 `YTMusic/Components/**` 目录保持一致（例如 `YTMusic.Components.Pages`）
-- 优先复用现有 `CommonHelp` 代码；避免随手新增零散工具函数；确需新增请放在 `CommonHelp/` 下
-- 组件与 VM 同目录：所有 Blazor 组件（`.razor`）及其对应的 ViewModel 必须放在同一个文件夹下，禁止跨目录存放
-  - ViewModel 文件名必须以 `VM.cs` 结尾（例如 `Counter.razor` → `CounterVM.cs`）
-  - 推荐使用 `partial class`（分部类）或依赖注入方式，将 ViewModel 与 `.razor` 视图解耦
-- 避免无关格式化；尽量保持现有编码/换行风格
+## 通用开发约定
+- 命名空间与 `RootNamespace`（`YTMusic`）及目录结构一致。
+- Razor 组件命名空间与 `YTMusic/Components/**` 对齐（例如 `YTMusic.Components.Pages`）。
+- 组件与 VM 同目录：
+  - ViewModel 文件必须以 `VM.cs` 结尾（例如 `Search.razor` -> `SearchVM.cs`）。
+  - 禁止跨目录放置组件与对应 VM。
+- 优先复用 `CommonHelp` 现有能力，避免新增零散工具函数。
+- 避免无关格式化，尽量保持原有代码风格与换行。
 
-## 主题与布局
+## UI/布局强约束（按当前实现）
+- 顶部栏：`MainLayout` 中保留品牌、搜索入口、三横杠菜单按钮。
+- 主题切换：
+  - 点击三横杠打开右侧主题侧边栏（不是直接切换）。
+  - 主题由侧边栏列表选择，当前内置 5 套（含 2 套亮色）。
+  - 主题逻辑在 `MainLayout.razor` 中维护，使用 `ThemePreset`。
+- 底部导航：
+  - 全端固定在最底部（`position: fixed; bottom: 0`），不能回退到侧边 Rail。
+  - 需要兼容输入法弹出场景：依赖 `wwwroot/js/ytmLayout.js` 的 `visualViewport` 修正。
+- 移动端安全区：
+  - Web 样式使用 `env(safe-area-inset-*)`。
+  - 原生层在 `MainPage.xaml.cs` 已补充 iOS/Android 顶部安全区处理，修改时不要破坏。
 
-### 主题色
+## Home/Search 页约定
+- Home（Search 页初始态）不显示页面标题与引导提示块。
+- 搜索框回车搜索需保证“所见即所得”：
+  - `Immediate="true"` + `OnKeyUp` 触发。
+- 搜索页样式主要由 `Search.razor.css` 管理，颜色优先跟随布局定义的 CSS 变量。
 
-用于 MudBlazor 主题和控件但不要滥用。
+## 稳定性约定
+- 主题索引必须防越界：
+  - 读取主题统一走安全访问器（如 `ActiveTheme`）。
+  - 选择主题时先做边界校验。
+- 修改 `MainLayout` 时，优先保证以下行为不回归：
+  - 顶栏元素不越界（手机小屏）
+  - 底部导航在键盘弹出/收起后可回到底部
+  - 主题抽屉可打开/关闭、可重复切换
 
-| 角色 | 颜色预览 | 十六进制 |
-| :--- | :--- | :--- |
-| Primary | ![#111111](https://via.placeholder.com/15/2F6DF6/2F6DF6.png) | `#111111` |
-| Secondary | ![#0E7490](https://via.placeholder.com/15/0E7490/0E7490.png) | `#0E7490` |
-| Tertiary/Accent | ![#F59E0B](https://via.placeholder.com/15/F59E0B/F59E0B.png) | `#F59E0B` |
-| Surface | ![#FFFFFF](https://via.placeholder.com/15/FFFFFF/FFFFFF.png) | `#FFFFFF` |
-| Background | ![#F6F7FB](https://via.placeholder.com/15/F6F7FB/F6F7FB.png) | `#F6F7FB` |
-| Text Primary | ![#0F172A](https://via.placeholder.com/15/0F172A/0F172A.png) | `#0F172A` |
-| Text Secondary | ![#475569](https://via.placeholder.com/15/475569/475569.png) | `#475569` |
-| Divider | ![#E2E8F0](https://via.placeholder.com/15/E2E8F0/E2E8F0.png) | `#E2E8F0` |
-
-
-## 安全
-- 未明确要求时，不要随意新增/删除 NuGet 包或安装工作负载（workloads）
+## 禁止项
+- 未明确要求，不新增/删除 NuGet 包，不安装 workloads。
+- 不将底部导航改回仅移动端显示。
+- 不在未沟通的情况下移除已有主题或主题侧边栏交互。
