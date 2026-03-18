@@ -1,0 +1,9 @@
+{
+    "chatgpt.openOnStartup": false,
+    "explorer.fileNesting.enabled": true,
+    "explorer.fileNesting.expand": false, // 默认不展开
+    "explorer.fileNesting.patterns": {
+        "*.razor": "${capture}.razor.css, ${capture}VM.cs, ${capture}.razor.js",
+        "*.cs": "${capture}.designer.cs, ${capture}.config"
+    }
+}
