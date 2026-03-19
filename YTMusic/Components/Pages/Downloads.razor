@@ -1,6 +1,4 @@
 @page "/downloads"
-@inject IJSRuntime JSRuntime
-@inject ISnackbar Snackbar
 @if (ViewModel.IsLoading)
 {
     <div class="d-flex justify-center mt-8">
@@ -38,9 +36,6 @@ else
                 Color="@(ViewModel.FavoriteFilePaths.Contains(file.LocalFilePath) ? Color.Error : Color.Default)"
                 OnClick="@(async () => await ViewModel.OpenFavoriteDialogAsync(file))" aria-label="Toggle Favorite" />
 
-                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Default"
-                               OnClick="@(() => CopyToClipboardAsync(file.LocalFilePath))" aria-label="Copy Path" />
-
                 <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Color="Color.Primary"
                                OnClick="@(() => PlayLocalFile(file))" aria-label="Play" />
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
@@ -65,18 +60,5 @@ else
     {
         await PlayerService.PlayLocalFileAsync(file.LocalFilePath, file.Title, file.IsVideo, file.Author, file.ThumbnailUrl);
         NavigationManager.NavigateTo("/player");
-    }
-
-    private async Task CopyToClipboardAsync(string text)
-    {
-        try
-        {
-            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
-            Snackbar.Add("Path copied to clipboard!", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Failed to copy: {ex.Message}", Severity.Error);
-        }
     }
 }

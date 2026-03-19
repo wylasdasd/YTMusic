@@ -3,6 +3,7 @@
 @using YTMusic.Services
 @inject GlobalStateService GlobalState
 @inject IJSRuntime JSRuntime
+@inject ISnackbar Snackbar
 @implements IDisposable
 
 <MudThemeProvider Theme="@CurrentMudTheme" IsDarkMode="@CurrentIsDark" />
@@ -63,6 +64,10 @@
                 <span>@item.Name</span>
             </button>
         }
+        <button class="ytm-theme-item" @onclick="CopyDownloadPathAsync">
+            <span class="ytm-theme-dot" style="background: var(--ytm-accent);"></span>
+            <span>Copy Download Path</span>
+        </button>
     </div>
 </aside>
 
@@ -166,6 +171,20 @@
     private string GetThemeItemClass(int index)
     {
         return index == _themeIndex ? "ytm-theme-item is-active" : "ytm-theme-item";
+    }
+
+    private async Task CopyDownloadPathAsync()
+    {
+        var downloadPath = StoragePaths.GetDownloadedMusicDirectory();
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", downloadPath);
+            Snackbar.Add("Download path copied.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Copy failed: {ex.Message}", Severity.Error);
+        }
     }
 
     public void Dispose()
