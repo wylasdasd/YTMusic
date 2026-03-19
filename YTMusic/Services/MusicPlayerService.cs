@@ -320,7 +320,7 @@ namespace YTMusic.Services
         public bool IsPlaying { get; private set; }
         public bool IsLoading { get; private set; }
         public bool UseNativePlayback => _nativeAudio.IsSupported;
-        public bool UseWebM { get; set; } = false;
+        public bool UseWebM { get; set; } = true;
         public bool IsCurrentStreamWebM { get; private set; }
         public double CurrentTime { get; private set; } = 0;
         public double Duration { get; private set; } = 100;

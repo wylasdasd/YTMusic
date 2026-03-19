@@ -83,7 +83,7 @@ namespace YTMusic.Services
             else
             {
                 streamInfo = streamManifest.GetAudioOnlyStreams()
-                    .Where(s => s.Container == Container.Mp4)
+                    .Where(s => s.Container == Container.WebM)
                     .GetWithHighestBitrate() ?? streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate();
             }
 
