@@ -1,0 +1,194 @@
+@page "/player/video"
+@using YTMusic.Services
+@using MudBlazor
+@using YTMusic.Components.Dialogs
+@inject MusicPlayerService PlayerService
+@inject IDialogService DialogService
+@inject IFavoriteService FavoriteService
+@inject IDownloadManagerService DownloadManager
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-4">
+    @{
+        var currentVideo = PlayerService.CurrentVideo;
+    }
+    @if (currentVideo == null)
+    {
+        <div class="d-flex flex-column align-center justify-center" style="height: 50vh;">
+            <MudIcon Icon="@Icons.Material.Filled.VideoLibrary" Style="font-size: 4rem;" Color="Color.Secondary" Class="mb-4" />
+            <MudText Typo="Typo.h5" Color="Color.Secondary">No video is currently playing</MudText>
+        </div>
+    }
+    else
+    {
+        <MudPaper Elevation="2" Class="pa-4">
+            @if (!PlayerService.UseNativeVideoPlayback)
+            {
+                <video @ref="_videoElement"
+                       autoplay
+                       playsinline
+                       controls
+                       preload="metadata"
+                       poster="@currentVideo.ThumbnailUrl"
+                       style="display:block;width:100%;max-width:100%;aspect-ratio:16/9;border-radius:12px;background:#000;object-fit:contain;margin-bottom:12px;" />
+            }
+
+            <MudText Typo="Typo.h6" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                @currentVideo.Title
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">@currentVideo.Author</MudText>
+
+            <div class="d-flex align-center justify-space-between">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @(PlayerService.UseNativeVideoPlayback ? "Android 原生 ExoPlayer 播放中" : "视频播放使用下方视频组件自带控件")
+                </MudText>
+                <div class="d-flex align-center">
+                    <MudIconButton
+                    Icon="@(IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                    Color="@(IsFavorite ? Color.Error : Color.Default)"
+                    OnClick="OpenFavoriteDialogAsync"
+                    aria-label="Toggle Favorite" />
+                    <MudMenu Icon="@Icons.Material.Filled.Download" Color="Color.Primary" AnchorOrigin="Origin.BottomRight"
+                             TransformOrigin="Origin.TopRight" aria-label="Download">
+                        <MudMenuItem OnClick="@(() => Download(false))">Download Audio</MudMenuItem>
+                        <MudMenuItem OnClick="@(() => Download(true))">Download Video</MudMenuItem>
+                    </MudMenu>
+                </div>
+            </div>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    private bool IsFavorite = false;
+    private string? _currentCheckedVideoId;
+    private ElementReference _videoElement;
+    private bool _videoBound;
+
+    protected override void OnInitialized()
+    {
+        PlayerService.OnChange += OnStateChanged;
+        _ = CheckFavoriteStatusAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (PlayerService.UseNativeVideoPlayback)
+        {
+            return;
+        }
+
+        if (PlayerService.CurrentVideo != null && !_videoBound)
+        {
+            await JSRuntime.InvokeVoidAsync("audioPlayer.setVideoElement", _videoElement);
+            _videoBound = true;
+        }
+    }
+
+    private void OnStateChanged()
+    {
+        if (!PlayerService.IsCurrentStreamVideo)
+        {
+            if (!PlayerService.UseNativeVideoPlayback)
+            {
+                _ = JSRuntime.InvokeVoidAsync("audioPlayer.clearVideoElement");
+            }
+            _videoBound = false;
+            NavigationManager.NavigateTo("/player/audio", replace: true);
+            return;
+        }
+
+        _ = CheckFavoriteStatusAsync();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CheckFavoriteStatusAsync()
+    {
+        var currentVideo = PlayerService.CurrentVideo;
+        if (currentVideo == null)
+        {
+            IsFavorite = false;
+            _currentCheckedVideoId = null;
+            return;
+        }
+
+        var trackingId = !string.IsNullOrEmpty(currentVideo.LocalFilePath) ? currentVideo.LocalFilePath : currentVideo.VideoId;
+        if (_currentCheckedVideoId == trackingId)
+        {
+            return;
+        }
+
+        _currentCheckedVideoId = trackingId;
+
+        if (!string.IsNullOrEmpty(currentVideo.LocalFilePath))
+        {
+            var track = await FavoriteService.GetTrackByFilePathAsync(currentVideo.LocalFilePath);
+            IsFavorite = track != null;
+        }
+        else
+        {
+            var folders = await FavoriteService.GetFavoriteFolderIdsForVideoAsync(currentVideo.VideoId);
+            IsFavorite = folders.Any();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OpenFavoriteDialogAsync()
+    {
+        var currentVideo = PlayerService.CurrentVideo;
+        if (currentVideo == null) return;
+
+        string videoId = currentVideo.VideoId;
+
+        if (!string.IsNullOrEmpty(currentVideo.LocalFilePath))
+        {
+            var existingTrack = await FavoriteService.GetTrackByFilePathAsync(currentVideo.LocalFilePath);
+            videoId = existingTrack?.VideoId ?? Guid.NewGuid().ToString("N").Substring(0, 11);
+        }
+
+        var parameters = new DialogParameters
+        {
+            { "VideoId", videoId },
+            { "Title", currentVideo.Title },
+            { "Author", currentVideo.Author },
+            { "ThumbnailUrl", currentVideo.ThumbnailUrl },
+            { "LocalFilePath", currentVideo.LocalFilePath }
+        };
+
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<FavoriteFolderDialog>("Add to Favorite Folder", parameters, options);
+        await dialog.Result;
+
+        _currentCheckedVideoId = null;
+        await CheckFavoriteStatusAsync();
+    }
+
+    private void Download(bool isVideo)
+    {
+        var currentVideo = PlayerService.CurrentVideo;
+        if (currentVideo == null) return;
+
+        if (currentVideo.VideoId == "local")
+        {
+            Snackbar.Add("This file is already downloaded.", Severity.Warning);
+            return;
+        }
+
+        DownloadManager.StartDownload(currentVideo.VideoId, currentVideo.Title, isVideo);
+        Snackbar.Add($"Started downloading: {currentVideo.Title}", Severity.Success);
+    }
+
+    public void Dispose()
+    {
+        PlayerService.OnChange -= OnStateChanged;
+        if (!PlayerService.UseNativeVideoPlayback)
+        {
+            _ = JSRuntime.InvokeVoidAsync("audioPlayer.clearVideoElement");
+        }
+        _videoBound = false;
+    }
+}

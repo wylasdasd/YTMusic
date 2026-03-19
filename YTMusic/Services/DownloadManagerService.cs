@@ -104,6 +104,7 @@ namespace YTMusic.Services
                     Author = "Unknown Artist",
                     ThumbnailUrl = $"https://img.youtube.com/vi/{taskInfo.VideoId}/mqdefault.jpg",
                     LocalFilePath = filePath,
+                    IsVideo = taskInfo.IsVideo,
                     DownloadedDate = DateTime.UtcNow
                 });
 

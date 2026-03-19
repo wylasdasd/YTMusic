@@ -23,6 +23,7 @@ namespace YTMusic.Services
         public string Author { get; set; } = string.Empty;
         public string? ThumbnailUrl { get; set; }
         public string LocalFilePath { get; set; } = string.Empty;
+        public bool IsVideo { get; set; }
         public DateTime DownloadedDate { get; set; }
     }
 

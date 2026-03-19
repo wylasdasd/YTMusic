@@ -63,7 +63,7 @@ else
 
     private async Task PlayLocalFile(YTMusic.Services.DownloadedTrack file)
     {
-        await PlayerService.PlayLocalFileAsync(file.LocalFilePath, file.Title);
+        await PlayerService.PlayLocalFileAsync(file.LocalFilePath, file.Title, file.IsVideo, file.Author, file.ThumbnailUrl);
         NavigationManager.NavigateTo("/player");
     }
 

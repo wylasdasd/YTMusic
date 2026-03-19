@@ -22,6 +22,7 @@ namespace YTMusic.Services
         public string Author { get; set; } = string.Empty;
         public string? ThumbnailUrl { get; set; }
         public string? LocalFilePath { get; set; }
+        public bool? IsVideo { get; set; }
         public double? DurationSeconds { get; set; }
     }
 
@@ -304,6 +305,7 @@ namespace YTMusic.Services
     {
         private readonly YoutubeClient _youtubeClient;
         private readonly INativeAudioPlaybackService _nativeAudio;
+        private readonly INativeVideoPlaybackService _nativeVideo;
         private readonly ILocalMusicService _localMusicService;
         private LocalAudioProxy? _proxy;
         private LocalFileProxy? _fileProxy;
@@ -320,8 +322,12 @@ namespace YTMusic.Services
         public bool IsPlaying { get; private set; }
         public bool IsLoading { get; private set; }
         public bool UseNativePlayback => _nativeAudio.IsSupported;
+        public bool IsUsingNativePlayback { get; private set; }
+        public bool UseNativeVideoPlayback => _nativeVideo.IsSupported && OperatingSystem.IsAndroid();
+        public bool IsUsingNativeVideoPlayback { get; private set; }
         public bool UseWebM { get; set; } = true;
         public bool IsCurrentStreamWebM { get; private set; }
+        public bool IsCurrentStreamVideo { get; private set; }
         public double CurrentTime { get; private set; } = 0;
         public double Duration { get; private set; } = 100;
 
@@ -333,9 +339,10 @@ namespace YTMusic.Services
         public PlaybackMode CurrentMode { get; private set; } = PlaybackMode.Sequential;
         private List<int> _shuffleIndices = new List<int>();
 
-        public MusicPlayerService(INativeAudioPlaybackService nativeAudio, ILocalMusicService localMusicService)
+        public MusicPlayerService(INativeAudioPlaybackService nativeAudio, INativeVideoPlaybackService nativeVideo, ILocalMusicService localMusicService)
         {
             _nativeAudio = nativeAudio;
+            _nativeVideo = nativeVideo;
             _localMusicService = localMusicService;
             _youtubeClient = new YoutubeClient();
 
@@ -350,6 +357,13 @@ namespace YTMusic.Services
                 _nativeAudio.PositionChanged += OnNativePositionChanged;
                 _nativeAudio.PlayingStateChanged += OnNativePlayingStateChanged;
                 _nativeAudio.PlaybackEnded += OnNativePlaybackEnded;
+            }
+
+            if (_nativeVideo.IsSupported)
+            {
+                _nativeVideo.PositionChanged += OnNativeVideoPositionChanged;
+                _nativeVideo.PlayingStateChanged += OnNativeVideoPlayingStateChanged;
+                _nativeVideo.PlaybackEnded += OnNativeVideoPlaybackEnded;
             }
         }
 
@@ -388,7 +402,7 @@ namespace YTMusic.Services
             await PlayInternalAsync(playingItem);
         }
 
-        public async Task PlayLocalFileAsync(string filePath, string title)
+        public async Task PlayLocalFileAsync(string filePath, string title, bool? isVideo = null, string? author = null, string? thumbnailUrl = null)
         {
             ClearPlaylist();
             CurrentMode = PlaybackMode.SingleLoop;
@@ -397,11 +411,14 @@ namespace YTMusic.Services
             {
                 VideoId = "local",
                 Title = title,
-                Author = "Local File",
-                ThumbnailUrl = null, // Could be a default local file icon
-                LocalFilePath = filePath
+                Author = string.IsNullOrWhiteSpace(author) ? "Local File" : author,
+                ThumbnailUrl = thumbnailUrl,
+                LocalFilePath = filePath,
+                IsVideo = isVideo
             };
             IsPlaying = false;
+            IsUsingNativePlayback = false;
+            IsUsingNativeVideoPlayback = false;
             NotifyStateChanged();
 
             try
@@ -412,18 +429,37 @@ namespace YTMusic.Services
                 }
 
                 IsCurrentStreamWebM = filePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
-                if (_nativeAudio.IsSupported)
+                IsCurrentStreamVideo = isVideo ?? IsLikelyVideoFile(filePath);
+                if (IsCurrentStreamVideo && UseNativeVideoPlayback)
                 {
+                    await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: true);
+                    IsUsingNativePlayback = false;
+                    IsUsingNativeVideoPlayback = true;
                     CurrentStreamUrl = null;
                     CurrentTime = 0;
                     Duration = 100;
-                    await _nativeAudio.PlayAsync(filePath, true, title, "Local File", null);
+                    await _nativeVideo.PlayAsync(filePath, true, title, string.IsNullOrWhiteSpace(author) ? "Local File" : author, null);
+                    IsPlaying = true;
+                }
+                else
+                if (_nativeAudio.IsSupported && !IsCurrentStreamVideo)
+                {
+                    await StopOtherPlaybackPipelineAsync(willUseNativePlayback: true, willUseNativeVideoPlayback: false);
+                    IsUsingNativePlayback = true;
+                    IsUsingNativeVideoPlayback = false;
+                    CurrentStreamUrl = null;
+                    CurrentTime = 0;
+                    Duration = 100;
+                    await _nativeAudio.PlayAsync(filePath, true, title, string.IsNullOrWhiteSpace(author) ? "Local File" : author, null);
                     IsPlaying = true;
                 }
                 else
                 {
+                    await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: false);
+                    IsUsingNativePlayback = false;
+                    IsUsingNativeVideoPlayback = false;
                     await EnsureFileProxyCreatedAsync();
-                    _fileProxy!.ContentType = IsCurrentStreamWebM ? "audio/webm" : (filePath.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ? "audio/mpeg" : "audio/mp4");
+                    _fileProxy!.ContentType = GetFileContentType(filePath, IsCurrentStreamVideo);
                     _fileProxy.CurrentFilePath = filePath;
                     CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
                     IsPlaying = true;
@@ -582,10 +618,15 @@ namespace YTMusic.Services
         {
             if (CurrentMode == PlaybackMode.SingleLoop)
             {
-                if (_nativeAudio.IsSupported)
+                if (IsUsingNativePlayback)
                 {
                     await _nativeAudio.SeekAsync(0);
                     await _nativeAudio.ResumeAsync();
+                }
+                else if (IsUsingNativeVideoPlayback)
+                {
+                    await _nativeVideo.SeekAsync(0);
+                    await _nativeVideo.ResumeAsync();
                 }
                 else
                 {
@@ -610,6 +651,8 @@ namespace YTMusic.Services
                 IsLoading = true;
                 CurrentVideo = video;
                 IsPlaying = false; // Reset playing state while loading
+                IsUsingNativePlayback = false;
+                IsUsingNativeVideoPlayback = false;
                 NotifyStateChanged();
 
                 if (!string.IsNullOrEmpty(video.LocalFilePath))
@@ -620,9 +663,24 @@ namespace YTMusic.Services
                     }
 
                     IsCurrentStreamWebM = video.LocalFilePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
+                    IsCurrentStreamVideo = video.IsVideo ?? IsLikelyVideoFile(video.LocalFilePath);
 
-                    if (_nativeAudio.IsSupported)
+                    if (IsCurrentStreamVideo && UseNativeVideoPlayback)
                     {
+                        await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: true);
+                        IsUsingNativePlayback = false;
+                        IsUsingNativeVideoPlayback = true;
+                        CurrentStreamUrl = null;
+                        CurrentTime = 0;
+                        Duration = 100;
+                        await _nativeVideo.PlayAsync(video.LocalFilePath, true, video.Title, video.Author, video.DurationSeconds);
+                        IsPlaying = true;
+                    }
+                    else if (_nativeAudio.IsSupported && !IsCurrentStreamVideo)
+                    {
+                        await StopOtherPlaybackPipelineAsync(willUseNativePlayback: true, willUseNativeVideoPlayback: false);
+                        IsUsingNativePlayback = true;
+                        IsUsingNativeVideoPlayback = false;
                         CurrentStreamUrl = null;
                         CurrentTime = 0;
                         Duration = 100;
@@ -631,8 +689,11 @@ namespace YTMusic.Services
                     }
                     else
                     {
+                        await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: false);
+                        IsUsingNativePlayback = false;
+                        IsUsingNativeVideoPlayback = false;
                         await EnsureFileProxyCreatedAsync();
-                        _fileProxy!.ContentType = IsCurrentStreamWebM ? "audio/webm" : (video.LocalFilePath.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ? "audio/mpeg" : "audio/mp4");
+                        _fileProxy!.ContentType = GetFileContentType(video.LocalFilePath, IsCurrentStreamVideo);
                         _fileProxy.CurrentFilePath = video.LocalFilePath;
                         CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
                         IsPlaying = true;
@@ -640,31 +701,48 @@ namespace YTMusic.Services
                     return;
                 }
 
-                // On Android native playback, prefer already-downloaded local files to ensure
-                // seekable media metadata for lockscreen progress controls.
-                if (_nativeAudio.IsSupported && OperatingSystem.IsAndroid())
+                // Prefer downloaded local files when we have a record for this video id.
+                var downloaded = await _localMusicService.GetDownloadedTrackByVideoIdAsync(video.VideoId);
+                if (downloaded != null && !string.IsNullOrWhiteSpace(downloaded.LocalFilePath))
                 {
-                    var downloaded = await _localMusicService.GetDownloadedTrackByVideoIdAsync(video.VideoId);
-                    if (downloaded != null && !string.IsNullOrWhiteSpace(downloaded.LocalFilePath))
+                    video.LocalFilePath = downloaded.LocalFilePath;
+                    video.IsVideo = downloaded.IsVideo;
+                    IsCurrentStreamWebM = video.LocalFilePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
+                    IsCurrentStreamVideo = downloaded.IsVideo;
+
+                    if (_nativeAudio.IsSupported && !IsCurrentStreamVideo)
                     {
-                        // Some ROM/media panels don't expose lockscreen seek for webm/opus local files.
-                        // Prefer stream fallback in that case to maximize system progress UI compatibility.
-                        if (downloaded.LocalFilePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // Skip local-webm fast path and continue to stream selection below.
-                        }
-                        else
-                        {
-                            video.LocalFilePath = downloaded.LocalFilePath;
-                            IsCurrentStreamWebM = video.LocalFilePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
-                            CurrentStreamUrl = null;
-                            CurrentTime = 0;
-                            Duration = 100;
-                            await _nativeAudio.PlayAsync(video.LocalFilePath, true, video.Title, video.Author, video.DurationSeconds);
-                            IsPlaying = true;
-                            return;
-                        }
+                        await StopOtherPlaybackPipelineAsync(willUseNativePlayback: true, willUseNativeVideoPlayback: false);
+                        IsUsingNativePlayback = true;
+                        IsUsingNativeVideoPlayback = false;
+                        CurrentStreamUrl = null;
+                        CurrentTime = 0;
+                        Duration = 100;
+                        await _nativeAudio.PlayAsync(video.LocalFilePath, true, video.Title, video.Author, video.DurationSeconds);
                     }
+                    else if (IsCurrentStreamVideo && UseNativeVideoPlayback)
+                    {
+                        await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: true);
+                        IsUsingNativePlayback = false;
+                        IsUsingNativeVideoPlayback = true;
+                        CurrentStreamUrl = null;
+                        CurrentTime = 0;
+                        Duration = 100;
+                        await _nativeVideo.PlayAsync(video.LocalFilePath, true, video.Title, video.Author, video.DurationSeconds);
+                    }
+                    else
+                    {
+                        await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: false);
+                        IsUsingNativePlayback = false;
+                        IsUsingNativeVideoPlayback = false;
+                        await EnsureFileProxyCreatedAsync();
+                        _fileProxy!.ContentType = GetFileContentType(video.LocalFilePath, IsCurrentStreamVideo);
+                        _fileProxy.CurrentFilePath = video.LocalFilePath;
+                        CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
+                    }
+
+                    IsPlaying = true;
+                    return;
                 }
 
                 var streamInfo = await GetPreferredAudioStreamInfoAsync(video.VideoId, UseWebM);
@@ -672,9 +750,13 @@ namespace YTMusic.Services
                 if (streamInfo != null)
                 {
                     IsCurrentStreamWebM = streamInfo.Container.Name.ToLower().Contains("webm");
+                    IsCurrentStreamVideo = false;
 
-                    if (_nativeAudio.IsSupported)
+                    if (_nativeAudio.IsSupported && !IsCurrentStreamVideo)
                     {
+                        await StopOtherPlaybackPipelineAsync(willUseNativePlayback: true, willUseNativeVideoPlayback: false);
+                        IsUsingNativePlayback = true;
+                        IsUsingNativeVideoPlayback = false;
                         CurrentStreamUrl = null;
                         CurrentTime = 0;
                         Duration = 100;
@@ -682,12 +764,18 @@ namespace YTMusic.Services
                     }
                     else if (OperatingSystem.IsAndroid())
                     {
+                        await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: false);
+                        IsUsingNativePlayback = false;
+                        IsUsingNativeVideoPlayback = false;
                         CurrentStreamUrl = streamInfo.Url;
                     }
                     else
                     {
+                        await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: false);
+                        IsUsingNativePlayback = false;
+                        IsUsingNativeVideoPlayback = false;
                         EnsureProxiesCreated();
-                        _proxy!.ContentType = IsCurrentStreamWebM ? "audio/webm" : "audio/mp4";
+                        _proxy!.ContentType = GetStreamContentType(streamInfo, IsCurrentStreamVideo);
                         _proxy.CurrentStreamInfo = streamInfo;
                         CurrentStreamUrl = $"{_proxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
                     }
@@ -715,9 +803,13 @@ namespace YTMusic.Services
 
         public async Task PauseAsync()
         {
-            if (_nativeAudio.IsSupported)
+            if (IsUsingNativePlayback)
             {
                 await _nativeAudio.PauseAsync();
+            }
+            else if (IsUsingNativeVideoPlayback)
+            {
+                await _nativeVideo.PauseAsync();
             }
             else
             {
@@ -728,9 +820,13 @@ namespace YTMusic.Services
 
         public async Task ResumeAsync()
         {
-            if (_nativeAudio.IsSupported)
+            if (IsUsingNativePlayback)
             {
                 await _nativeAudio.ResumeAsync();
+            }
+            else if (IsUsingNativeVideoPlayback)
+            {
+                await _nativeVideo.ResumeAsync();
             }
             else
             {
@@ -741,9 +837,13 @@ namespace YTMusic.Services
 
         public async Task SeekAsync(double positionSeconds)
         {
-            if (_nativeAudio.IsSupported)
+            if (IsUsingNativePlayback)
             {
                 await _nativeAudio.SeekAsync(positionSeconds);
+            }
+            else if (IsUsingNativeVideoPlayback)
+            {
+                await _nativeVideo.SeekAsync(positionSeconds);
             }
             else
             {
@@ -830,6 +930,72 @@ namespace YTMusic.Services
                 .GetWithHighestBitrate() ?? manifest.GetAudioOnlyStreams().GetWithHighestBitrate();
         }
 
+        private static bool IsLikelyVideoFile(string filePath)
+        {
+            var extension = Path.GetExtension(filePath).ToLowerInvariant();
+            return extension == ".mp4" || extension == ".webm" || extension == ".mkv" || extension == ".mov" || extension == ".m4v" || extension == ".avi";
+        }
+
+        private static string GetFileContentType(string filePath, bool isVideo)
+        {
+            var extension = Path.GetExtension(filePath).ToLowerInvariant();
+            if (extension == ".webm")
+            {
+                return isVideo ? "video/webm" : "audio/webm";
+            }
+
+            if (extension == ".mp3")
+            {
+                return "audio/mpeg";
+            }
+
+            return isVideo ? "video/mp4" : "audio/mp4";
+        }
+
+        private static string GetStreamContentType(IStreamInfo streamInfo, bool isVideo)
+        {
+            if (streamInfo.Container == Container.WebM)
+            {
+                return isVideo ? "video/webm" : "audio/webm";
+            }
+
+            return isVideo ? "video/mp4" : "audio/mp4";
+        }
+
+        private async Task StopOtherPlaybackPipelineAsync(bool willUseNativePlayback, bool willUseNativeVideoPlayback)
+        {
+            if (willUseNativePlayback)
+            {
+                OnRequestPause?.Invoke();
+                if (_nativeVideo.IsSupported)
+                {
+                    await _nativeVideo.StopAsync();
+                }
+                IsUsingNativeVideoPlayback = false;
+                return;
+            }
+
+            if (willUseNativeVideoPlayback)
+            {
+                if (_nativeAudio.IsSupported)
+                {
+                    await _nativeAudio.StopAsync();
+                }
+                OnRequestPause?.Invoke();
+                IsUsingNativePlayback = false;
+                return;
+            }
+
+            if (_nativeAudio.IsSupported)
+            {
+                await _nativeAudio.StopAsync();
+            }
+            if (_nativeVideo.IsSupported)
+            {
+                await _nativeVideo.StopAsync();
+            }
+        }
+
         private void NotifyStateChanged() => OnChange?.Invoke();
 
         private void OnNativePositionChanged(double currentTime, double duration)
@@ -846,6 +1012,24 @@ namespace YTMusic.Services
         }
 
         private void OnNativePlaybackEnded()
+        {
+            _ = Task.Run(OnTrackEndedAsync);
+        }
+
+        private void OnNativeVideoPositionChanged(double currentTime, double duration)
+        {
+            CurrentTime = currentTime;
+            Duration = duration > 0 ? duration : 100;
+            OnTimeChanged?.Invoke();
+        }
+
+        private void OnNativeVideoPlayingStateChanged(bool isPlaying)
+        {
+            IsPlaying = isPlaying;
+            NotifyStateChanged();
+        }
+
+        private void OnNativeVideoPlaybackEnded()
         {
             _ = Task.Run(OnTrackEndedAsync);
         }

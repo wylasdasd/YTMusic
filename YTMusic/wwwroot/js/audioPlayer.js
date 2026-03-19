@@ -1,10 +1,15 @@
 window.audioPlayer = {
     dotNetHelper: null,
     nativeAudio: null,
+    nativeVideo: null,
     ogvPlayer: null,
     activePlayer: null,
     isSeeking: false,
     seekTimer: null,
+    isVideoActive: false,
+    pendingUrl: null,
+    pendingIsWebM: false,
+    pendingIsVideo: false,
     describeMediaError: function (player) {
         if (!player || !player.error) return "none";
         const code = player.error.code;
@@ -36,10 +41,11 @@ window.audioPlayer = {
         }
     },
 
-    init: function (element, helper) {
+    init: function (audioElement, videoElement, helper) {
         this.dotNetHelper = helper;
-        this.nativeAudio = element;
-        this.activePlayer = element;
+        this.nativeAudio = audioElement;
+        this.nativeVideo = videoElement || null;
+        this.activePlayer = audioElement;
 
         if (typeof OGVPlayer !== 'undefined') {
             OGVLoader.base = 'https://cdnjs.cloudflare.com/ajax/libs/ogv.js/1.8.9';
@@ -47,12 +53,14 @@ window.audioPlayer = {
         }
 
         this.bindEvents(this.nativeAudio);
+        this.bindEvents(this.nativeVideo);
         if (this.ogvPlayer) {
             this.bindEvents(this.ogvPlayer);
         }
     },
 
     bindEvents: function (player) {
+        if (!player) return;
         player.ontimeupdate = function () {
             if (window.audioPlayer.isSeeking) return; // Guard
             if (window.audioPlayer.activePlayer === player && window.audioPlayer.dotNetHelper) {
@@ -93,17 +101,53 @@ window.audioPlayer = {
         };
     },
 
-    loadAndPlay: function (url, isWebM) {
+    updateVideoVisibility: function () {
+        if (!this.nativeVideo) return;
+        this.nativeVideo.style.display = this.isVideoActive ? "block" : "none";
+    },
+
+    setVideoElement: function (videoElement) {
+        this.nativeVideo = videoElement || null;
+        this.bindEvents(this.nativeVideo);
+        this.updateVideoVisibility();
+        if (this.nativeVideo && this.pendingUrl && this.pendingIsVideo) {
+            this.loadAndPlay(this.pendingUrl, this.pendingIsWebM, true);
+        }
+    },
+
+    clearVideoElement: function () {
+        if (!this.nativeVideo) return;
+        if (this.activePlayer === this.nativeVideo) {
+            this.activePlayer.pause();
+            this.activePlayer = this.nativeAudio;
+        }
+        this.nativeVideo = null;
+    },
+
+    loadAndPlay: function (url, isWebM, isVideo) {
         if (!url) return;
 
+        this.pendingUrl = url;
+        this.pendingIsWebM = !!isWebM;
+        this.pendingIsVideo = !!isVideo;
         this.isSeeking = false;
+        this.isVideoActive = !!isVideo;
+        this.updateVideoVisibility();
+
+        if (this.isVideoActive && !this.nativeVideo) {
+            // Video host isn't ready yet; wait for setVideoElement to re-trigger playback.
+            return;
+        }
+
         if (this.activePlayer) {
             this.activePlayer.pause();
             this.activePlayer.src = "";
             this.activePlayer.load();
         }
 
-        if (isWebM && this.ogvPlayer) {
+        if (this.isVideoActive && this.nativeVideo) {
+            this.activePlayer = this.nativeVideo;
+        } else if (isWebM && this.ogvPlayer) {
             this.activePlayer = this.ogvPlayer;
         } else {
             this.activePlayer = this.nativeAudio;

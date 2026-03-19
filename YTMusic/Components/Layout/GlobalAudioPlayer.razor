@@ -10,6 +10,7 @@
     private ElementReference _audioElement;
     private DotNetObjectReference<GlobalAudioPlayer>? _objRef;
     private string? _lastUrl = null;
+    private bool _lastIsVideo;
 
     protected override void OnInitialized()
     {
@@ -22,7 +23,6 @@
 
     private void OnRequestReplay()
     {
-        // 事件签名是 void，使用 InvokeAsync 承载异步逻辑并在内部兜底异常，避免未观察异常。
         _ = InvokeAsync(async () =>
         {
             try
@@ -39,20 +39,21 @@
 
     private void OnPlayerStateChanged()
     {
-        if (PlayerService.UseNativePlayback)
+        if (PlayerService.IsUsingNativePlayback)
         {
             return;
         }
 
-        // 仅在 URL 变化时重新 load，避免重复触发同一资源的 loadAndPlay。
         _ = InvokeAsync(async () =>
         {
             try
             {
-                if (PlayerService.CurrentStreamUrl != null && PlayerService.CurrentStreamUrl != _lastUrl)
+                if (PlayerService.CurrentStreamUrl != null &&
+                    (PlayerService.CurrentStreamUrl != _lastUrl || PlayerService.IsCurrentStreamVideo != _lastIsVideo))
                 {
                     _lastUrl = PlayerService.CurrentStreamUrl;
-                    await JSRuntime.InvokeVoidAsync("audioPlayer.loadAndPlay", PlayerService.CurrentStreamUrl,PlayerService.IsCurrentStreamWebM);
+                    _lastIsVideo = PlayerService.IsCurrentStreamVideo;
+                    await JSRuntime.InvokeVoidAsync("audioPlayer.loadAndPlay", PlayerService.CurrentStreamUrl, PlayerService.IsCurrentStreamWebM, PlayerService.IsCurrentStreamVideo);
                 }
             }
             catch (Exception ex)
@@ -67,12 +68,13 @@
         if (firstRender)
         {
             _objRef = DotNetObjectReference.Create(this);
-            await JSRuntime.InvokeVoidAsync("audioPlayer.init", _audioElement, _objRef);
+            await JSRuntime.InvokeVoidAsync("audioPlayer.init", _audioElement, null, _objRef);
 
-            if (!PlayerService.UseNativePlayback && PlayerService.CurrentStreamUrl != null)
+            if (!PlayerService.IsUsingNativePlayback && PlayerService.CurrentStreamUrl != null)
             {
                 _lastUrl = PlayerService.CurrentStreamUrl;
-                await JSRuntime.InvokeVoidAsync("audioPlayer.loadAndPlay", PlayerService.CurrentStreamUrl,PlayerService.IsCurrentStreamWebM);
+                _lastIsVideo = PlayerService.IsCurrentStreamVideo;
+                await JSRuntime.InvokeVoidAsync("audioPlayer.loadAndPlay", PlayerService.CurrentStreamUrl, PlayerService.IsCurrentStreamWebM, PlayerService.IsCurrentStreamVideo);
             }
         }
     }

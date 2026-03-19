@@ -48,9 +48,19 @@ namespace YTMusic.Services
                     Author TEXT,
                     ThumbnailUrl TEXT,
                     LocalFilePath TEXT NOT NULL,
+                    IsVideo INTEGER NOT NULL DEFAULT 0,
                     DownloadedDate DATETIME NOT NULL
                 );";
             connection.Execute(createTableSql);
+
+            // Backward-compatible migration for existing databases.
+            try
+            {
+                connection.Execute("ALTER TABLE DownloadedTracks ADD COLUMN IsVideo INTEGER NOT NULL DEFAULT 0;");
+            }
+            catch
+            {
+            }
         }
 
         private string GetMusicDirectory()
@@ -111,8 +121,8 @@ namespace YTMusic.Services
         {
             using var connection = new SqliteConnection(_connectionString);
             string sql = @"
-                INSERT OR REPLACE INTO DownloadedTracks (VideoId, Title, Author, ThumbnailUrl, LocalFilePath, DownloadedDate) 
-                VALUES (@VideoId, @Title, @Author, @ThumbnailUrl, @LocalFilePath, @DownloadedDate);";
+                INSERT OR REPLACE INTO DownloadedTracks (VideoId, Title, Author, ThumbnailUrl, LocalFilePath, IsVideo, DownloadedDate) 
+                VALUES (@VideoId, @Title, @Author, @ThumbnailUrl, @LocalFilePath, @IsVideo, @DownloadedDate);";
                 
             await connection.ExecuteAsync(sql, track);
         }
