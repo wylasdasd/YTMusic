@@ -261,7 +261,7 @@
                 return;
             }
 
-            WindowChrome.RestoreWindowForDrag();
+            WindowChrome.RestoreWindowForDrag(screenX, screenY);
             await Task.Delay(16);
             WindowChrome.StartWindowMove();
             _isPendingMaximizedDrag = false;

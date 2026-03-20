@@ -110,7 +110,7 @@ public class WindowChromeService
 #endif
     }
 
-    public void RestoreWindowForDrag()
+    public void RestoreWindowForDrag(double cursorScreenX, double cursorScreenY)
     {
 #if WINDOWS
         var hWnd = GetWindowHandle();
@@ -119,20 +119,29 @@ public class WindowChromeService
             return;
         }
 
-        var rect = GetWindowPosition();
-        var width = Math.Max(800, rect.Right - rect.Left);
-        var height = Math.Max(600, rect.Bottom - rect.Top);
-        const int insetX = 10;
-        const int insetY = 8;
+        const int toolbarHeight = 56;
+        var restoreRect = GetRestoreBounds(hWnd);
+        var targetWidth = Math.Max(800, restoreRect.Right - restoreRect.Left);
+        var targetHeight = Math.Max(600, restoreRect.Bottom - restoreRect.Top);
+
+        var screenWidth = GetSystemMetrics(SmCxScreen);
+        var screenHeight = GetSystemMetrics(SmCyScreen);
+        var desiredLeft = (int)Math.Round(cursorScreenX - (targetWidth * 0.5));
+        var desiredTop = (int)Math.Round(cursorScreenY - (toolbarHeight * 0.5));
+
+        var maxLeft = Math.Max(0, screenWidth - targetWidth);
+        var maxTop = Math.Max(0, screenHeight - targetHeight);
+        var finalLeft = Math.Clamp(desiredLeft, 0, maxLeft);
+        var finalTop = Math.Clamp(desiredTop, 0, maxTop);
 
         _ = ShowWindow(hWnd, SwRestore);
         _ = SetWindowPos(
             hWnd,
             nint.Zero,
-            rect.Left + insetX,
-            rect.Top + insetY,
-            width - (insetX * 2),
-            height - insetY - 6,
+            finalLeft,
+            finalTop,
+            targetWidth,
+            targetHeight,
             SwpNoZOrder | SwpNoActivate);
 #endif
     }
@@ -179,11 +188,28 @@ public class WindowChromeService
         return GetCursorPos(out var point) ? (point.X, point.Y) : (0, 0);
     }
 
+    private static RECT GetRestoreBounds(nint hWnd)
+    {
+        var placement = new WINDOWPLACEMENT
+        {
+            Length = Marshal.SizeOf<WINDOWPLACEMENT>()
+        };
+
+        if (GetWindowPlacement(hWnd, ref placement))
+        {
+            return placement.RcNormalPosition;
+        }
+
+        return new RECT { Left = 0, Top = 0, Right = 1200, Bottom = 800 };
+    }
+
     private const uint WmClose = 0x0010;
 
     private const int SwMinimize = 6;
     private const int SwMaximize = 3;
     private const int SwRestore = 9;
+    private const int SmCxScreen = 0;
+    private const int SmCyScreen = 1;
 
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(nint hWnd, int nCmdShow);
@@ -207,6 +233,12 @@ public class WindowChromeService
     [DllImport("user32.dll")]
     private static extern bool SetWindowPos(nint hWnd, nint hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
 
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int nIndex);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowPlacement(nint hWnd, ref WINDOWPLACEMENT lpwndpl);
+
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT
     {
@@ -221,6 +253,17 @@ public class WindowChromeService
         public int Top;
         public int Right;
         public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WINDOWPLACEMENT
+    {
+        public int Length;
+        public int Flags;
+        public int ShowCmd;
+        public POINT PtMinPosition;
+        public POINT PtMaxPosition;
+        public RECT RcNormalPosition;
     }
 #endif
 }
