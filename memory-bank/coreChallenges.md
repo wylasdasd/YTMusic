@@ -1,0 +1,132 @@
+# 核心难点 (Core Challenges)
+
+## 1. YouTube 流播放在不同平台上的链路分流
+- **难点**:
+  - 项目不是所有平台都走同一套播放器链路。
+  - Android 有原生音频播放实现；Windows/桌面侧在没有原生实现时，才走 WebView/HTML5 音频元素。
+  - 在线流、本地文件、音频/视频、平台差异都在 `MusicPlayerService` 中做分流，理解错分支就容易误判问题位置。
+- **解决逻辑**:
+  - 统一由 `MusicPlayerService` 决定播放路径：
+    - 如果 `INativeAudioPlaybackService.IsSupported == true`，优先走原生音频播放。
+    - 如果是 Android 视频且 `INativeVideoPlaybackService.IsSupported == true`，走原生视频播放。
+    - 如果没有原生实现，则走 WebView/HTML5 播放。
+  - WebView/HTML5 这条链路下：
+    - 在线音频流在非 Android 平台会通过 `LocalAudioProxy` 暴露为本地 HTTP 地址；
+    - 本地文件在需要走 WebView 时通过 `LocalFileProxy` 暴露为本地 HTTP 地址；
+    - `GlobalAudioPlayer.razor` + `audioPlayer.js` 驱动 `<audio>` 元素播放。
+  - Android 音频主链路不是代理层，而是 `AndroidNativeAudioPlaybackService -> PlaybackForegroundService`。
+- **核心代码位置**:
+  - 分流中心：
+    - [MusicPlayerService.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Services\MusicPlayerService.cs)
+  - WebView/代理层：
+    - [GlobalAudioPlayer.razor](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Components\Layout\GlobalAudioPlayer.razor)
+    - [audioPlayer.js](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\wwwroot\js\audioPlayer.js)
+    - [MusicPlayerService.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Services\MusicPlayerService.cs) 内的 `LocalAudioProxy`
+    - [MusicPlayerService.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Services\MusicPlayerService.cs) 内的 `LocalFileProxy`
+  - Android 原生音频：
+    - [AndroidNativeAudioPlaybackService.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Platforms\Android\Services\AndroidNativeAudioPlaybackService.cs)
+    - [PlaybackForegroundService.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Platforms\Android\Services\PlaybackForegroundService.cs)
+- **注意事项**:
+  - 不要笼统地说“全项目都靠代理层播放 YouTube 流”，这只适用于无原生实现的 WebView 播放分支。
+  - 排查播放问题时，先确认当前 `MusicPlayerService` 走的是“原生播放”还是“WebView + 代理”。
+
+## 2. 播放器跨页面持久化与播放队列一致性
+- **难点**:
+  - 搜索页、收藏页、播放器页都可能触发播放；如果状态放在页面组件内，页面跳转后容易中断或丢队列。
+  - 顺序播放、随机播放、上一首/下一首、单曲循环之间容易相互打架。
+- **解决逻辑**:
+  - 将播放队列、当前索引、播放模式统一收敛到 `MusicPlayerService`。
+  - 随机播放使用预生成索引列表，而不是每次临时随机。
+  - 单曲循环使用前端直接重置 `currentTime` 的方式做无缝重播，避开二次解析。
+- **核心代码位置**:
+  - [MusicPlayerService.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Services\MusicPlayerService.cs)
+  - [GlobalAudioPlayer.razor](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Components\Layout\GlobalAudioPlayer.razor)
+  - [Player.razor](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Components\Pages\Player.razor)
+- **注意事项**:
+  - 新增播放入口时，尽量只调用 `MusicPlayerService` 暴露的方法，不要在页面里再维护一套“当前歌曲 / 当前列表”。
+
+## 3. Android 后台播放通知与锁屏媒体控件稳定性
+- **难点**:
+  - Android 13+ 有运行时通知权限。
+  - 即使业务播放逻辑正常，只要通知权限没授予，也会出现“有播放但没有通知卡片/锁屏控件”的假象，排障时很容易误判成播放器或通知样式代码失效。
+  - `Media3` 和 `ExoPlayer` 容易被误认为两套独立方案；实际上当前项目里不是“二选一”，而是 `Media3` 框架下使用 `ExoPlayer` 作为实际播放器实现。
+  - Media3 在当前 MAUI 绑定环境里并不总能稳定自动生成通知卡片。
+  - 某些 ROM 下，通知有时显示进度但不显示上一首/下一首。
+- **解决逻辑**:
+  - 先统一概念：
+    - `Media3` 负责媒体框架、Session、控制链路；
+    - `ExoPlayer` 负责实际音频播放；
+    - 当前项目是 `Media3 Session + Media3 ExoPlayer + 手写前台通知` 的混合方案，不是 `Media3` 与 `ExoPlayer` 互斥。
+  - 权限层先兜住：
+    - Manifest 声明 `POST_NOTIFICATIONS`、`FOREGROUND_SERVICE`、`FOREGROUND_SERVICE_MEDIA_PLAYBACK`。
+    - `MainActivity.OnCreate` 中显式检查并请求 Android 13+ 的 `POST_NOTIFICATIONS` 运行时权限。
+  - 前台服务层再兜住：
+    - `PlaybackForegroundService` 通过 `[Service(ForegroundServiceType = TypeMediaPlayback)]` 声明媒体前台服务类型。
+    - 创建可公开显示的通知渠道，并设置 `LockscreenVisibility = Public`。
+  - 保留 `Media3` 播放内核，但用手写前台通知做稳定兜底。
+  - 对目标设备保留平台原生 `Notification.MediaStyle + android.media.session.MediaSession.Token`。
+- **核心代码位置**:
+  - 权限与前台服务声明：
+    - [AndroidManifest.xml](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Platforms\Android\AndroidManifest.xml)
+    - [MainActivity.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Platforms\Android\MainActivity.cs)
+  - [MainActivity.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Platforms\Android\MainActivity.cs)
+  - [PlaybackForegroundService.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Platforms\Android\Services\PlaybackForegroundService.cs)
+  - [AndroidNativeAudioPlaybackService.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Platforms\Android\Services\AndroidNativeAudioPlaybackService.cs)
+- **注意事项**:
+  - 后续不要轻易回退到“纯自动通知”假设，先在目标设备实机验证再动。
+  - 遇到“有声音无通知”时，先查权限、前台服务和通知渠道，再查业务代码。
+  - 这块历史上真正最容易卡住的不是播放 API 本身，而是权限链路：
+    - Manifest 少权限会直接导致前台服务/通知能力不完整；
+    - Android 13+ 没有运行时授权时，通知卡片不会正常出现；
+    - 所以以后改这块时，先确认权限声明和运行时请求是否还在。
+  - 讨论 Android 播放链路时，表述尽量准确：
+    - 不要说成“Media3 和 ExoPlayer 是两套并行播放器”；
+    - 更准确的说法是“项目使用 Media3 体系，并由 ExoPlayer 承担实际播放”。
+
+## 4. Windows 自定义窗口壳层与页面顶栏交互分层
+- **难点**:
+  - MAUI 默认窗口在 Windows 下很难直接做出参考项目那种标题栏/系统按钮/拖拽体验。
+  - 只改 `Window.TitleBar` 外观，并不会自动拥有完整的桌面交互。
+- **解决逻辑**:
+  - Windows 端单独引入 `MainWindow.xaml` 接管默认窗口。
+  - 在 `MauiProgram.cs` 中配置 `AppWindow.TitleBar` 和 `OverlappedPresenter` 负责窗口壳层能力。
+  - 在 `MainLayout.razor` 中单独提供窗口按钮和拖拽热区负责交互入口。
+- **核心代码位置**:
+  - [MainWindow.xaml](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\ForWindows\Windows\MainWindow.xaml)
+  - [MainWindow.xaml.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\ForWindows\Windows\MainWindow.xaml.cs)
+  - [App.xaml.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\App.xaml.cs)
+  - [MauiProgram.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\MauiProgram.cs)
+  - [MainLayout.razor](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Components\Layout\MainLayout.razor)
+- **注意事项**:
+  - Windows UI 改动尽量通过 `IsWindowsDesktop` 做平台分支，不要把桌面端布局直接压到 Android/iOS 上。
+
+## 5. Windows 窗口拖拽与系统按钮体验对齐参考模板
+- **难点**:
+  - 直接用 `cursor: move` 会出现十字光标，不像原生标题栏。
+  - 直接用 `HTCAPTION` 虽然简单，但不容易按模板手感细调。
+  - 拖拽实现中如果错误调用 `MoveWindow(..., 0, 0, ...)`，会意外修改窗口尺寸。
+- **解决逻辑**:
+  - 拖拽改为模板同款“mousedown 记录起点 + JS 全局 `mousemove` + Win32 `SetWindowPos(...SWP_NOSIZE...)`”。
+  - 鼠标样式保持 `cursor: default`。
+  - Windows 按钮和拖拽热区统一放在 `MainLayout.razor`，由 `WindowChromeService` 承接。
+- **核心代码位置**:
+  - [WindowChromeService.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Services\WindowChromeService.cs)
+  - [mouseInterop.js](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\wwwroot\js\mouseInterop.js)
+  - [MainLayout.razor](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Components\Layout\MainLayout.razor)
+  - [MainLayout.razor.css](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Components\Layout\MainLayout.razor.css)
+- **注意事项**:
+  - 如果再次出现“点击拖拽时窗口尺寸变化”，优先检查是否误用了 `MoveWindow` 或遗漏了 `SWP_NOSIZE`。
+  - 若桌面端顶栏布局继续微调，先确认三横杠与系统按钮的分组关系，不要让用户误以为它是第四个窗口控制按钮。
+
+## 6. 构建产物残留导致的“重复定义 / 重复特性”假报错
+- **难点**:
+  - 之前临时构建产生的 `obj-temp` 残留在项目目录中，会被 SDK 当成正常源码再次编译。
+  - 这类问题会表现成 `ValidatableTypeAttribute` 重复定义、程序集特性重复等误导性错误。
+- **解决逻辑**:
+  - 在项目文件里显式排除 `obj-temp` 下的 `Compile/None/Content/EmbeddedResource/MauiXaml`。
+  - 排查重复定义时，优先检查项目树里是否混入了嵌套临时目录。
+- **核心代码位置**:
+  - [YTMusic.csproj](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\YTMusic.csproj)
+  - [CommonHelp.csproj](c:\Users\wyl\Desktop\work2\YTMusic\CommonHelp\CommonHelp.csproj)
+- **注意事项**:
+  - 以后若为了绕开锁文件使用临时 `obj/bin` 路径，尽量放在项目树外，或者及时排除，避免再次污染编译项。

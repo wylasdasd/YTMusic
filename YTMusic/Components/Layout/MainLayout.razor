@@ -132,7 +132,11 @@
     private bool _isThemePanelOpen;
     private int _themeIndex;
     private bool _isWindowDragging;
+    private bool _isPendingMaximizedDrag;
+    private double _dragStartScreenX;
+    private double _dragStartScreenY;
     private DotNetObjectReference<MainLayout>? _windowDragRef;
+    private const double MaximizedDragThreshold = 8;
 
     public string SelectedNavValue { get; set; } = "Search";
 
@@ -192,8 +196,20 @@
             return;
         }
 
-        _isWindowDragging = true;
-        WindowChrome.StartWindowMove();
+        if (WindowChrome.IsWindowMaximized())
+        {
+            _isPendingMaximizedDrag = true;
+            _isWindowDragging = false;
+            _dragStartScreenX = args.ScreenX;
+            _dragStartScreenY = args.ScreenY;
+        }
+        else
+        {
+            _isPendingMaximizedDrag = false;
+            _isWindowDragging = true;
+            WindowChrome.StartWindowMove();
+        }
+
         await JSRuntime.InvokeVoidAsync("mouseDragInterop.startDrag", _windowDragRef);
     }
 
@@ -228,9 +244,31 @@
     }
 
     [JSInvokable]
-    public void OnGlobalMouseMove()
+    public async Task OnGlobalMouseMove(double screenX, double screenY)
     {
-        if (!_isWindowDragging || !IsWindowsDesktop)
+        if (!IsWindowsDesktop)
+        {
+            return;
+        }
+
+        if (_isPendingMaximizedDrag)
+        {
+            var deltaX = screenX - _dragStartScreenX;
+            var deltaY = screenY - _dragStartScreenY;
+            var movedEnough = Math.Max(Math.Abs(deltaX), Math.Abs(deltaY)) >= MaximizedDragThreshold;
+            if (!movedEnough)
+            {
+                return;
+            }
+
+            WindowChrome.RestoreWindowForDrag();
+            await Task.Delay(16);
+            WindowChrome.StartWindowMove();
+            _isPendingMaximizedDrag = false;
+            _isWindowDragging = true;
+        }
+
+        if (!_isWindowDragging)
         {
             return;
         }
@@ -239,9 +277,20 @@
     }
 
     [JSInvokable]
-    public void OnGlobalMouseUp()
+    public void OnGlobalMouseUp(double screenX, double screenY)
     {
-        if (!_isWindowDragging || !IsWindowsDesktop)
+        if (!IsWindowsDesktop)
+        {
+            return;
+        }
+
+        if (_isPendingMaximizedDrag)
+        {
+            _isPendingMaximizedDrag = false;
+            return;
+        }
+
+        if (!_isWindowDragging)
         {
             return;
         }

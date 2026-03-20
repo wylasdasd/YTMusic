@@ -87,6 +87,56 @@ public class WindowChromeService
 #endif
     }
 
+    public bool IsWindowMaximized()
+    {
+#if WINDOWS
+        var hWnd = GetWindowHandle();
+        return hWnd != nint.Zero && IsZoomed(hWnd);
+#else
+        return false;
+#endif
+    }
+
+    public void RestoreWindow()
+    {
+#if WINDOWS
+        var hWnd = GetWindowHandle();
+        if (hWnd == nint.Zero)
+        {
+            return;
+        }
+
+        _ = ShowWindow(hWnd, SwRestore);
+#endif
+    }
+
+    public void RestoreWindowForDrag()
+    {
+#if WINDOWS
+        var hWnd = GetWindowHandle();
+        if (hWnd == nint.Zero)
+        {
+            return;
+        }
+
+        var rect = GetWindowPosition();
+        var width = Math.Max(800, rect.Right - rect.Left);
+        var height = Math.Max(600, rect.Bottom - rect.Top);
+        const int insetX = 10;
+        const int insetY = 8;
+
+        _ = ShowWindow(hWnd, SwRestore);
+        _ = SetWindowPos(
+            hWnd,
+            nint.Zero,
+            rect.Left + insetX,
+            rect.Top + insetY,
+            width - (insetX * 2),
+            height - insetY - 6,
+            SwpNoZOrder | SwpNoActivate);
+#endif
+    }
+
     public void CloseWindow()
     {
 #if WINDOWS

@@ -12,6 +12,10 @@
 - [x] Android 后台播放通知链路稳定化（恢复前台通知与进度更新）。
 - [x] 清理无效通知权限服务抽象，降低排障复杂度。
 - [x] 实机确认并固化“平台原生 `Notification.MediaStyle + MediaSession.Token`”方案，恢复上一首/下一首显示。
+- [x] Windows 自定义窗口壳层接入（`MainWindow.xaml` + `MauiProgram` 生命周期配置）。
+- [x] Windows 顶栏窗口控制按钮与拖拽热区接入（`WindowChromeService` + `mouseInterop.js`）。
+- [x] 修复 Windows 拖拽导致窗口尺寸变化的问题（改用 `SetWindowPos(...SWP_NOSIZE...)`）。
+- [x] 调整 Windows 顶栏布局：删除搜索胶囊、三横杠移至窗口按钮组左侧、顶栏全宽贴边。
 
 ## 进行中
 - [x] 初始化中文化 Memory Bank。

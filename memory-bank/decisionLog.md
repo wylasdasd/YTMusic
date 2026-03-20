@@ -49,3 +49,30 @@
   - 仅使用 `NotificationCompat.MediaStyle` 时，实机出现“有进度条但无上一首/下一首”。
   - 切换到平台原生 `Notification.MediaStyle` 后，实机确认“上一首/下一首”恢复显示。
   - 该行为与设备/ROM 渲染策略强相关，应作为已验证结论固化，避免后续误回退。
+
+## 2026-03-21: Windows 自定义窗口采用“壳层定制 + 页面交互分层”方案
+- **决策**:
+  - Windows 端通过 `ForWindows/Windows/MainWindow.xaml` + `App.xaml.cs` 平台分支接管默认窗口；
+  - 在 `MauiProgram.cs` 中配置 `AppWindow.TitleBar` 与 `OverlappedPresenter`；
+  - 在 `MainLayout.razor` 中单独实现 Windows 顶栏按钮和拖拽热区；
+  - 使用 `WindowChromeService + mouseInterop.js` 实现模板同款拖拽。
+- **依据**:
+  - 仅修改 `Window.TitleBar` 外观并不能自动获得完整的桌面交互，窗口按钮与拖拽入口仍需要页面层主动承接。
+  - 参考模板验证后发现，桌面端更稳定的方案是“窗口壳层负责能力、页面层负责入口”，而不是把所有行为都押在 WinUI 标题栏对象上。
+  - 这样可以在不影响 Android/iOS 的前提下，独立优化 Windows 窗口体验。
+
+## 2026-03-21: Windows 拖拽方式改为“持续跟随鼠标移动”，而不是 `HTCAPTION` 一次性交给系统
+- **决策**: 放弃 `SendMessage(...WM_NCLBUTTONDOWN, HTCAPTION...)` 方案，改为模板同款“mousedown 记录位置 + JS 全局 `mousemove` + Win32 `SetWindowPos`”。
+- **依据**:
+  - 参考模板的拖拽手感与原生窗口更接近，且更容易控制双击最大化、拖拽热区范围、鼠标样式。
+  - 直接使用 `cursor: move` 会出现十字光标，不符合目标体验；页面层驱动拖拽时保留 `cursor: default` 更自然。
+  - 实现中若使用 `MoveWindow(hWnd, x, y, 0, 0, ...)` 会错误修改窗口尺寸，后续已确认为坑点，必须使用 `SetWindowPos(..., SWP_NOSIZE ...)` 只移动位置。
+
+## 2026-03-21: Windows 顶栏布局需与移动端分离看待
+- **决策**:
+  - 顶部搜索胶囊从当前布局中移除；
+  - Windows 下三横杠放在窗口按钮组左边，并与系统按钮保持明显间距；
+  - 顶栏内部容器使用全宽布局，确保放大窗口后左右元素贴边。
+- **依据**:
+  - Android 上合理的顶栏排布，在 Windows 桌面窗口中不一定合理；尤其三横杠放在系统按钮旁边时容易被误认为“第四个窗口控制按钮”。
+  - 居中限宽容器会导致放大后两侧控件离边太远，不符合桌面端标题栏直觉。
