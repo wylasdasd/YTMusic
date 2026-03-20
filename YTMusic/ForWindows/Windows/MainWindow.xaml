@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Window xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+        xmlns:local="clr-namespace:YTMusic"
+        x:Class="YTMusic.ForWindows.Windows.MainWindow"
+        Title="YTMusic"
+        Height="800"
+        Width="1200">
+    <Window.Page>
+        <local:MainPage />
+    </Window.Page>
+    <Window.TitleBar>
+        <TitleBar x:Name="titleBar"
+                  BackgroundColor="#5E35B1"
+                  ForegroundColor="#5E35B1"
+                  HeightRequest="0">
+        </TitleBar>
+    </Window.TitleBar>
+</Window>

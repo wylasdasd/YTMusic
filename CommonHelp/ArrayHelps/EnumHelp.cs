@@ -33,7 +33,7 @@ namespace CommonTool.ArrayHelps
                 var attribute = field.GetCustomAttribute<DescriptionAttribute>();
                 return attribute?.Description ?? name;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return $"枚举值:{value},没找到枚举类型名称";
             }

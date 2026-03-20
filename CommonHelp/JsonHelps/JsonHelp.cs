@@ -101,7 +101,7 @@ namespace CommonTool.JsonHelps
             // 如果 JSON 值是字符串 ("true"/"false")
             if (reader.TokenType == JsonTokenType.String)
             {
-                string value = reader.GetString();
+                string? value = reader.GetString();
                 if (bool.TryParse(value, out bool result))
                 {
                     return result;

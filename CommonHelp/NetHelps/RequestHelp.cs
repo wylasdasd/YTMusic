@@ -131,7 +131,7 @@ namespace CommonTool.NetHelps
                 throw;
                 //return default;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return default;
             }

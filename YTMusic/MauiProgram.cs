@@ -1,6 +1,11 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
+using Microsoft.Maui.LifecycleEvents;
 using MudBlazor.Services;
 using YTMusic.Services;
+
+#if WINDOWS
+using Microsoft.UI.Windowing;
+#endif
 
 namespace YTMusic
 {
@@ -16,6 +21,37 @@ namespace YTMusic
                 .ConfigureFonts(fonts =>
                 {
                     fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
+                })
+                .ConfigureLifecycleEvents(events =>
+                {
+#if WINDOWS
+                    events.AddWindows(windows =>
+                        windows.OnWindowCreated(window =>
+                        {
+                            if (window is not MauiWinUIWindow mauiWindow)
+                            {
+                                return;
+                            }
+
+                            mauiWindow.ExtendsContentIntoTitleBar = true;
+
+                            var appWindow = mauiWindow.AppWindow;
+                            var titleBar = appWindow.TitleBar;
+                            titleBar.ExtendsContentIntoTitleBar = true;
+                            titleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
+
+                            var overlappedPresenter = OverlappedPresenter.Create();
+                            overlappedPresenter.SetBorderAndTitleBar(true, false);
+                            overlappedPresenter.IsResizable = true;
+                            overlappedPresenter.IsMaximizable = true;
+                            overlappedPresenter.IsMinimizable = true;
+                            overlappedPresenter.IsAlwaysOnTop = false;
+                            overlappedPresenter.PreferredMinimumHeight = 600;
+                            overlappedPresenter.PreferredMinimumWidth = 800;
+                            overlappedPresenter.IsModal = false;
+                            appWindow.SetPresenter(overlappedPresenter);
+                        }));
+#endif
                 });
 
             builder.Services.AddMauiBlazorWebView();
@@ -26,6 +62,7 @@ namespace YTMusic
             builder.Services.AddSingleton<IFavoriteService, FavoriteService>();
             builder.Services.AddSingleton<IDownloadManagerService, DownloadManagerService>();
             builder.Services.AddSingleton<MusicPlayerService>();
+            builder.Services.AddSingleton<WindowChromeService>();
 #if ANDROID
             builder.Services.AddSingleton<INativeAudioPlaybackService, YTMusic.Platforms.Android.Services.AndroidNativeAudioPlaybackService>();
             builder.Services.AddSingleton<INativeVideoPlaybackService, YTMusic.Platforms.Android.Services.AndroidNativeVideoPlaybackService>();
@@ -43,8 +80,8 @@ namespace YTMusic
             builder.Services.AddMudServices();
 
 #if DEBUG
-    		builder.Services.AddBlazorWebViewDeveloperTools();
-    		builder.Logging.AddDebug();
+            builder.Services.AddBlazorWebViewDeveloperTools();
+            builder.Logging.AddDebug();
 #endif
 
             var app = builder.Build();

@@ -17,8 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\YTMusic\Services\IYouTubeService.cs" Link="Services\IYouTubeService.cs" />
-    <Compile Include="..\YTMusic\Services\YouTubeService.cs" Link="Services\YouTubeService.cs" />
+    <ProjectReference Include="..\CommonHelp\CommonHelp.csproj" />
   </ItemGroup>
 
   <ItemGroup>

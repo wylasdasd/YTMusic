@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
+<Project Sdk="Microsoft.NET.Sdk.Razor">
 
     <PropertyGroup>
         <TargetFrameworks>net10.0-android;net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
@@ -93,4 +93,19 @@
       <PackageReference Include="Xamarin.AndroidX.Media3.UI" Version="1.2.1" />
     </ItemGroup>
 
+    <ItemGroup>
+      <MauiXaml Update="ForWindows\Windows\MainWindow.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </MauiXaml>
+    </ItemGroup>
+    <ItemGroup>
+      <Compile Remove="**\obj-temp\**\*.cs" />
+      <None Remove="**\obj-temp\**" />
+      <Content Remove="**\obj-temp\**" />
+      <EmbeddedResource Remove="**\obj-temp\**" />
+      <MauiXaml Remove="**\obj-temp\**" />
+    </ItemGroup>
 </Project>
+
+
+

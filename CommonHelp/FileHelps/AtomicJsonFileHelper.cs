@@ -126,12 +126,12 @@ namespace CommonTool.FileHelps
                 };
                 if (stream.Length == 0)
                 {
-                    data = default;
+                    data = default!;
                 }
                 else
                 {
                     stream.Seek(0, SeekOrigin.Begin);
-                    data = JsonSerializer.Deserialize<T>(stream, options1) ?? default;
+                    data = JsonSerializer.Deserialize<T>(stream, options1) ?? default!;
                 }
 
                 // 构造并返回句柄（句柄负责最终的写回与释放锁）

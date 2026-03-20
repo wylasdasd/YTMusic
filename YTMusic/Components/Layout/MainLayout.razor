@@ -4,6 +4,7 @@
 @inject GlobalStateService GlobalState
 @inject IJSRuntime JSRuntime
 @inject ISnackbar Snackbar
+@inject WindowChromeService WindowChrome
 @implements IDisposable
 
 <MudThemeProvider Theme="@CurrentMudTheme" IsDarkMode="@CurrentIsDark" />
@@ -26,16 +27,46 @@
                 <span>YTMusic</span>
             </button>
 
-            <button class="ytm-search-pill" @onclick='() => NavigateToTab("")'>
-                <MudIcon Icon="@Icons.Material.Filled.Search" />
-                <span>Search songs, albums, artists</span>
-            </button>
+            @if (IsWindowsDesktop)
+            {
+                <div class="ytm-window-drag"
+                     @onmousedown="BeginWindowDrag"
+                     @ondblclick="ToggleWindowMaximize"
+                     title="Drag window">
+                </div>
 
-            <MudIconButton Icon="@Icons.Material.Filled.Menu"
-                           Color="Color.Default"
-                           Class="ytm-theme-toggle"
-                           OnClick="ToggleThemePanel"
-                           aria-label="Open Theme Panel" />
+                <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                               Color="Color.Default"
+                               Class="ytm-theme-toggle ytm-theme-toggle-desktop"
+                               OnClick="ToggleThemePanel"
+                               aria-label="Open Theme Panel" />
+
+                <div class="ytm-window-controls">
+                    <MudIconButton Icon="@Icons.Material.Rounded.Minimize"
+                                   Color="Color.Default"
+                                   Class="ytm-window-button"
+                                   OnClick="MinimizeWindow"
+                                   aria-label="Minimize Window" />
+                    <MudIconButton Icon="@Icons.Material.Outlined.CropSquare"
+                                   Color="Color.Default"
+                                   Class="ytm-window-button"
+                                   OnClick="ToggleWindowMaximize"
+                                   aria-label="Toggle Maximize Window" />
+                    <MudIconButton Icon="@Icons.Material.Rounded.Close"
+                                   Color="Color.Default"
+                                   Class="ytm-window-button ytm-window-button-close"
+                                   OnClick="CloseWindow"
+                                   aria-label="Close Window" />
+                </div>
+            }
+            else
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                               Color="Color.Default"
+                               Class="ytm-theme-toggle"
+                               OnClick="ToggleThemePanel"
+                               aria-label="Open Theme Panel" />
+            }
         </div>
     </MudAppBar>
 
@@ -100,6 +131,8 @@
     private EventHandler<LocationChangedEventArgs>? _locationChangedHandler;
     private bool _isThemePanelOpen;
     private int _themeIndex;
+    private bool _isWindowDragging;
+    private DotNetObjectReference<MainLayout>? _windowDragRef;
 
     public string SelectedNavValue { get; set; } = "Search";
 
@@ -116,6 +149,11 @@
         if (!firstRender)
         {
             return;
+        }
+
+        if (IsWindowsDesktop)
+        {
+            _windowDragRef = DotNetObjectReference.Create(this);
         }
 
         await JSRuntime.InvokeVoidAsync("ytmLayout.initBottomNav", "ytm-bottom-nav");
@@ -145,6 +183,71 @@
     private void ToggleThemePanel()
     {
         _isThemePanelOpen = !_isThemePanelOpen;
+    }
+
+    private async Task BeginWindowDrag(MouseEventArgs args)
+    {
+        if (!IsWindowsDesktop || args.Button != 0)
+        {
+            return;
+        }
+
+        _isWindowDragging = true;
+        WindowChrome.StartWindowMove();
+        await JSRuntime.InvokeVoidAsync("mouseDragInterop.startDrag", _windowDragRef);
+    }
+
+    private void MinimizeWindow()
+    {
+        if (!IsWindowsDesktop)
+        {
+            return;
+        }
+
+        WindowChrome.MinimizeWindow();
+    }
+
+    private void ToggleWindowMaximize()
+    {
+        if (!IsWindowsDesktop)
+        {
+            return;
+        }
+
+        WindowChrome.ToggleMaximizeWindow();
+    }
+
+    private void CloseWindow()
+    {
+        if (!IsWindowsDesktop)
+        {
+            return;
+        }
+
+        WindowChrome.CloseWindow();
+    }
+
+    [JSInvokable]
+    public void OnGlobalMouseMove()
+    {
+        if (!_isWindowDragging || !IsWindowsDesktop)
+        {
+            return;
+        }
+
+        WindowChrome.MoveWindow();
+    }
+
+    [JSInvokable]
+    public void OnGlobalMouseUp()
+    {
+        if (!_isWindowDragging || !IsWindowsDesktop)
+        {
+            return;
+        }
+
+        _isWindowDragging = false;
+        WindowChrome.EndWindowMove();
     }
 
     private void CloseThemePanel()
@@ -195,6 +298,9 @@
             NavigationManager.LocationChanged -= _locationChangedHandler;
             _locationChangedHandler = null;
         }
+
+        _windowDragRef?.Dispose();
+        _windowDragRef = null;
     }
 
     private ThemePreset ActiveTheme
@@ -221,6 +327,8 @@
     private MudTheme CurrentMudTheme => ActiveTheme.Theme;
 
     private string CurrentThemeCssVars => ActiveTheme.CssVars;
+
+    private static bool IsWindowsDesktop => OperatingSystem.IsWindows();
 
     private readonly ThemePreset[] _themes =
     [
