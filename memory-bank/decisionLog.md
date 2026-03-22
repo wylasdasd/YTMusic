@@ -52,7 +52,7 @@
 
 ## 2026-03-21: Windows 自定义窗口采用“壳层定制 + 页面交互分层”方案
 - **决策**:
-  - Windows 端通过 `ForWindows/Windows/MainWindow.xaml` + `App.xaml.cs` 平台分支接管默认窗口；
+  - Windows 端通过 `Platforms/Windows/MainWindow.xaml` + `App.xaml.cs` 平台分支接管默认窗口；
   - 在 `MauiProgram.cs` 中配置 `AppWindow.TitleBar` 与 `OverlappedPresenter`；
   - 在 `MainLayout.razor` 中单独实现 Windows 顶栏按钮和拖拽热区；
   - 使用 `WindowChromeService + mouseInterop.js` 实现模板同款拖拽。

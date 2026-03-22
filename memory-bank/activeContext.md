@@ -15,7 +15,7 @@ Windows 自定义窗口与桌面顶栏交互已完成一轮稳定化；后续若
 - **关键实机结论**：目标设备上需使用平台原生 `Notification.MediaStyle + platform MediaSession.Token`，否则可能出现“有进度条但没有上一首/下一首”。
 - **代码清理**：删除无效通知权限服务抽象，减少多链路并行导致的排障噪音。
 - **Windows 窗口壳层**：
-  - 已新增 `ForWindows/Windows/MainWindow.xaml(.cs)`，Windows 平台不再走默认 `new Window(new MainPage())`。
+  - 已新增 `Platforms/Windows/MainWindow.xaml(.cs)`，Windows 平台不再走默认 `new Window(new MainPage())`。
   - `MauiProgram.cs` 已配置 `AppWindow.TitleBar` 与 `OverlappedPresenter`，保留边框和缩放能力。
   - `MainLayout.razor` 已接入 Windows 顶栏按钮（最小化/最大化/关闭）和桌面专用拖拽热区。
   - 拖拽逻辑已切换为模板同款 `WindowChromeService + mouseInterop.js` 持续移动方案，且修正了“错误调用 `MoveWindow` 导致窗口尺寸变化”的坑。

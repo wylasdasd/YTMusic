@@ -92,8 +92,8 @@
   - 在 `MauiProgram.cs` 中配置 `AppWindow.TitleBar` 和 `OverlappedPresenter` 负责窗口壳层能力。
   - 在 `MainLayout.razor` 中单独提供窗口按钮和拖拽热区负责交互入口。
 - **核心代码位置**:
-  - [MainWindow.xaml](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\ForWindows\Windows\MainWindow.xaml)
-  - [MainWindow.xaml.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\ForWindows\Windows\MainWindow.xaml.cs)
+  - [MainWindow.xaml](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Platforms\Windows\MainWindow.xaml)
+  - [MainWindow.xaml.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Platforms\Windows\MainWindow.xaml.cs)
   - [App.xaml.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\App.xaml.cs)
   - [MauiProgram.cs](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\MauiProgram.cs)
   - [MainLayout.razor](c:\Users\wyl\Desktop\work2\YTMusic\YTMusic\Components\Layout\MainLayout.razor)

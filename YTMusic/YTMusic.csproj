@@ -94,10 +94,13 @@
     </ItemGroup>
 
     <ItemGroup>
-      <MauiXaml Update="ForWindows\Windows\MainWindow.xaml">
-        <Generator>MSBuild:Compile</Generator>
-      </MauiXaml>
+      <Page Remove="Platforms\Windows\MainWindow.xaml" />
+      <ApplicationDefinition Remove="Platforms\Windows\MainWindow.xaml" />
+      <MauiXaml Remove="Platforms\Windows\MainWindow.xaml" />
+      <EmbeddedResource Remove="Platforms\Windows\MainWindow.xaml" />
+      <None Include="Platforms\Windows\MainWindow.xaml" />
     </ItemGroup>
+
     <ItemGroup>
       <Compile Remove="**\obj-temp\**\*.cs" />
       <None Remove="**\obj-temp\**" />

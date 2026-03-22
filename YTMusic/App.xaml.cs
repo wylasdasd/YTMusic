@@ -1,5 +1,5 @@
 #if WINDOWS
-using YTMusic.ForWindows.Windows;
+using YTMusic.Platforms.Windows;
 #endif
 
 namespace YTMusic

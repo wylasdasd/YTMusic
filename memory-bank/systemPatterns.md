@@ -10,7 +10,7 @@
 - **JS 互操作**: 广泛使用 `IJSRuntime` 来控制音频元素（播放/暂停、进度跳转、事件监听）。
 - **全局状态管理**: `MusicPlayerService` 作为单例/作用域状态提供者，向整个 UI 提供数据，并通过事件 (`OnChange`) 通知组件更新。
 - **Windows 窗口壳层定制**:
-  - Windows 端使用 `ForWindows/Windows/MainWindow.xaml` 接管默认 MAUI 窗口，而不是只依赖 `new Window(new MainPage())`。
+  - Windows 端使用 `Platforms/Windows/MainWindow.xaml` 接管默认 MAUI 窗口，而不是只依赖 `new Window(new MainPage())`。
   - `MauiProgram` 中通过 `ConfigureLifecycleEvents` 配置 `AppWindow.TitleBar` 与 `OverlappedPresenter`，保留边框、缩放、最小化/最大化能力，同时折叠标题栏高度。
   - 页面层的窗口交互不要依赖 `Window.TitleBar` 自带行为；窗口按钮与拖拽热区由 `MainLayout.razor` 主动提供，调用 `WindowChromeService` 完成最小化、最大化、关闭、拖拽。
   - Windows 拖拽实现采用“按下记录起点 + JS 全局 mousemove + Win32 移动窗口”的方式，行为更接近参考模板；拖拽热区鼠标样式保持 `cursor: default`，避免出现 `move` 十字光标。
