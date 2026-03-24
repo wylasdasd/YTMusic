@@ -199,8 +199,13 @@
 }
 
 .ytm-bottom-item.is-active {
-    color: var(--ytm-text-primary);
+    color: var(--ytm-nav-active-text);
     background: var(--ytm-nav-active-bg);
+}
+
+.ytm-bottom-item ::deep .mud-icon-root,
+.ytm-bottom-item ::deep .mud-typography {
+    color: inherit;
 }
 
 .ytm-bottom-item ::deep .mud-typography {

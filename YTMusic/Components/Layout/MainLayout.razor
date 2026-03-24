@@ -12,119 +12,121 @@
 <MudSnackbarProvider />
 <MudPopoverProvider />
 
-<MudLayout Class="ytm-shell" Style="@CurrentThemeCssVars">
-    <MudOverlay Visible="GlobalState.IsLoading" DarkBackground="true" Absolute="false" ZIndex="9999">
-        <div class="d-flex flex-column align-center justify-center">
-            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
-            <MudText Typo="Typo.h6" Color="Color.Primary" Class="mt-4">Loading...</MudText>
+<div style="@CurrentThemeCssVars">
+    <MudLayout Class="ytm-shell">
+        <MudOverlay Visible="GlobalState.IsLoading" DarkBackground="true" Absolute="false" ZIndex="9999">
+            <div class="d-flex flex-column align-center justify-center">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                <MudText Typo="Typo.h6" Color="Color.Primary" Class="mt-4">Loading...</MudText>
+            </div>
+        </MudOverlay>
+
+        <MudAppBar Elevation="0" Fixed="true" Color="Color.Transparent" Class="ytm-topbar">
+            <div class="ytm-topbar-inner">
+                <button class="ytm-brand" @onclick='() => NavigateToTab("")'>
+                    <MudIcon Icon="@Icons.Material.Filled.PlayCircleFilled" />
+                    <span>YTMusic</span>
+                </button>
+
+                @if (IsWindowsDesktop)
+                {
+                    <div class="ytm-window-drag"
+                         @onmousedown="BeginWindowDrag"
+                         @ondblclick="ToggleWindowMaximize"
+                         title="Drag window">
+                    </div>
+
+                    <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                                   Color="Color.Default"
+                                   Class="ytm-theme-toggle ytm-theme-toggle-desktop"
+                                   OnClick="ToggleThemePanel"
+                                   aria-label="Open Theme Panel" />
+
+                    <div class="ytm-window-controls">
+                        <MudIconButton Icon="@Icons.Material.Rounded.Minimize"
+                                       Color="Color.Default"
+                                       Class="ytm-window-button"
+                                       OnClick="MinimizeWindow"
+                                       aria-label="Minimize Window" />
+                        <MudIconButton Icon="@Icons.Material.Outlined.CropSquare"
+                                       Color="Color.Default"
+                                       Class="ytm-window-button"
+                                       OnClick="ToggleWindowMaximize"
+                                       aria-label="Toggle Maximize Window" />
+                        <MudIconButton Icon="@Icons.Material.Rounded.Close"
+                                       Color="Color.Default"
+                                       Class="ytm-window-button ytm-window-button-close"
+                                       OnClick="CloseWindow"
+                                       aria-label="Close Window" />
+                    </div>
+                }
+                else
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                                   Color="Color.Default"
+                                   Class="ytm-theme-toggle"
+                                   OnClick="ToggleThemePanel"
+                                   aria-label="Open Theme Panel" />
+                }
+            </div>
+        </MudAppBar>
+
+        <MudMainContent Class="ytm-main" Style="padding-bottom: 98px;">
+            <MudContainer MaxWidth="MaxWidth.False" Class="ytm-content">
+                @Body
+            </MudContainer>
+            <GlobalAudioPlayer />
+        </MudMainContent>
+    </MudLayout>
+
+    <div class="ytm-theme-backdrop @( _isThemePanelOpen ? "is-open" : "" )" @onclick="CloseThemePanel"></div>
+
+    <aside class="ytm-theme-panel @( _isThemePanelOpen ? "is-open" : "" )" aria-hidden="@(!_isThemePanelOpen)">
+        <div class="ytm-theme-panel-header">
+            <MudText Typo="Typo.h6">Theme</MudText>
+            <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="CloseThemePanel" aria-label="Close Theme Panel" />
         </div>
-    </MudOverlay>
-
-    <MudAppBar Elevation="0" Fixed="true" Color="Color.Transparent" Class="ytm-topbar">
-        <div class="ytm-topbar-inner">
-            <button class="ytm-brand" @onclick='() => NavigateToTab("")'>
-                <MudIcon Icon="@Icons.Material.Filled.PlayCircleFilled" />
-                <span>YTMusic</span>
+        <div class="ytm-theme-list">
+            @for (var i = 0; i < _themes.Length; i++)
+            {
+                var index = i;
+                var item = _themes[index];
+                <button class="@GetThemeItemClass(index)" @onclick="@(() => SelectTheme(index))">
+                    <span class="ytm-theme-dot" style="background:@item.PreviewColor;"></span>
+                    <span>@item.Name</span>
+                </button>
+            }
+            <button class="ytm-theme-item" @onclick="CopyDownloadPathAsync">
+                <span class="ytm-theme-dot" style="background: var(--ytm-accent);"></span>
+                <span>Copy Download Path</span>
             </button>
-
-            @if (IsWindowsDesktop)
-            {
-                <div class="ytm-window-drag"
-                     @onmousedown="BeginWindowDrag"
-                     @ondblclick="ToggleWindowMaximize"
-                     title="Drag window">
-                </div>
-
-                <MudIconButton Icon="@Icons.Material.Filled.Menu"
-                               Color="Color.Default"
-                               Class="ytm-theme-toggle ytm-theme-toggle-desktop"
-                               OnClick="ToggleThemePanel"
-                               aria-label="Open Theme Panel" />
-
-                <div class="ytm-window-controls">
-                    <MudIconButton Icon="@Icons.Material.Rounded.Minimize"
-                                   Color="Color.Default"
-                                   Class="ytm-window-button"
-                                   OnClick="MinimizeWindow"
-                                   aria-label="Minimize Window" />
-                    <MudIconButton Icon="@Icons.Material.Outlined.CropSquare"
-                                   Color="Color.Default"
-                                   Class="ytm-window-button"
-                                   OnClick="ToggleWindowMaximize"
-                                   aria-label="Toggle Maximize Window" />
-                    <MudIconButton Icon="@Icons.Material.Rounded.Close"
-                                   Color="Color.Default"
-                                   Class="ytm-window-button ytm-window-button-close"
-                                   OnClick="CloseWindow"
-                                   aria-label="Close Window" />
-                </div>
-            }
-            else
-            {
-                <MudIconButton Icon="@Icons.Material.Filled.Menu"
-                               Color="Color.Default"
-                               Class="ytm-theme-toggle"
-                               OnClick="ToggleThemePanel"
-                               aria-label="Open Theme Panel" />
-            }
         </div>
-    </MudAppBar>
+    </aside>
 
-    <MudMainContent Class="ytm-main" Style="padding-bottom: 98px;">
-        <MudContainer MaxWidth="MaxWidth.False" Class="ytm-content">
-            @Body
-        </MudContainer>
-        <GlobalAudioPlayer />
-    </MudMainContent>
-</MudLayout>
-
-<div class="ytm-theme-backdrop @( _isThemePanelOpen ? "is-open" : "" )" @onclick="CloseThemePanel"></div>
-
-<aside class="ytm-theme-panel @( _isThemePanelOpen ? "is-open" : "" )" aria-hidden="@(!_isThemePanelOpen)">
-    <div class="ytm-theme-panel-header">
-        <MudText Typo="Typo.h6">Theme</MudText>
-        <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="CloseThemePanel" aria-label="Close Theme Panel" />
-    </div>
-    <div class="ytm-theme-list">
-        @for (var i = 0; i < _themes.Length; i++)
-        {
-            var index = i;
-            var item = _themes[index];
-            <button class="@GetThemeItemClass(index)" @onclick="@(() => SelectTheme(index))">
-                <span class="ytm-theme-dot" style="background:@item.PreviewColor;"></span>
-                <span>@item.Name</span>
-            </button>
-        }
-        <button class="ytm-theme-item" @onclick="CopyDownloadPathAsync">
-            <span class="ytm-theme-dot" style="background: var(--ytm-accent);"></span>
-            <span>Copy Download Path</span>
-        </button>
-    </div>
-</aside>
-
-<MudPaper Elevation="0" id="ytm-bottom-nav" Class="ytm-bottom-nav"
-          Style="position: fixed; left: 0; right: 0; bottom: 0; z-index: 5000; display: flex; justify-content: space-around; border-radius: 0; padding-bottom: env(safe-area-inset-bottom);">
-    <div @onclick='() => NavigateToTab("")' class="@GetBottomItemClass("Search")">
-        <MudIcon Icon="@Icons.Material.Filled.Search" />
-        <MudText Typo="Typo.caption">Home</MudText>
-    </div>
-    <div @onclick='() => NavigateToTab("favorites")' class="@GetBottomItemClass("Favorites")">
-        <MudIcon Icon="@Icons.Material.Filled.Favorite" />
-        <MudText Typo="Typo.caption">Favorites</MudText>
-    </div>
-    <div @onclick='() => NavigateToTab("player")' class="@GetBottomItemClass("Player")">
-        <MudIcon Icon="@Icons.Material.Filled.PlayCircle" />
-        <MudText Typo="Typo.caption">Player</MudText>
-    </div>
-    <div @onclick='() => NavigateToTab("downloads")' class="@GetBottomItemClass("Downloads")">
-        <MudIcon Icon="@Icons.Material.Filled.LibraryMusic" />
-        <MudText Typo="Typo.caption">Library</MudText>
-    </div>
-    <div @onclick='() => NavigateToTab("transfers")' class="@GetBottomItemClass("Transfers")">
-        <MudIcon Icon="@Icons.Material.Filled.CloudDownload" />
-        <MudText Typo="Typo.caption">Transfers</MudText>
-    </div>
-</MudPaper>
+    <MudPaper Elevation="0" id="ytm-bottom-nav" Class="ytm-bottom-nav"
+              Style="position: fixed; left: 0; right: 0; bottom: 0; z-index: 5000; display: flex; justify-content: space-around; border-radius: 0; padding-bottom: env(safe-area-inset-bottom);">
+        <div @onclick='() => NavigateToTab("")' class="@GetBottomItemClass("Search")">
+            <MudIcon Icon="@Icons.Material.Filled.Search" Style="@GetBottomItemContentStyle("Search")" />
+            <MudText Typo="Typo.caption" Style="@GetBottomItemContentStyle("Search")">Home</MudText>
+        </div>
+        <div @onclick='() => NavigateToTab("favorites")' class="@GetBottomItemClass("Favorites")">
+            <MudIcon Icon="@Icons.Material.Filled.Favorite" Style="@GetBottomItemContentStyle("Favorites")" />
+            <MudText Typo="Typo.caption" Style="@GetBottomItemContentStyle("Favorites")">Favorites</MudText>
+        </div>
+        <div @onclick='() => NavigateToTab("player")' class="@GetBottomItemClass("Player")">
+            <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Style="@GetBottomItemContentStyle("Player")" />
+            <MudText Typo="Typo.caption" Style="@GetBottomItemContentStyle("Player")">Player</MudText>
+        </div>
+        <div @onclick='() => NavigateToTab("downloads")' class="@GetBottomItemClass("Downloads")">
+            <MudIcon Icon="@Icons.Material.Filled.LibraryMusic" Style="@GetBottomItemContentStyle("Downloads")" />
+            <MudText Typo="Typo.caption" Style="@GetBottomItemContentStyle("Downloads")">Library</MudText>
+        </div>
+        <div @onclick='() => NavigateToTab("transfers")' class="@GetBottomItemClass("Transfers")">
+            <MudIcon Icon="@Icons.Material.Filled.CloudDownload" Style="@GetBottomItemContentStyle("Transfers")" />
+            <MudText Typo="Typo.caption" Style="@GetBottomItemContentStyle("Transfers")">Transfers</MudText>
+        </div>
+    </MudPaper>
+</div>
 
 @code {
     [Inject] private NavigationManager NavigationManager { get; set; } = default!;
@@ -320,6 +322,13 @@
         return SelectedNavValue == tab ? "ytm-bottom-item is-active" : "ytm-bottom-item";
     }
 
+    private string GetBottomItemContentStyle(string tab)
+    {
+        return SelectedNavValue == tab
+            ? "color: var(--ytm-nav-active-text);"
+            : "color: var(--ytm-nav-text);";
+    }
+
     private string GetThemeItemClass(int index)
     {
         return index == _themeIndex ? "ytm-theme-item is-active" : "ytm-theme-item";
@@ -415,6 +424,7 @@
             "--ytm-bottom-bg: rgba(13, 16, 23, 0.97);" +
             "--ytm-nav-text: #AEB9D2;" +
             "--ytm-nav-active-bg: rgba(255, 78, 106, 0.25);" +
+            "--ytm-nav-active-text: #FF4E6A;" +
             "--ytm-text-primary: #F5F7FA;" +
             "--ytm-text-secondary: #B0BACB;"
         ),
@@ -452,6 +462,7 @@
             "--ytm-bottom-bg: rgba(7, 19, 27, 0.97);" +
             "--ytm-nav-text: #A5C4D5;" +
             "--ytm-nav-active-bg: rgba(45, 212, 191, 0.24);" +
+            "--ytm-nav-active-text: #2DD4BF;" +
             "--ytm-text-primary: #EAF7FF;" +
             "--ytm-text-secondary: #9CC2D6;"
         ),
@@ -489,6 +500,7 @@
             "--ytm-bottom-bg: rgba(20, 16, 10, 0.97);" +
             "--ytm-nav-text: #DCC8AF;" +
             "--ytm-nav-active-bg: rgba(245, 158, 11, 0.24);" +
+            "--ytm-nav-active-text: #F59E0B;" +
             "--ytm-text-primary: #FFF6EA;" +
             "--ytm-text-secondary: #D8C4AC;"
         ),
@@ -526,6 +538,7 @@
             "--ytm-bottom-bg: rgba(234, 244, 255, 0.97);" +
             "--ytm-nav-text: #475569;" +
             "--ytm-nav-active-bg: rgba(37, 99, 235, 0.20);" +
+            "--ytm-nav-active-text: #2563EB;" +
             "--ytm-text-primary: #0F172A;" +
             "--ytm-text-secondary: #475569;"
         ),
@@ -563,6 +576,7 @@
             "--ytm-bottom-bg: rgba(238, 253, 247, 0.97);" +
             "--ytm-nav-text: #4B635A;" +
             "--ytm-nav-active-bg: rgba(5, 150, 105, 0.21);" +
+            "--ytm-nav-active-text: #059669;" +
             "--ytm-text-primary: #102A23;" +
             "--ytm-text-secondary: #4B635A;"
         )
@@ -602,6 +616,7 @@
         "--ytm-bottom-bg: rgba(13, 16, 23, 0.97);" +
         "--ytm-nav-text: #AEB9D2;" +
         "--ytm-nav-active-bg: rgba(255, 78, 106, 0.25);" +
+        "--ytm-nav-active-text: #FF4E6A;" +
         "--ytm-text-primary: #F5F7FA;" +
         "--ytm-text-secondary: #B0BACB;"
     );
