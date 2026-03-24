@@ -1,12 +1,12 @@
 using Android.App;
 using Android.Content;
 using Android.OS;
+using Android.Content.Res;
 using Android.Views;
 using Android.Widget;
 using AndroidX.Media3.Common;
 using AndroidX.Media3.ExoPlayer;
 using AndroidX.Media3.UI;
-using Java.Lang;
 
 namespace YTMusic.Platforms.Android.Services
 {
@@ -34,9 +34,12 @@ namespace YTMusic.Platforms.Android.Services
         private const string ExtraDurationMs = "durationMs";
 
         private static WeakReference<VideoPlayerActivity>? _currentInstance;
+        private static readonly float[] PlaybackSpeedOptions = { 0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f };
 
         private IExoPlayer? _player;
         private PlayerView? _playerView;
+        private global::Android.Widget.Button? _settingsButton;
+        private ControllerVisibilityListener? _controllerVisibilityListener;
         private Handler? _mainHandler;
         private global::Java.Lang.Runnable? _positionRunnable;
         private long _expectedDurationMs;
@@ -66,6 +69,22 @@ namespace YTMusic.Platforms.Android.Services
             };
             _playerView.SetBackgroundColor(global::Android.Graphics.Color.Black);
             _playerView.UseController = true;
+            _settingsButton = new global::Android.Widget.Button(this)
+            {
+                LayoutParameters = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WrapContent,
+                    ViewGroup.LayoutParams.WrapContent,
+                    GravityFlags.Bottom | GravityFlags.End)
+                {
+                    BottomMargin = DpToPx(56),
+                    RightMargin = DpToPx(16)
+                }
+            };
+            _settingsButton.SetAllCaps(false);
+            _settingsButton.Alpha = 0.85f;
+            _settingsButton.Text = "设置";
+            _settingsButton.Click += OnSettingsButtonClick;
+
             root.AddView(_playerView);
 
             SetContentView(root);
@@ -73,6 +92,11 @@ namespace YTMusic.Platforms.Android.Services
             _player = new ExoPlayerBuilder(this).Build();
             _player.AddListener(this);
             _playerView.Player = _player;
+            _controllerVisibilityListener = new ControllerVisibilityListener(this);
+            _playerView.SetControllerVisibilityListener(_controllerVisibilityListener);
+            _playerView.OverlayFrameLayout?.AddView(_settingsButton);
+            TryHideDefaultSettingsButton();
+            UpdateSettingsButtonVisibility(_playerView.IsControllerFullyVisible);
 
             HandleIntent(Intent);
         }
@@ -97,15 +121,32 @@ namespace YTMusic.Platforms.Android.Services
 
             if (_playerView != null)
             {
+                _playerView.SetControllerVisibilityListener(null);
+                _playerView.OverlayFrameLayout?.RemoveView(_settingsButton);
                 _playerView.Player = null;
                 _playerView.Dispose();
                 _playerView = null;
             }
 
+            if (_settingsButton != null)
+            {
+                _settingsButton.Click -= OnSettingsButtonClick;
+                _settingsButton.Dispose();
+                _settingsButton = null;
+            }
+
             _mainHandler = null;
             _positionRunnable = null;
+            _controllerVisibilityListener = null;
             _currentInstance = null;
             base.OnDestroy();
+        }
+
+        public override void OnConfigurationChanged(Configuration newConfig)
+        {
+            base.OnConfigurationChanged(newConfig);
+            TryHideDefaultSettingsButton();
+            UpdateSettingsButtonVisibility(_playerView?.IsControllerFullyVisible == true);
         }
 
         public void OnIsPlayingChanged(bool isPlaying)
@@ -306,6 +347,167 @@ namespace YTMusic.Platforms.Android.Services
             intent.SetAction(action);
             intent.AddFlags(ActivityFlags.NewTask | ActivityFlags.SingleTop | ActivityFlags.ClearTop);
             return intent;
+        }
+
+        private void OnSettingsButtonClick(object? sender, EventArgs e)
+        {
+            if (_settingsButton == null)
+            {
+                return;
+            }
+
+            var popupMenu = new PopupMenu(this, _settingsButton);
+            popupMenu.Menu.Add(0, 1, 0, IsLandscape() ? "切换到竖屏" : "切换到横屏");
+            popupMenu.Menu.Add(0, 2, 1, $"播放速度: {GetCurrentPlaybackSpeedLabel()}");
+            popupMenu.MenuItemClick += OnSettingsMenuItemClick;
+            popupMenu.DismissEvent += (_, _) =>
+            {
+                popupMenu.MenuItemClick -= OnSettingsMenuItemClick;
+                popupMenu.Dispose();
+            };
+            popupMenu.Show();
+        }
+
+        private void OnSettingsMenuItemClick(object? sender, PopupMenu.MenuItemClickEventArgs e)
+        {
+            switch (e.Item.ItemId)
+            {
+                case 1:
+                    ToggleOrientation();
+                    break;
+                case 2:
+                    ShowPlaybackSpeedDialog();
+                    break;
+            }
+        }
+
+        private void ToggleOrientation()
+        {
+            RequestedOrientation = IsLandscape()
+                ? global::Android.Content.PM.ScreenOrientation.Portrait
+                : global::Android.Content.PM.ScreenOrientation.SensorLandscape;
+        }
+
+        private bool IsLandscape()
+        {
+            return Resources?.Configuration?.Orientation == global::Android.Content.Res.Orientation.Landscape;
+        }
+
+        private void ShowPlaybackSpeedDialog()
+        {
+            var labels = PlaybackSpeedOptions.Select(FormatPlaybackSpeedLabel).ToArray();
+            var currentSpeed = GetCurrentPlaybackSpeed();
+            var checkedIndex = Array.FindIndex(PlaybackSpeedOptions, speed => Math.Abs(speed - currentSpeed) < 0.01f);
+            if (checkedIndex < 0)
+            {
+                checkedIndex = Array.FindIndex(PlaybackSpeedOptions, speed => Math.Abs(speed - 1f) < 0.01f);
+            }
+
+            var builder = new AlertDialog.Builder(this);
+            builder.SetTitle("播放速度");
+            builder.SetSingleChoiceItems(labels, checkedIndex, (_, args) =>
+            {
+                if (args.Which >= 0 && args.Which < PlaybackSpeedOptions.Length)
+                {
+                    SetPlaybackSpeed(PlaybackSpeedOptions[args.Which]);
+                }
+            });
+            builder.SetNegativeButton("关闭", (_, _) => { });
+            builder.Show();
+        }
+
+        private float GetCurrentPlaybackSpeed()
+        {
+            return _player?.PlaybackParameters?.Speed ?? 1f;
+        }
+
+        private string GetCurrentPlaybackSpeedLabel()
+        {
+            return FormatPlaybackSpeedLabel(GetCurrentPlaybackSpeed());
+        }
+
+        private static string FormatPlaybackSpeedLabel(float speed)
+        {
+            return $"{speed:0.##}x";
+        }
+
+        private void SetPlaybackSpeed(float speed)
+        {
+            _player?.SetPlaybackSpeed(speed);
+        }
+
+        private void UpdateSettingsButtonVisibility(bool isVisible)
+        {
+            if (_settingsButton == null)
+            {
+                return;
+            }
+
+            _settingsButton.Visibility = isVisible
+                ? global::Android.Views.ViewStates.Visible
+                : global::Android.Views.ViewStates.Gone;
+        }
+
+        private void TryHideDefaultSettingsButton()
+        {
+            if (_playerView == null)
+            {
+                return;
+            }
+
+            HideViewByResourceEntryName(_playerView, "exo_settings");
+        }
+
+        private void HideViewByResourceEntryName(global::Android.Views.View view, string resourceEntryName)
+        {
+            if (view.Id != global::Android.Views.View.NoId)
+            {
+                try
+                {
+                    if (Resources?.GetResourceEntryName(view.Id) == resourceEntryName)
+                    {
+                        view.Visibility = global::Android.Views.ViewStates.Gone;
+                    }
+                }
+                catch
+                {
+                    // Ignore views whose ids are not directly resolvable in the app resources.
+                }
+            }
+
+            if (view is not global::Android.Views.ViewGroup viewGroup)
+            {
+                return;
+            }
+
+            for (int i = 0; i < viewGroup.ChildCount; i++)
+            {
+                var child = viewGroup.GetChildAt(i);
+                if (child != null)
+                {
+                    HideViewByResourceEntryName(child, resourceEntryName);
+                }
+            }
+        }
+
+        private int DpToPx(int dp)
+        {
+            return (int)(dp * Resources!.DisplayMetrics!.Density);
+        }
+
+        private sealed class ControllerVisibilityListener : Java.Lang.Object, PlayerView.IControllerVisibilityListener
+        {
+            private readonly VideoPlayerActivity _activity;
+
+            public ControllerVisibilityListener(VideoPlayerActivity activity)
+            {
+                _activity = activity;
+            }
+
+            public void OnVisibilityChanged(int visibility)
+            {
+                _activity.UpdateSettingsButtonVisibility(visibility == (int)global::Android.Views.ViewStates.Visible);
+            }
         }
 
         private static global::Android.Net.Uri ResolveUri(string source, bool isLocalFile)
