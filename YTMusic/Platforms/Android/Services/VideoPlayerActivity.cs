@@ -32,14 +32,14 @@ namespace YTMusic.Platforms.Android.Services
         private const string ExtraIsLocalFile = "isLocalFile";
         private const string ExtraSeekMs = "seekMs";
         private const string ExtraDurationMs = "durationMs";
+        private const string CustomSettingsButtonIdName = "exo_custom_settings";
 
         private static WeakReference<VideoPlayerActivity>? _currentInstance;
         private static readonly float[] PlaybackSpeedOptions = { 0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f };
 
         private IExoPlayer? _player;
         private PlayerView? _playerView;
-        private global::Android.Widget.Button? _settingsButton;
-        private ControllerVisibilityListener? _controllerVisibilityListener;
+        private global::Android.Widget.ImageButton? _settingsButton;
         private Handler? _mainHandler;
         private global::Java.Lang.Runnable? _positionRunnable;
         private long _expectedDurationMs;
@@ -69,21 +69,6 @@ namespace YTMusic.Platforms.Android.Services
             };
             _playerView.SetBackgroundColor(global::Android.Graphics.Color.Black);
             _playerView.UseController = true;
-            _settingsButton = new global::Android.Widget.Button(this)
-            {
-                LayoutParameters = new FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WrapContent,
-                    ViewGroup.LayoutParams.WrapContent,
-                    GravityFlags.Bottom | GravityFlags.End)
-                {
-                    BottomMargin = DpToPx(56),
-                    RightMargin = DpToPx(16)
-                }
-            };
-            _settingsButton.SetAllCaps(false);
-            _settingsButton.Alpha = 0.85f;
-            _settingsButton.Text = "设置";
-            _settingsButton.Click += OnSettingsButtonClick;
 
             root.AddView(_playerView);
 
@@ -92,11 +77,7 @@ namespace YTMusic.Platforms.Android.Services
             _player = new ExoPlayerBuilder(this).Build();
             _player.AddListener(this);
             _playerView.Player = _player;
-            _controllerVisibilityListener = new ControllerVisibilityListener(this);
-            _playerView.SetControllerVisibilityListener(_controllerVisibilityListener);
-            _playerView.OverlayFrameLayout?.AddView(_settingsButton);
-            TryHideDefaultSettingsButton();
-            UpdateSettingsButtonVisibility(_playerView.IsControllerFullyVisible);
+            BindCustomSettingsButton();
 
             HandleIntent(Intent);
         }
@@ -121,8 +102,6 @@ namespace YTMusic.Platforms.Android.Services
 
             if (_playerView != null)
             {
-                _playerView.SetControllerVisibilityListener(null);
-                _playerView.OverlayFrameLayout?.RemoveView(_settingsButton);
                 _playerView.Player = null;
                 _playerView.Dispose();
                 _playerView = null;
@@ -137,7 +116,6 @@ namespace YTMusic.Platforms.Android.Services
 
             _mainHandler = null;
             _positionRunnable = null;
-            _controllerVisibilityListener = null;
             _currentInstance = null;
             base.OnDestroy();
         }
@@ -145,8 +123,7 @@ namespace YTMusic.Platforms.Android.Services
         public override void OnConfigurationChanged(Configuration newConfig)
         {
             base.OnConfigurationChanged(newConfig);
-            TryHideDefaultSettingsButton();
-            UpdateSettingsButtonVisibility(_playerView?.IsControllerFullyVisible == true);
+            BindCustomSettingsButton();
         }
 
         public void OnIsPlayingChanged(bool isPlaying)
@@ -436,77 +413,32 @@ namespace YTMusic.Platforms.Android.Services
             _player?.SetPlaybackSpeed(speed);
         }
 
-        private void UpdateSettingsButtonVisibility(bool isVisible)
-        {
-            if (_settingsButton == null)
-            {
-                return;
-            }
-
-            _settingsButton.Visibility = isVisible
-                ? global::Android.Views.ViewStates.Visible
-                : global::Android.Views.ViewStates.Gone;
-        }
-
-        private void TryHideDefaultSettingsButton()
+        private void BindCustomSettingsButton()
         {
             if (_playerView == null)
             {
                 return;
             }
 
-            HideViewByResourceEntryName(_playerView, "exo_settings");
-        }
-
-        private void HideViewByResourceEntryName(global::Android.Views.View view, string resourceEntryName)
-        {
-            if (view.Id != global::Android.Views.View.NoId)
-            {
-                try
-                {
-                    if (Resources?.GetResourceEntryName(view.Id) == resourceEntryName)
-                    {
-                        view.Visibility = global::Android.Views.ViewStates.Gone;
-                    }
-                }
-                catch
-                {
-                    // Ignore views whose ids are not directly resolvable in the app resources.
-                }
-            }
-
-            if (view is not global::Android.Views.ViewGroup viewGroup)
+            var settingsButtonId = Resources?.GetIdentifier(CustomSettingsButtonIdName, "id", PackageName) ?? 0;
+            if (settingsButtonId == 0)
             {
                 return;
             }
 
-            for (int i = 0; i < viewGroup.ChildCount; i++)
+            var settingsButton = _playerView.FindViewById<global::Android.Widget.ImageButton>(settingsButtonId);
+            if (!ReferenceEquals(_settingsButton, settingsButton))
             {
-                var child = viewGroup.GetChildAt(i);
-                if (child != null)
+                if (_settingsButton != null)
                 {
-                    HideViewByResourceEntryName(child, resourceEntryName);
+                    _settingsButton.Click -= OnSettingsButtonClick;
                 }
-            }
-        }
 
-        private int DpToPx(int dp)
-        {
-            return (int)(dp * Resources!.DisplayMetrics!.Density);
-        }
-
-        private sealed class ControllerVisibilityListener : Java.Lang.Object, PlayerView.IControllerVisibilityListener
-        {
-            private readonly VideoPlayerActivity _activity;
-
-            public ControllerVisibilityListener(VideoPlayerActivity activity)
-            {
-                _activity = activity;
-            }
-
-            public void OnVisibilityChanged(int visibility)
-            {
-                _activity.UpdateSettingsButtonVisibility(visibility == (int)global::Android.Views.ViewStates.Visible);
+                _settingsButton = settingsButton;
+                if (_settingsButton != null)
+                {
+                    _settingsButton.Click += OnSettingsButtonClick;
+                }
             }
         }
 
