@@ -50,5 +50,17 @@ namespace YTMusic.Services
             Preferences.Default.Set(PreferHighQualityAudioKey, value);
             OnChange?.Invoke();
         }
+
+        public void ResetToDefaults()
+        {
+            ShowFavoriteCardImages = true;
+            ThemeIndex = 0;
+            PreferHighQualityAudio = true;
+
+            Preferences.Default.Remove(ShowFavoriteCardImagesKey);
+            Preferences.Default.Remove(ThemeIndexKey);
+            Preferences.Default.Remove(PreferHighQualityAudioKey);
+            OnChange?.Invoke();
+        }
     }
 }

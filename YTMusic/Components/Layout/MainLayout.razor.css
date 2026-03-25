@@ -187,6 +187,16 @@
     background: var(--ytm-nav-active-bg);
 }
 
+.ytm-theme-item-danger {
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #FCA5A5;
+}
+
+.ytm-theme-item-danger:hover {
+    border-color: rgba(239, 68, 68, 0.75);
+    background: rgba(239, 68, 68, 0.10);
+}
+
 .ytm-theme-dot {
     width: 12px;
     height: 12px;

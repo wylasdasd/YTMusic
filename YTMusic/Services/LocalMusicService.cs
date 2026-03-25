@@ -153,6 +153,12 @@ namespace YTMusic.Services
             await connection.ExecuteAsync(sql, track);
         }
 
+        public async Task ResetAllAsync()
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.ExecuteAsync("DELETE FROM DownloadedTracks;");
+        }
+
         public async Task RemoveDownloadedTrackAsync(string videoId, string filePath)
         {
             using var connection = new SqliteConnection(_connectionString);

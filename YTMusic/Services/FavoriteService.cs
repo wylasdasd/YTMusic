@@ -35,6 +35,7 @@ namespace YTMusic.Services
         Task<List<FavoriteFolder>> GetFoldersAsync();
         Task<FavoriteFolder> CreateFolderAsync(string name);
         Task DeleteFolderAsync(int folderId);
+        Task ResetAllAsync();
         
         Task<List<FavoriteTrack>> GetTracksAsync(int? folderId = null, bool? isDownloaded = null);
         Task<HashSet<string>> GetFavoritedVideoIdsAsync(IEnumerable<string> videoIds);
@@ -141,6 +142,15 @@ namespace YTMusic.Services
             using var connection = new SqliteConnection(_connectionString);
             await connection.ExecuteAsync("DELETE FROM FavoriteTracks WHERE FolderId = @FolderId;", new { FolderId = folderId });
             await connection.ExecuteAsync("DELETE FROM FavoriteFolders WHERE Id = @FolderId;", new { FolderId = folderId });
+        }
+
+        public async Task ResetAllAsync()
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.ExecuteAsync("DELETE FROM FavoriteTracks;");
+            await connection.ExecuteAsync("DELETE FROM FavoriteFolders WHERE Id != 1;");
+            await connection.ExecuteAsync("INSERT OR IGNORE INTO FavoriteFolders (Id, Name, IsDefault) VALUES (1, '默认收藏夹', 1);");
+            await connection.ExecuteAsync("UPDATE FavoriteFolders SET Name = '默认收藏夹', IsDefault = 1 WHERE Id = 1;");
         }
 
         public async Task<List<FavoriteTrack>> GetTracksAsync(int? folderId = null, bool? isDownloaded = null)

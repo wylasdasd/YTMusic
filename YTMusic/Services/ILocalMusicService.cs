@@ -9,6 +9,7 @@ namespace YTMusic.Services
         Task<IReadOnlyList<DownloadedTrack>> GetDownloadedTracksAsync();
         Task<DownloadedTrack?> GetDownloadedTrackByVideoIdAsync(string videoId);
         Task<DownloadedTrack?> GetDownloadedTrackByFilePathAsync(string filePath);
+        Task ResetAllAsync();
         Task AddDownloadedTrackAsync(DownloadedTrack track);
         Task RemoveDownloadedTrackAsync(string videoId, string filePath);
         

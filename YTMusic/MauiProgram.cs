@@ -60,6 +60,7 @@ namespace YTMusic
             builder.Services.AddSingleton<ILocalMusicService, LocalMusicService>();
             builder.Services.AddSingleton<GlobalStateService>();
             builder.Services.AddSingleton<UiPreferencesService>();
+            builder.Services.AddSingleton<AppResetService>();
             builder.Services.AddSingleton<IFavoriteService, FavoriteService>();
             builder.Services.AddSingleton<IDownloadManagerService, DownloadManagerService>();
             builder.Services.AddSingleton<MusicPlayerService>();

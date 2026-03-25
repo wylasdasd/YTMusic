@@ -382,6 +382,26 @@ namespace YTMusic.Services
             NotifyStateChanged();
         }
 
+        public async Task ResetStateAsync()
+        {
+            await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: false);
+            OnRequestPause?.Invoke();
+
+            ClearPlaylist();
+            CurrentVideo = null;
+            CurrentStreamUrl = null;
+            IsPlaying = false;
+            IsLoading = false;
+            IsUsingNativePlayback = false;
+            IsUsingNativeVideoPlayback = false;
+            IsCurrentStreamVideo = false;
+            IsCurrentStreamWebM = false;
+            CurrentTime = 0;
+            Duration = 100;
+            NotifyStateChanged();
+            OnTimeChanged?.Invoke();
+        }
+
         public async Task PlayAsync(VideoSearchResult video)
         {
             ClearPlaylist();

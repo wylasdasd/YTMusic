@@ -7,6 +7,7 @@
 @inject WindowChromeService WindowChrome
 @inject UiPreferencesService UiPreferences
 @inject MusicPlayerService PlayerService
+@inject AppResetService AppResetService
 @implements IDisposable
 
 <MudThemeProvider Theme="@CurrentMudTheme" IsDarkMode="@CurrentIsDark" />
@@ -127,6 +128,10 @@
             <button class="ytm-theme-item" @onclick="CopyDownloadPathAsync">
                 <span class="ytm-theme-dot" style="background: var(--ytm-accent);"></span>
                 <span>Copy Download Path</span>
+            </button>
+            <button class="ytm-theme-item ytm-theme-item-danger" @onclick="ResetToDefaultsAsync">
+                <span class="ytm-theme-dot" style="background: #EF4444;"></span>
+                <span>还原默认</span>
             </button>
         </div>
     </aside>
@@ -392,6 +397,40 @@
     {
         PlayerService.SetUseWebM(value);
         return Task.CompletedTask;
+    }
+
+    private async Task ResetToDefaultsAsync()
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>(
+            "confirm",
+            "这会清空所有表记录，并删除下载目录里的所有音频和视频，同时恢复默认设置。确定继续吗？");
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        try
+        {
+            GlobalState.ShowLoading();
+            await AppResetService.ResetToDefaultsAsync();
+            if (_themes.Length > 0)
+            {
+                _themeIndex = 0;
+            }
+            _isThemePanelOpen = false;
+            UpdateSelectedNavValue();
+            Snackbar.Add("已还原默认设置并清空本地数据。", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"还原默认失败: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            GlobalState.HideLoading();
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     public void Dispose()
