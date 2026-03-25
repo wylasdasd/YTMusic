@@ -94,6 +94,12 @@
 
     protected override void OnInitialized()
     {
+        if (OperatingSystem.IsAndroid() && PlayerService.UseNativeVideoPlayback)
+        {
+            NavigationManager.NavigateTo("/player/audio", replace: true);
+            return;
+        }
+
         PlayerService.OnChange += OnStateChanged;
         _ = CheckFavoriteStatusAsync();
         _ = CheckVideoAvailabilityAsync();
@@ -101,6 +107,11 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (OperatingSystem.IsAndroid() && PlayerService.UseNativeVideoPlayback)
+        {
+            return;
+        }
+
         if (PlayerService.UseNativeVideoPlayback)
         {
             return;
@@ -115,6 +126,12 @@
 
     private void OnStateChanged()
     {
+        if (OperatingSystem.IsAndroid() && PlayerService.UseNativeVideoPlayback)
+        {
+            NavigationManager.NavigateTo("/player/audio", replace: true);
+            return;
+        }
+
         if (!PlayerService.IsCurrentStreamVideo)
         {
             if (!PlayerService.UseNativeVideoPlayback)
@@ -133,6 +150,12 @@
 
     protected override void OnAfterRender(bool firstRender)
     {
+        if (OperatingSystem.IsAndroid() && PlayerService.UseNativeVideoPlayback)
+        {
+            NavigationManager.NavigateTo("/player/audio", replace: true);
+            return;
+        }
+
         if (!PlayerService.IsCurrentStreamVideo)
         {
             NavigationManager.NavigateTo("/player/audio", replace: true);

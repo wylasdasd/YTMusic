@@ -140,7 +140,10 @@
     {
         if (PlayerService.IsCurrentStreamVideo)
         {
-            NavigationManager.NavigateTo("/player/video", replace: true);
+            if (!(OperatingSystem.IsAndroid() && PlayerService.UseNativeVideoPlayback))
+            {
+                NavigationManager.NavigateTo("/player/video", replace: true);
+            }
             return;
         }
 
@@ -264,7 +267,7 @@
         }
 
         var switched = await PlayerService.PlayCurrentAsVideoAsync();
-        if (switched)
+        if (switched && !(OperatingSystem.IsAndroid() && PlayerService.UseNativeVideoPlayback))
         {
             NavigationManager.NavigateTo("/player/video");
         }

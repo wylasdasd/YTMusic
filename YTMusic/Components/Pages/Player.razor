@@ -10,6 +10,10 @@
             return;
         }
 
-        NavigationManager.NavigateTo(PlayerService.IsCurrentStreamVideo ? "/player/video" : "/player/audio", replace: true);
+        var target = PlayerService.IsCurrentStreamVideo && !(OperatingSystem.IsAndroid() && PlayerService.UseNativeVideoPlayback)
+            ? "/player/video"
+            : "/player/audio";
+
+        NavigationManager.NavigateTo(target, replace: true);
     }
 }
