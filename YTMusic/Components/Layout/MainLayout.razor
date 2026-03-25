@@ -154,9 +154,9 @@
             <MudIcon Icon="@Icons.Material.Filled.LibraryMusic" Style="@GetBottomItemContentStyle("Downloads")" />
             <MudText Typo="Typo.caption" Style="@GetBottomItemContentStyle("Downloads")">Library</MudText>
         </div>
-        <div @onclick='() => NavigateToTab("transfers")' class="@GetBottomItemClass("Transfers")">
-            <MudIcon Icon="@Icons.Material.Filled.CloudDownload" Style="@GetBottomItemContentStyle("Transfers")" />
-            <MudText Typo="Typo.caption" Style="@GetBottomItemContentStyle("Transfers")">Transfers</MudText>
+        <div @onclick='() => NavigateToTab("other")' class="@GetBottomItemClass("Other")">
+            <MudIcon Icon="@Icons.Material.Filled.MoreHoriz" Style="@GetBottomItemContentStyle("Other")" />
+            <MudText Typo="Typo.caption" Style="@GetBottomItemContentStyle("Other")">Other</MudText>
         </div>
     </MudPaper>
 </div>
@@ -215,7 +215,7 @@
         if (uri.Contains("favorites")) SelectedNavValue = "Favorites";
         else if (uri.Contains("player")) SelectedNavValue = "Player";
         else if (uri.Contains("downloads")) SelectedNavValue = "Downloads";
-        else if (uri.Contains("transfers")) SelectedNavValue = "Transfers";
+        else if (uri.Contains("other") || uri.Contains("transfers")) SelectedNavValue = "Other";
         else SelectedNavValue = "Search";
     }
 

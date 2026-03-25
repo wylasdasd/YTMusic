@@ -3,14 +3,41 @@
 @using YTMusic.Services
 @implements IDisposable
 
-@if (!ViewModel.ActiveDownloads.Any())
+<div class="d-flex align-center gap-2 mt-4 mb-4" style="overflow-x: auto;">
+    <MudChip T="string"
+             Color="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.All ? Color.Primary : Color.Default)"
+             Variant="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.All ? Variant.Filled : Variant.Outlined)"
+             OnClick="@(() => ViewModel.SetFilter(TransfersVM.TransferFilter.All))">
+        All
+    </MudChip>
+    <MudChip T="string"
+             Color="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Active ? Color.Primary : Color.Default)"
+             Variant="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Active ? Variant.Filled : Variant.Outlined)"
+             OnClick="@(() => ViewModel.SetFilter(TransfersVM.TransferFilter.Active))">
+        Active
+    </MudChip>
+    <MudChip T="string"
+             Color="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Completed ? Color.Success : Color.Default)"
+             Variant="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Completed ? Variant.Filled : Variant.Outlined)"
+             OnClick="@(() => ViewModel.SetFilter(TransfersVM.TransferFilter.Completed))">
+        Completed
+    </MudChip>
+    <MudChip T="string"
+             Color="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Failed ? Color.Error : Color.Default)"
+             Variant="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Failed ? Variant.Filled : Variant.Outlined)"
+             OnClick="@(() => ViewModel.SetFilter(TransfersVM.TransferFilter.Failed))">
+        Failed
+    </MudChip>
+</div>
+
+@if (!ViewModel.FilteredDownloads.Any())
 {
-    <MudAlert Severity="Severity.Info" Class="mt-4">No active downloads.</MudAlert>
+    <MudAlert Severity="Severity.Info" Class="mt-4">@GetEmptyMessage()</MudAlert>
 }
 else
 {
     <div class="d-flex flex-column gap-4 mt-4">
-        @foreach (var task in ViewModel.ActiveDownloads.Reverse())
+        @foreach (var task in ViewModel.FilteredDownloads.Reverse())
         {
             <MudPaper Elevation="2" Class="pa-4">
                 <div class="d-flex justify-space-between align-center mb-2">
@@ -56,5 +83,13 @@ else
         DownloadStatus.Completed => Color.Success,
         DownloadStatus.Failed => Color.Error,
         _ => Color.Default
+    };
+
+    private string GetEmptyMessage() => ViewModel.CurrentFilter switch
+    {
+        TransfersVM.TransferFilter.Active => "No active downloads.",
+        TransfersVM.TransferFilter.Completed => "No completed downloads yet.",
+        TransfersVM.TransferFilter.Failed => "No failed downloads.",
+        _ => "No transfers yet."
     };
 }

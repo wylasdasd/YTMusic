@@ -1,0 +1,20 @@
+@page "/other"
+@inject NavigationManager NavigationManager
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-6">
+    <MudText Typo="Typo.h6" Class="mb-4">其他菜单</MudText>
+
+    <MudPaper Elevation="2"
+              Class="pa-4 d-flex align-center justify-space-between"
+              Style="cursor: pointer;"
+              @onclick='() => NavigationManager.NavigateTo("transfers")'>
+        <div class="d-flex align-center gap-3">
+            <MudIcon Icon="@Icons.Material.Filled.CloudDownload" Color="Color.Primary" />
+            <div class="d-flex flex-column">
+                <MudText Typo="Typo.subtitle1">下载页面</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">查看全部、进行中、已完成、失败任务</MudText>
+            </div>
+        </div>
+        <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Color="Color.Default" />
+    </MudPaper>
+</MudContainer>
