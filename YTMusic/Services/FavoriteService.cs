@@ -26,6 +26,8 @@ namespace YTMusic.Services
         public DateTime AddedDate { get; set; }
         public string? LocalFilePath { get; set; }
         public bool IsDownloaded => !string.IsNullOrEmpty(LocalFilePath) && File.Exists(LocalFilePath);
+        public string? LocalVideoFilePath { get; set; }
+        public bool HasDownloadedVideo => !string.IsNullOrEmpty(LocalVideoFilePath) && File.Exists(LocalVideoFilePath);
     }
 
     public interface IFavoriteService

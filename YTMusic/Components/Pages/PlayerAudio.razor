@@ -11,13 +11,6 @@
 @implements IDisposable
 
 <MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
-    @if (PlayerService.CurrentVideo?.VideoId != "local")
-    {
-        <div class="d-flex justify-end mb-2">
-            <MudSwitch @bind-Value="PlayerService.UseWebM" Label="High Quality (WebM/Opus)" Color="Color.Primary" />
-        </div>
-    }
-
     @if (PlayerService.CurrentVideo != null)
     {
         <MudCard Elevation="4" Class="pa-6">
@@ -52,6 +45,13 @@
             <MudCardActions Class="mt-2" Style="width: 100%; display: flex; flex-direction: column; gap: 4px;">
                 <div class="d-flex align-center justify-space-between" style="width: 100%;">
                     <div class="d-flex align-center">
+                        @if (CanPlayVideo)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.OndemandVideo"
+                                           Color="Color.Secondary"
+                                           OnClick="PlayVideoAsync"
+                                           aria-label="Play video" />
+                        }
                         <MudIconButton
                         Icon="@(IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
                         Color="@(IsFavorite ? Color.Error : Color.Default)" OnClick="OpenFavoriteDialogAsync"
@@ -102,14 +102,17 @@
 @code {
     private bool IsFavorite = false;
     private string? _currentCheckedVideoId;
+    private string? _currentCheckedVideoSourceId;
     private DateTime _lastSliderInteraction = DateTime.MinValue;
     private double _lastReportedTime = 0;
+    private bool CanPlayVideo;
 
     protected override void OnInitialized()
     {
         PlayerService.OnChange += OnStateChanged;
         PlayerService.OnTimeChanged += OnTimeChanged;
         _ = CheckFavoriteStatusAsync();
+        _ = CheckVideoAvailabilityAsync();
     }
 
     private void OnStateChanged()
@@ -121,6 +124,7 @@
         }
 
         _ = CheckFavoriteStatusAsync();
+        _ = CheckVideoAvailabilityAsync();
         InvokeAsync(StateHasChanged);
     }
 
@@ -168,6 +172,31 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    private async Task CheckVideoAvailabilityAsync()
+    {
+        var currentVideo = PlayerService.CurrentVideo;
+        if (currentVideo == null)
+        {
+            CanPlayVideo = false;
+            _currentCheckedVideoSourceId = null;
+            return;
+        }
+
+        var sourceId = !string.IsNullOrWhiteSpace(currentVideo.LocalFilePath)
+            ? currentVideo.LocalFilePath
+            : currentVideo.VideoId;
+
+        if (_currentCheckedVideoSourceId == sourceId)
+        {
+            return;
+        }
+
+        _currentCheckedVideoSourceId = sourceId;
+        CanPlayVideo = await PlayerService.CanPlayCurrentAsVideoAsync();
+
+        await InvokeAsync(StateHasChanged);
+    }
+
     private async Task OpenFavoriteDialogAsync()
     {
         var currentVideo = PlayerService.CurrentVideo;
@@ -204,6 +233,20 @@
             await PlayerService.PauseAsync();
         else
             await PlayerService.ResumeAsync();
+    }
+
+    private async Task PlayVideoAsync()
+    {
+        if (!CanPlayVideo)
+        {
+            return;
+        }
+
+        var switched = await PlayerService.PlayCurrentAsVideoAsync();
+        if (switched)
+        {
+            NavigationManager.NavigateTo("/player/video");
+        }
     }
 
     private async Task PlayNextTrack()

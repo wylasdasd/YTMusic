@@ -135,7 +135,6 @@ namespace YTMusic.Components.Pages
             catch (Exception ex)
             {
                 _snackbar.Add($"Search failed: {ex.Message}", Severity.Error);
-                HasMore = false;
             }
             finally
             {

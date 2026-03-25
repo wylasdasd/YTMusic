@@ -5,6 +5,8 @@
 @inject IJSRuntime JSRuntime
 @inject ISnackbar Snackbar
 @inject WindowChromeService WindowChrome
+@inject UiPreferencesService UiPreferences
+@inject MusicPlayerService PlayerService
 @implements IDisposable
 
 <MudThemeProvider Theme="@CurrentMudTheme" IsDarkMode="@CurrentIsDark" />
@@ -96,6 +98,32 @@
                     <span>@item.Name</span>
                 </button>
             }
+            <div class="ytm-setting-item">
+                <div class="ytm-setting-copy">
+                    <span class="ytm-theme-dot" style="background: var(--ytm-accent);"></span>
+                    <div class="ytm-setting-text">
+                        <span>Favorites Image</span>
+                        <small>Show thumbnails on favorite cards</small>
+                    </div>
+                </div>
+                <MudSwitch T="bool"
+                           Color="Color.Primary"
+                           Value="UiPreferences.ShowFavoriteCardImages"
+                           ValueChanged="OnShowFavoriteCardImagesChanged" />
+            </div>
+            <div class="ytm-setting-item">
+                <div class="ytm-setting-copy">
+                    <span class="ytm-theme-dot" style="background: var(--ytm-accent);"></span>
+                    <div class="ytm-setting-text">
+                        <span>High Quality Audio</span>
+                        <small>Use WebM/Opus when available</small>
+                    </div>
+                </div>
+                <MudSwitch T="bool"
+                           Color="Color.Primary"
+                           Value="UiPreferences.PreferHighQualityAudio"
+                           ValueChanged="OnPreferHighQualityAudioChanged" />
+            </div>
             <button class="ytm-theme-item" @onclick="CopyDownloadPathAsync">
                 <span class="ytm-theme-dot" style="background: var(--ytm-accent);"></span>
                 <span>Copy Download Path</span>
@@ -145,6 +173,11 @@
     protected override void OnInitialized()
     {
         GlobalState.OnChange += StateHasChanged;
+        UiPreferences.OnChange += StateHasChanged;
+        if (_themes.Length > 0)
+        {
+            _themeIndex = Math.Clamp(UiPreferences.ThemeIndex, 0, _themes.Length - 1);
+        }
         UpdateSelectedNavValue();
         _locationChangedHandler = OnLocationChanged;
         NavigationManager.LocationChanged += _locationChangedHandler;
@@ -314,6 +347,7 @@
         }
 
         _themeIndex = Math.Clamp(index, 0, _themes.Length - 1);
+        UiPreferences.SetThemeIndex(_themeIndex);
         _isThemePanelOpen = false;
     }
 
@@ -348,9 +382,22 @@
         }
     }
 
+    private Task OnShowFavoriteCardImagesChanged(bool value)
+    {
+        UiPreferences.SetShowFavoriteCardImages(value);
+        return Task.CompletedTask;
+    }
+
+    private Task OnPreferHighQualityAudioChanged(bool value)
+    {
+        PlayerService.SetUseWebM(value);
+        return Task.CompletedTask;
+    }
+
     public void Dispose()
     {
         GlobalState.OnChange -= StateHasChanged;
+        UiPreferences.OnChange -= StateHasChanged;
         if (_locationChangedHandler != null)
         {
             NavigationManager.LocationChanged -= _locationChangedHandler;

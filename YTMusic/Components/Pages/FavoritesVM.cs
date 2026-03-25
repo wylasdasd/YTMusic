@@ -10,6 +10,7 @@ namespace YTMusic.Components.Pages
     public class FavoritesVM
     {
         private readonly IFavoriteService _favoriteService;
+        private readonly ILocalMusicService _localMusicService;
         private readonly ISnackbar _snackbar;
 
         public Action? StateHasChanged { get; set; }
@@ -24,9 +25,10 @@ namespace YTMusic.Components.Pages
         
         public bool IsLoading { get; private set; } = false;
 
-        public FavoritesVM(IFavoriteService favoriteService, ISnackbar snackbar)
+        public FavoritesVM(IFavoriteService favoriteService, ILocalMusicService localMusicService, ISnackbar snackbar)
         {
             _favoriteService = favoriteService;
+            _localMusicService = localMusicService;
             _snackbar = snackbar;
         }
 
@@ -61,6 +63,15 @@ namespace YTMusic.Components.Pages
                 };
 
                 Tracks = await _favoriteService.GetTracksAsync(SelectedFolderId, isDownloaded);
+
+                foreach (var track in Tracks)
+                {
+                    var downloadedTrack = await _localMusicService.GetDownloadedTrackByVideoIdAsync(track.VideoId);
+                    if (downloadedTrack?.IsVideo == true)
+                    {
+                        track.LocalVideoFilePath = downloadedTrack.LocalFilePath;
+                    }
+                }
             }
             catch (Exception ex)
             {

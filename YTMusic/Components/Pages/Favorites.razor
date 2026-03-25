@@ -48,17 +48,31 @@ else
             <MudItem xs="12" sm="6" md="4" lg="3">
                 <MudCard Elevation="2" Style="height: 100%; display: flex; flex-direction: column; cursor: pointer;"
                          @onclick="@(() => PlayTrack(track))">
-                    <div style="position: relative;">
-                        <MudCardMedia Image="@track.ThumbnailUrl" Height="160" />
-                        @if (track.IsDownloaded)
-                        {
-                            <div
-                                style="position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.6); border-radius: 50%; padding: 4px;">
-                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
-                            </div>
-                        }
-                    </div>
+                    @if (UiPreferences.ShowFavoriteCardImages)
+                    {
+                        <div style="position: relative;">
+                            <MudCardMedia Image="@track.ThumbnailUrl" Height="160" />
+                            @if (track.IsDownloaded)
+                            {
+                                <div
+                                    style="position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.6); border-radius: 50%; padding: 4px;">
+                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                                </div>
+                            }
+                        </div>
+                    }
                     <MudCardContent Style="flex-grow: 1;">
+                        @if (!UiPreferences.ShowFavoriteCardImages && track.IsDownloaded)
+                        {
+                            <MudChip T="string"
+                                     Size="Size.Small"
+                                     Color="Color.Success"
+                                     Variant="Variant.Outlined"
+                                     Icon="@Icons.Material.Filled.CheckCircle"
+                                     Class="mb-2">
+                                Downloaded
+                            </MudChip>
+                        }
                         <MudText Typo="Typo.subtitle1"
                                  Style="display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;">
                             @track.Title</MudText>
@@ -66,10 +80,21 @@ else
                         </MudCardContent>
                         <MudCardActions>
                             <MudIconButton Icon="@Icons.Material.Filled.PlayCircle" Color="Color.Primary" aria-label="Play" />
+                            @if (track.HasDownloadedVideo)
+                            {
+                                <div @onclick:stopPropagation="true">
+                                    <MudIconButton Icon="@Icons.Material.Filled.OndemandVideo"
+                                                   Color="Color.Secondary"
+                                                   OnClick="@(async (e) => await PlayLocalVideoAsync(track))"
+                                                   aria-label="Play local video" />
+                                </div>
+                            }
                             <MudSpacer />
-                            <MudIconButton Icon="@Icons.Material.Filled.Favorite" Color="Color.Primary"
-                                           OnClick="@(async (e) => { await ViewModel.RemoveFavoriteAsync(track); })"
-                                           aria-label="Remove from favorites" />
+                            <div @onclick:stopPropagation="true">
+                                <MudIconButton Icon="@Icons.Material.Filled.Favorite" Color="Color.Primary"
+                                               OnClick="@(async (e) => { await ViewModel.RemoveFavoriteAsync(track); })"
+                                               aria-label="Remove from favorites" />
+                            </div>
                         </MudCardActions>
                     </MudCard>
                 </MudItem>
@@ -82,10 +107,12 @@ else
     [Inject] private NavigationManager NavigationManager { get; set; } = default!;
     [Inject] private MusicPlayerService PlayerService { get; set; } = default!;
     [Inject] private YTMusic.Services.GlobalStateService GlobalState { get; set; } = default!;
+    [Inject] private UiPreferencesService UiPreferences { get; set; } = default!;
 
     protected override async Task OnInitializedAsync()
     {
         ViewModel.StateHasChanged = StateHasChanged;
+        UiPreferences.OnChange += OnUiPreferencesChanged;
         await ViewModel.InitializeAsync();
     }
 
@@ -104,7 +131,8 @@ else
                     Title = t.Title,
                     Author = t.Author,
                     ThumbnailUrl = t.ThumbnailUrl,
-                    LocalFilePath = t.IsDownloaded ? t.LocalFilePath : null
+                    LocalFilePath = t.IsDownloaded ? t.LocalFilePath : null,
+                    IsVideo = false
                 }).ToList();
 
                 int startIndex = ViewModel.Tracks.FindIndex(t => t.VideoId == track.VideoId);
@@ -148,7 +176,8 @@ else
                 Title = t.Title,
                 Author = t.Author,
                 ThumbnailUrl = t.ThumbnailUrl,
-                LocalFilePath = t.IsDownloaded ? t.LocalFilePath : null
+                LocalFilePath = t.IsDownloaded ? t.LocalFilePath : null,
+                IsVideo = false
             }).ToList();
 
             string folderName = ViewModel.Folders.FirstOrDefault(f => f.Id == ViewModel.SelectedFolderId)?.Name ?? "收藏夹";
@@ -163,8 +192,42 @@ else
         }
     }
 
+    private async Task PlayLocalVideoAsync(FavoriteTrack track)
+    {
+        if (!track.HasDownloadedVideo || string.IsNullOrWhiteSpace(track.LocalVideoFilePath))
+        {
+            return;
+        }
+
+        try
+        {
+            GlobalState.ShowLoading();
+            StateHasChanged();
+
+            await PlayerService.PlayLocalFileAsync(
+                track.LocalVideoFilePath,
+                track.Title,
+                true,
+                track.Author,
+                track.ThumbnailUrl);
+
+            NavigationManager.NavigateTo("/player");
+        }
+        finally
+        {
+            GlobalState.HideLoading();
+            StateHasChanged();
+        }
+    }
+
     public void Dispose()
     {
         ViewModel.StateHasChanged = null;
+        UiPreferences.OnChange -= OnUiPreferencesChanged;
+    }
+
+    private void OnUiPreferencesChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
     }
 }

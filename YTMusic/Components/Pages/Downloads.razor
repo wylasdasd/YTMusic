@@ -14,7 +14,7 @@ else
     <div class="d-flex flex-column gap-4 mt-4">
         @foreach (var file in ViewModel.Files)
         {
-            <MudPaper Elevation="2" Class="pa-4 d-flex align-center">
+            <MudPaper Elevation="2" Class="pa-4 d-flex align-center" Style="cursor: pointer;" @onclick="@(() => PlayLocalAudioFile(file))">
                 @if (!string.IsNullOrEmpty(file.ThumbnailUrl))
                 {
                     <MudImage Src="@file.ThumbnailUrl" Width="60" Height="60" ObjectFit="ObjectFit.Cover" Class="rounded mr-4" />
@@ -31,15 +31,35 @@ else
                     <MudText Typo="Typo.body2" Color="Color.Secondary">@file.Author</MudText>
                 </div>
 
-                <MudIconButton
-                Icon="@(ViewModel.FavoriteFilePaths.Contains(file.LocalFilePath) ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
-                Color="@(ViewModel.FavoriteFilePaths.Contains(file.LocalFilePath) ? Color.Error : Color.Default)"
-                OnClick="@(async () => await ViewModel.OpenFavoriteDialogAsync(file))" aria-label="Toggle Favorite" />
+                @if (file.IsVideo)
+                {
+                    <div @onclick:stopPropagation="true">
+                        <MudIconButton Icon="@Icons.Material.Filled.OndemandVideo"
+                                       Color="Color.Secondary"
+                                       OnClick="@(() => PlayLocalVideoFile(file))"
+                                       aria-label="Play video" />
+                    </div>
+                }
+                <div @onclick:stopPropagation="true">
+                    <MudIconButton
+                        Icon="@(ViewModel.FavoriteFilePaths.Contains(file.LocalFilePath) ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                        Color="@(ViewModel.FavoriteFilePaths.Contains(file.LocalFilePath) ? Color.Error : Color.Default)"
+                        OnClick="@(async () => await ViewModel.OpenFavoriteDialogAsync(file))"
+                        aria-label="Toggle Favorite" />
+                </div>
 
-                <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Color="Color.Primary"
-                               OnClick="@(() => PlayLocalFile(file))" aria-label="Play" />
-                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
-                               OnClick="@(() => ViewModel.DeleteFileAsync(file))" aria-label="Delete" />
+                <div @onclick:stopPropagation="true">
+                    <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
+                                   Color="Color.Primary"
+                                   OnClick="@(() => PlayLocalAudioFile(file))"
+                                   aria-label="Play audio" />
+                </div>
+                <div @onclick:stopPropagation="true">
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                   Color="Color.Error"
+                                   OnClick="@(() => ViewModel.DeleteFileAsync(file))"
+                                   aria-label="Delete" />
+                </div>
             </MudPaper>
         }
     </div>
@@ -56,9 +76,15 @@ else
         await ViewModel.LoadFilesAsync();
     }
 
-    private async Task PlayLocalFile(YTMusic.Services.DownloadedTrack file)
+    private async Task PlayLocalAudioFile(YTMusic.Services.DownloadedTrack file)
     {
-        await PlayerService.PlayLocalFileAsync(file.LocalFilePath, file.Title, file.IsVideo, file.Author, file.ThumbnailUrl);
+        await PlayerService.PlayLocalFileAsync(file.LocalFilePath, file.Title, false, file.Author, file.ThumbnailUrl);
+        NavigationManager.NavigateTo("/player");
+    }
+
+    private async Task PlayLocalVideoFile(YTMusic.Services.DownloadedTrack file)
+    {
+        await PlayerService.PlayLocalFileAsync(file.LocalFilePath, file.Title, true, file.Author, file.ThumbnailUrl);
         NavigationManager.NavigateTo("/player");
     }
 }

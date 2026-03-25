@@ -307,6 +307,7 @@ namespace YTMusic.Services
         private readonly INativeAudioPlaybackService _nativeAudio;
         private readonly INativeVideoPlaybackService _nativeVideo;
         private readonly ILocalMusicService _localMusicService;
+        private readonly UiPreferencesService _uiPreferences;
         private LocalAudioProxy? _proxy;
         private LocalFileProxy? _fileProxy;
         private readonly SemaphoreSlim _fileProxyInitLock = new SemaphoreSlim(1, 1);
@@ -325,7 +326,7 @@ namespace YTMusic.Services
         public bool IsUsingNativePlayback { get; private set; }
         public bool UseNativeVideoPlayback => _nativeVideo.IsSupported && OperatingSystem.IsAndroid();
         public bool IsUsingNativeVideoPlayback { get; private set; }
-        public bool UseWebM { get; set; } = true;
+        public bool UseWebM { get; private set; }
         public bool IsCurrentStreamWebM { get; private set; }
         public bool IsCurrentStreamVideo { get; private set; }
         public double CurrentTime { get; private set; } = 0;
@@ -339,12 +340,14 @@ namespace YTMusic.Services
         public PlaybackMode CurrentMode { get; private set; } = PlaybackMode.Sequential;
         private List<int> _shuffleIndices = new List<int>();
 
-        public MusicPlayerService(INativeAudioPlaybackService nativeAudio, INativeVideoPlaybackService nativeVideo, ILocalMusicService localMusicService)
+        public MusicPlayerService(INativeAudioPlaybackService nativeAudio, INativeVideoPlaybackService nativeVideo, ILocalMusicService localMusicService, UiPreferencesService uiPreferences)
         {
             _nativeAudio = nativeAudio;
             _nativeVideo = nativeVideo;
             _localMusicService = localMusicService;
+            _uiPreferences = uiPreferences;
             _youtubeClient = new YoutubeClient();
+            UseWebM = _uiPreferences.PreferHighQualityAudio;
 
             if (!_nativeAudio.IsSupported && !OperatingSystem.IsAndroid())
             {
@@ -365,6 +368,18 @@ namespace YTMusic.Services
                 _nativeVideo.PlayingStateChanged += OnNativeVideoPlayingStateChanged;
                 _nativeVideo.PlaybackEnded += OnNativeVideoPlaybackEnded;
             }
+        }
+
+        public void SetUseWebM(bool value)
+        {
+            if (UseWebM == value)
+            {
+                return;
+            }
+
+            UseWebM = value;
+            _uiPreferences.SetPreferHighQualityAudio(value);
+            NotifyStateChanged();
         }
 
         public async Task PlayAsync(VideoSearchResult video)
@@ -474,6 +489,81 @@ namespace YTMusic.Services
                 IsLoading = false;
                 NotifyStateChanged();
             }
+        }
+
+        public async Task<bool> CanPlayCurrentAsVideoAsync()
+        {
+            var current = CurrentVideo;
+            if (current == null)
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(current.LocalFilePath))
+            {
+                var localTrack = await _localMusicService.GetDownloadedTrackByFilePathAsync(current.LocalFilePath);
+                if (localTrack?.IsVideo == true)
+                {
+                    return true;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(current.VideoId) || current.VideoId == "local")
+            {
+                return false;
+            }
+
+            var downloaded = await _localMusicService.GetDownloadedTrackByVideoIdAsync(current.VideoId);
+            if (downloaded?.IsVideo == true)
+            {
+                return true;
+            }
+
+            var muxedStreamInfo = await GetPreferredMuxedVideoStreamInfoAsync(current.VideoId);
+            return muxedStreamInfo != null;
+        }
+
+        public async Task<bool> PlayCurrentAsVideoAsync()
+        {
+            var current = CurrentVideo;
+            if (current == null)
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(current.LocalFilePath))
+            {
+                var localTrack = await _localMusicService.GetDownloadedTrackByFilePathAsync(current.LocalFilePath);
+                if (localTrack?.IsVideo == true && !string.IsNullOrWhiteSpace(localTrack.LocalFilePath))
+                {
+                    await PlayLocalFileAsync(localTrack.LocalFilePath, current.Title, true, current.Author, current.ThumbnailUrl);
+                    return true;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(current.VideoId) || current.VideoId == "local")
+            {
+                return false;
+            }
+
+            var downloaded = await _localMusicService.GetDownloadedTrackByVideoIdAsync(current.VideoId);
+            if (downloaded?.IsVideo == true && !string.IsNullOrWhiteSpace(downloaded.LocalFilePath))
+            {
+                await PlayLocalFileAsync(downloaded.LocalFilePath, current.Title, true, current.Author, current.ThumbnailUrl);
+                return true;
+            }
+
+            await PlayInternalAsync(new PlayingItem
+            {
+                VideoId = current.VideoId,
+                Title = current.Title,
+                Author = current.Author,
+                ThumbnailUrl = current.ThumbnailUrl,
+                DurationSeconds = current.DurationSeconds,
+                IsVideo = true
+            });
+
+            return IsCurrentStreamVideo;
         }
 
         public void ClearPlaylist()
@@ -745,6 +835,48 @@ namespace YTMusic.Services
                     return;
                 }
 
+                if (video.IsVideo == true)
+                {
+                    var muxedStreamInfo = await GetPreferredMuxedVideoStreamInfoAsync(video.VideoId);
+
+                    if (muxedStreamInfo != null)
+                    {
+                        IsCurrentStreamWebM = muxedStreamInfo.Container == Container.WebM;
+                        IsCurrentStreamVideo = true;
+
+                        if (UseNativeVideoPlayback)
+                        {
+                            await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: true);
+                            IsUsingNativePlayback = false;
+                            IsUsingNativeVideoPlayback = true;
+                            CurrentStreamUrl = null;
+                            CurrentTime = 0;
+                            Duration = 100;
+                            await _nativeVideo.PlayAsync(muxedStreamInfo.Url, false, video.Title, video.Author, video.DurationSeconds);
+                        }
+                        else if (OperatingSystem.IsAndroid())
+                        {
+                            await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: false);
+                            IsUsingNativePlayback = false;
+                            IsUsingNativeVideoPlayback = false;
+                            CurrentStreamUrl = muxedStreamInfo.Url;
+                        }
+                        else
+                        {
+                            await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: false);
+                            IsUsingNativePlayback = false;
+                            IsUsingNativeVideoPlayback = false;
+                            EnsureProxiesCreated();
+                            _proxy!.ContentType = GetStreamContentType(muxedStreamInfo, true);
+                            _proxy.CurrentStreamInfo = muxedStreamInfo;
+                            CurrentStreamUrl = $"{_proxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
+                        }
+
+                        IsPlaying = true;
+                        return;
+                    }
+                }
+
                 var streamInfo = await GetPreferredAudioStreamInfoAsync(video.VideoId, UseWebM);
 
                 if (streamInfo != null)
@@ -928,6 +1060,21 @@ namespace YTMusic.Services
             return manifest.GetAudioOnlyStreams()
                 .Where(s => s.Container == Container.Mp4)
                 .GetWithHighestBitrate() ?? manifest.GetAudioOnlyStreams().GetWithHighestBitrate();
+        }
+
+        private async Task<IStreamInfo?> GetPreferredMuxedVideoStreamInfoAsync(string videoId)
+        {
+            if (OperatingSystem.IsAndroid())
+            {
+                return await Task.Run(async () =>
+                {
+                    var streamManifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId);
+                    return streamManifest.GetMuxedStreams().GetWithHighestVideoQuality();
+                });
+            }
+
+            var manifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId);
+            return manifest.GetMuxedStreams().GetWithHighestVideoQuality();
         }
 
         private static bool IsLikelyVideoFile(string filePath)

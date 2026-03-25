@@ -46,6 +46,13 @@
                     @(PlayerService.UseNativeVideoPlayback ? "Android 原生 ExoPlayer 播放中" : "视频播放使用下方视频组件自带控件")
                 </MudText>
                 <div class="d-flex align-center">
+                    @if (CanPlayVideo)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.OndemandVideo"
+                                       Color="Color.Primary"
+                                       Disabled="true"
+                                       aria-label="Video playback available" />
+                    }
                     <MudIconButton
                     Icon="@(IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
                     Color="@(IsFavorite ? Color.Error : Color.Default)"
@@ -65,13 +72,16 @@
 @code {
     private bool IsFavorite = false;
     private string? _currentCheckedVideoId;
+    private string? _currentCheckedVideoSourceId;
     private ElementReference _videoElement;
     private bool _videoBound;
+    private bool CanPlayVideo;
 
     protected override void OnInitialized()
     {
         PlayerService.OnChange += OnStateChanged;
         _ = CheckFavoriteStatusAsync();
+        _ = CheckVideoAvailabilityAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -102,6 +112,7 @@
         }
 
         _ = CheckFavoriteStatusAsync();
+        _ = CheckVideoAvailabilityAsync();
         InvokeAsync(StateHasChanged);
     }
 
@@ -134,6 +145,30 @@
             IsFavorite = folders.Any();
         }
 
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CheckVideoAvailabilityAsync()
+    {
+        var currentVideo = PlayerService.CurrentVideo;
+        if (currentVideo == null)
+        {
+            CanPlayVideo = false;
+            _currentCheckedVideoSourceId = null;
+            return;
+        }
+
+        var sourceId = !string.IsNullOrWhiteSpace(currentVideo.LocalFilePath)
+            ? currentVideo.LocalFilePath
+            : currentVideo.VideoId;
+
+        if (_currentCheckedVideoSourceId == sourceId)
+        {
+            return;
+        }
+
+        _currentCheckedVideoSourceId = sourceId;
+        CanPlayVideo = await PlayerService.CanPlayCurrentAsVideoAsync();
         await InvokeAsync(StateHasChanged);
     }
 
