@@ -1,9 +1,32 @@
 # 活动上下文 (Active Context)
 
 ## 当前焦点
-Windows 自定义窗口与桌面顶栏交互已完成一轮稳定化；后续若继续调 UI，需保持 Android 布局不被桌面端回归影响。
+当前焦点已转为移动端主导航收敛与播放器体验统一：
+- 底部导航已将 `Transfers` 收敛为 `Other`，并把下载任务页作为 `Other` 下的二级入口。
+- 播放器正在从“通用卡片页”转向更接近 YouTube Music 的沉浸式布局，但 Android/Windows/原生视频分流仍需谨慎验证。
+- Android 原生视频已被明确视为主视频播放路径，Blazor `/player/video` 在 Android 上只保留兜底角色。
 
 ## 最近的变更
+- **设置抽屉持久化**：
+  - 新增 `UiPreferencesService` 持久化三类轻量设置：主题索引、`Favorites Image`、`High Quality Audio`。
+  - 三横杠抽屉新增“还原默认”危险操作按钮，并改为应用内 `MudDialog` 二次确认（`OK / Cancel`）。
+- **数据重置链路**：
+  - 新增 `AppResetService`，统一负责清空收藏表、下载表、下载目录文件、偏好设置和播放器状态。
+  - 收藏数据通过 `FavoriteService.ResetAllAsync()` 重置，下载数据通过 `LocalMusicService.ResetAllAsync()` 重置。
+- **主导航重构**：
+  - 底部导航 `Library` 文案改回 `Download`。
+  - 原 `Transfers` 主入口收进 `Other` 页面，`Other` 下包含“下载页面”入口，下载页内部保留三级筛选 `All / Active / Completed / Failed`。
+  - `Other` 页面新增“历史播放列表”入口。
+- **播放历史**：
+  - `MusicPlayerService` 新增运行期内的 `PlaybackHistory`（最多 50 条），统一由播放器服务记录。
+  - 现已覆盖 `Home/Search`、`Favorites`、`Library/Download`、历史页重播等播放入口。
+- **播放器分流**：
+  - Android 视频播放继续走原生全屏 `VideoPlayerActivity`。
+  - 安卓场景下 `/player` 统一留在 `/player/audio`；`/player/video` 仅保留给 Windows/非 Android 的视频播放和兜底。
+  - Android 原生视频退出时，`VideoPlayerActivity -> AndroidNativeVideoPlaybackService -> MusicPlayerService` 已补齐 `PlaybackStopped` 事件链，避免页面卡在“原生播放中”的假状态。
+- **Player UI 方向**：
+  - `PlayerAudio`/`PlayerVideo` 已去掉中心卡片，改成沉浸式背景布局。
+  - 音频页与视频页样式已拆到各自 `.razor.css`；后续平台细调必须注意 Razor scoped CSS 不会跨组件共享。
 - **列表播放逻辑**：在 `MusicPlayerService` 中实现了顺序和随机播放模式。
 - **UI 布局调整**：在 `Player.razor` 中，将播放模式切换按钮移动到最右侧，收藏和下载按钮移动到最左侧。
 - **播放优化**：
@@ -22,6 +45,7 @@ Windows 自定义窗口与桌面顶栏交互已完成一轮稳定化；后续若
   - 顶栏搜索胶囊已删除；Windows 下三横杠位于窗口按钮组左侧；顶栏已改为全宽，放大窗口时左右控件可贴边。
 
 ## 下一步计划
-- 实机验证 Windows 顶栏在不同窗口尺寸下的观感（重点：拖拽热区范围、按钮间距、三横杠与系统按钮的分组感）。
-- 若继续调整桌面顶栏样式，优先做平台分支，避免误伤 Android 顶部栏布局。
-- Android 方向仍保留：锁屏媒体卡片一致性验证、通知链路回归清单。
+- 实机验证 Android 原生视频“进入/退出/恢复音频页”链路，重点检查是否仍有假状态或死按钮。
+- 若继续调播放器 UI，优先收敛为“平台分支 + 页面独立 scoped CSS”，避免音频页改动误以为自动影响视频页。
+- 评估是否将 `PlaybackHistory` 从运行期内存提升为 SQLite 持久化数据。
+- `Other` 页面后续可继续收纳低频入口（例如设置、关于、历史、调试页），但底部主导航尽量保持 5 个以内。

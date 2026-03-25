@@ -17,4 +17,18 @@
         </div>
         <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Color="Color.Default" />
     </MudPaper>
+
+    <MudPaper Elevation="2"
+              Class="pa-4 d-flex align-center justify-space-between mt-3"
+              Style="cursor: pointer;"
+              @onclick='() => NavigationManager.NavigateTo("history")'>
+        <div class="d-flex align-center gap-3">
+            <MudIcon Icon="@Icons.Material.Filled.History" Color="Color.Primary" />
+            <div class="d-flex flex-column">
+                <MudText Typo="Typo.subtitle1">历史播放列表</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">查看最近播放并快速重新播放</MudText>
+            </div>
+        </div>
+        <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Color="Color.Default" />
+    </MudPaper>
 </MudContainer>

@@ -76,3 +76,37 @@
 - **依据**:
   - Android 上合理的顶栏排布，在 Windows 桌面窗口中不一定合理；尤其三横杠放在系统按钮旁边时容易被误认为“第四个窗口控制按钮”。
   - 居中限宽容器会导致放大后两侧控件离边太远，不符合桌面端标题栏直觉。
+
+## 2026-03-25: 轻量 UI 设置统一走 `Preferences`，不单独建设置表
+- **决策**:
+  - 主题索引、`Favorites Image`、`High Quality Audio` 等轻量设置统一收口到 `UiPreferencesService`。
+  - 不额外建立 SQLite `Settings` 表。
+- **依据**:
+  - 当前设置项数量少、类型简单（`bool` / `int`），`Preferences` 的键值模型更轻更稳。
+  - 收藏/下载/播放历史才是结构化数据，更适合继续走 SQLite。
+
+## 2026-03-25: 底部导航控制在 5 个以内，低频页收进 `Other`
+- **决策**:
+  - 底部导航将原 `Transfers` 改为 `Other`。
+  - `Other` 页面承接下载任务页、历史播放列表等低频入口。
+  - 下载任务页内部使用页内二/三级筛选，不再继续膨胀底部主导航。
+- **依据**:
+  - Android 小屏下超过 5 个主入口会快速进入“挤、缩、易误触”的状态。
+  - 页内层级导航比继续堆叠全局导航更可维护。
+
+## 2026-03-25: Android 视频播放以原生全屏为主，Blazor 视频页只做非安卓/兜底
+- **决策**:
+  - Android 继续使用 `VideoPlayerActivity` 作为视频主播放路径。
+  - 安卓场景下 `/player` 默认留在 `/player/audio`，不再把 `/player/video` 当主场景。
+  - 退出原生视频时增加 `PlaybackStopped` 事件链，保证 `MusicPlayerService` 能退出假视频态。
+- **依据**:
+  - 原生全屏 Activity 已经承担实际视频播放职责，再强行让 Blazor `/player/video` 承接主流程会造成双重心智模型。
+  - 之前 Android 上出现“退出原生视频后页面仍显示 ExoPlayer 播放中、且无法继续播放”的问题，本质是退出事件未回传到服务层。
+
+## 2026-03-25: 播放历史先做运行期统一入口，再决定是否落库
+- **决策**:
+  - 在 `MusicPlayerService` 中维护运行期内的 `PlaybackHistory`，并统一由播放器服务记录。
+  - 暂不先建 SQLite 表，先确保入口统一。
+- **依据**:
+  - Home/Search、Favorites、Library/Download、本地文件播放路径此前不完全一致，优先解决“有没有记历史”的一致性问题。
+  - 运行期内存方案改动小、验证快，等体验确认后再决定是否持久化到 SQLite。

@@ -16,10 +16,18 @@
 - [x] Windows 顶栏窗口控制按钮与拖拽热区接入（`WindowChromeService` + `mouseInterop.js`）。
 - [x] 修复 Windows 拖拽导致窗口尺寸变化的问题（改用 `SetWindowPos(...SWP_NOSIZE...)`）。
 - [x] 调整 Windows 顶栏布局：删除搜索胶囊、三横杠移至窗口按钮组左侧、顶栏全宽贴边。
+- [x] 三横杠设置持久化：主题、`Favorites Image`、`High Quality Audio`。
+- [x] “还原默认”重置链路：清表、删下载目录、恢复默认设置、停止播放。
+- [x] 底部导航重构：`Transfers` 收进 `Other`，下载页使用页内二/三级筛选。
+- [x] `Other` 页面新增“历史播放列表”入口。
+- [x] 运行期播放历史列表（`MusicPlayerService.PlaybackHistory`）接入。
+- [x] Android 原生视频退出后恢复状态链路修复（`PlaybackStopped`）。
+- [x] 安卓视频主路径调整为原生全屏；Blazor `/player/video` 在安卓上弱化为兜底。
 
 ## 进行中
 - [x] 初始化中文化 Memory Bank。
-- [ ] UI 细节微调（按钮布局与间距）。
+- [ ] Player 页面继续向 YouTube Music 风格靠拢（封面、视频区、标题区、平台差异样式）。
+- [ ] Player 视频页在 Windows/Android 的最终居中与视觉重心校准。
 - [ ] 锁屏媒体控件在不同 ROM 的一致性验证与适配。
 
 ## 未来路线图
@@ -27,3 +35,4 @@
 - [ ] 离线歌词支持。
 - [ ] 更好的 Android/iOS SDK 适配（针对移动端构建）。
 - [ ] 收藏夹中的批量操作功能。
+- [ ] 播放历史 SQLite 持久化（跨重启保留）。

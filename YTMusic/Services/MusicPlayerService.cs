@@ -26,6 +26,11 @@ namespace YTMusic.Services
         public double? DurationSeconds { get; set; }
     }
 
+    public class PlaybackHistoryItem : PlayingItem
+    {
+        public DateTime PlayedAtUtc { get; set; }
+    }
+
     public class LocalAudioProxy : IDisposable
     {
         private readonly HttpListener _listener;
@@ -331,6 +336,7 @@ namespace YTMusic.Services
         public bool IsCurrentStreamVideo { get; private set; }
         public double CurrentTime { get; private set; } = 0;
         public double Duration { get; private set; } = 100;
+        public IReadOnlyList<PlaybackHistoryItem> PlaybackHistory => _playbackHistory;
 
         // Playlist State
         public List<PlayingItem> Playlist { get; private set; } = new List<PlayingItem>();
@@ -339,6 +345,7 @@ namespace YTMusic.Services
         public enum PlaybackMode { Sequential, Random, SingleLoop }
         public PlaybackMode CurrentMode { get; private set; } = PlaybackMode.Sequential;
         private List<int> _shuffleIndices = new List<int>();
+        private readonly List<PlaybackHistoryItem> _playbackHistory = new List<PlaybackHistoryItem>();
 
         public MusicPlayerService(INativeAudioPlaybackService nativeAudio, INativeVideoPlaybackService nativeVideo, ILocalMusicService localMusicService, UiPreferencesService uiPreferences)
         {
@@ -476,6 +483,7 @@ namespace YTMusic.Services
                     Duration = 100;
                     await _nativeVideo.PlayAsync(filePath, true, title, string.IsNullOrWhiteSpace(author) ? "Local File" : author, null);
                     IsPlaying = true;
+                    AddToPlaybackHistory(CurrentVideo, true);
                 }
                 else
                 if (_nativeAudio.IsSupported && !IsCurrentStreamVideo)
@@ -488,6 +496,7 @@ namespace YTMusic.Services
                     Duration = 100;
                     await _nativeAudio.PlayAsync(filePath, true, title, string.IsNullOrWhiteSpace(author) ? "Local File" : author, null);
                     IsPlaying = true;
+                    AddToPlaybackHistory(CurrentVideo, false);
                 }
                 else
                 {
@@ -499,6 +508,7 @@ namespace YTMusic.Services
                     _fileProxy.CurrentFilePath = filePath;
                     CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
                     IsPlaying = true;
+                    AddToPlaybackHistory(CurrentVideo, IsCurrentStreamVideo);
                 }
             }
             catch (Exception ex)
@@ -593,6 +603,12 @@ namespace YTMusic.Services
             _shuffleIndices.Clear();
             CurrentPlaylistIndex = -1;
             CurrentPlaylistName = null;
+            NotifyStateChanged();
+        }
+
+        public void ClearPlaybackHistory()
+        {
+            _playbackHistory.Clear();
             NotifyStateChanged();
         }
 
@@ -786,6 +802,7 @@ namespace YTMusic.Services
                         Duration = 100;
                         await _nativeVideo.PlayAsync(video.LocalFilePath, true, video.Title, video.Author, video.DurationSeconds);
                         IsPlaying = true;
+                        AddToPlaybackHistory(video, true);
                     }
                     else if (_nativeAudio.IsSupported && !IsCurrentStreamVideo)
                     {
@@ -797,6 +814,7 @@ namespace YTMusic.Services
                         Duration = 100;
                         await _nativeAudio.PlayAsync(video.LocalFilePath, true, video.Title, video.Author, video.DurationSeconds);
                         IsPlaying = true;
+                        AddToPlaybackHistory(video, false);
                     }
                     else
                     {
@@ -808,6 +826,7 @@ namespace YTMusic.Services
                         _fileProxy.CurrentFilePath = video.LocalFilePath;
                         CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
                         IsPlaying = true;
+                        AddToPlaybackHistory(video, IsCurrentStreamVideo);
                     }
                     return;
                 }
@@ -830,6 +849,7 @@ namespace YTMusic.Services
                         CurrentTime = 0;
                         Duration = 100;
                         await _nativeAudio.PlayAsync(video.LocalFilePath, true, video.Title, video.Author, video.DurationSeconds);
+                        AddToPlaybackHistory(video, false);
                     }
                     else if (IsCurrentStreamVideo && UseNativeVideoPlayback)
                     {
@@ -840,6 +860,7 @@ namespace YTMusic.Services
                         CurrentTime = 0;
                         Duration = 100;
                         await _nativeVideo.PlayAsync(video.LocalFilePath, true, video.Title, video.Author, video.DurationSeconds);
+                        AddToPlaybackHistory(video, true);
                     }
                     else
                     {
@@ -850,6 +871,7 @@ namespace YTMusic.Services
                         _fileProxy!.ContentType = GetFileContentType(video.LocalFilePath, IsCurrentStreamVideo);
                         _fileProxy.CurrentFilePath = video.LocalFilePath;
                         CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
+                        AddToPlaybackHistory(video, IsCurrentStreamVideo);
                     }
 
                     IsPlaying = true;
@@ -874,6 +896,7 @@ namespace YTMusic.Services
                             CurrentTime = 0;
                             Duration = 100;
                             await _nativeVideo.PlayAsync(muxedStreamInfo.Url, false, video.Title, video.Author, video.DurationSeconds);
+                            AddToPlaybackHistory(video, true);
                         }
                         else if (OperatingSystem.IsAndroid())
                         {
@@ -881,6 +904,7 @@ namespace YTMusic.Services
                             IsUsingNativePlayback = false;
                             IsUsingNativeVideoPlayback = false;
                             CurrentStreamUrl = muxedStreamInfo.Url;
+                            AddToPlaybackHistory(video, true);
                         }
                         else
                         {
@@ -891,6 +915,7 @@ namespace YTMusic.Services
                             _proxy!.ContentType = GetStreamContentType(muxedStreamInfo, true);
                             _proxy.CurrentStreamInfo = muxedStreamInfo;
                             CurrentStreamUrl = $"{_proxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
+                            AddToPlaybackHistory(video, true);
                         }
 
                         IsPlaying = true;
@@ -914,6 +939,7 @@ namespace YTMusic.Services
                         CurrentTime = 0;
                         Duration = 100;
                         await _nativeAudio.PlayAsync(streamInfo.Url, false, video.Title, video.Author, video.DurationSeconds);
+                        AddToPlaybackHistory(video, false);
                     }
                     else if (OperatingSystem.IsAndroid())
                     {
@@ -921,6 +947,7 @@ namespace YTMusic.Services
                         IsUsingNativePlayback = false;
                         IsUsingNativeVideoPlayback = false;
                         CurrentStreamUrl = streamInfo.Url;
+                        AddToPlaybackHistory(video, false);
                     }
                     else
                     {
@@ -931,6 +958,7 @@ namespace YTMusic.Services
                         _proxy!.ContentType = GetStreamContentType(streamInfo, IsCurrentStreamVideo);
                         _proxy.CurrentStreamInfo = streamInfo;
                         CurrentStreamUrl = $"{_proxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
+                        AddToPlaybackHistory(video, false);
                     }
 
                     IsPlaying = true;
@@ -1182,6 +1210,37 @@ namespace YTMusic.Services
         }
 
         private void NotifyStateChanged() => OnChange?.Invoke();
+
+        private void AddToPlaybackHistory(PlayingItem item, bool isVideo)
+        {
+            var hasLocalPath = !string.IsNullOrWhiteSpace(item.LocalFilePath);
+            if (!hasLocalPath && string.IsNullOrWhiteSpace(item.VideoId))
+            {
+                return;
+            }
+
+            _playbackHistory.RemoveAll(existing =>
+                hasLocalPath
+                    ? string.Equals(existing.LocalFilePath, item.LocalFilePath, StringComparison.OrdinalIgnoreCase)
+                    : existing.VideoId == item.VideoId);
+
+            _playbackHistory.Insert(0, new PlaybackHistoryItem
+            {
+                VideoId = item.VideoId,
+                Title = item.Title,
+                Author = item.Author,
+                ThumbnailUrl = item.ThumbnailUrl,
+                LocalFilePath = item.LocalFilePath,
+                IsVideo = isVideo,
+                DurationSeconds = item.DurationSeconds,
+                PlayedAtUtc = DateTime.UtcNow
+            });
+
+            if (_playbackHistory.Count > 50)
+            {
+                _playbackHistory.RemoveRange(50, _playbackHistory.Count - 50);
+            }
+        }
 
         private void OnNativePositionChanged(double currentTime, double duration)
         {

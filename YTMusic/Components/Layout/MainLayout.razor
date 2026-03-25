@@ -1,9 +1,11 @@
 @inherits LayoutComponentBase
 @using MudBlazor
 @using YTMusic.Services
+@using YTMusic.Components.Dialogs
 @inject GlobalStateService GlobalState
 @inject IJSRuntime JSRuntime
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @inject WindowChromeService WindowChrome
 @inject UiPreferencesService UiPreferences
 @inject MusicPlayerService PlayerService
@@ -152,7 +154,7 @@
         </div>
         <div @onclick='() => NavigateToTab("downloads")' class="@GetBottomItemClass("Downloads")">
             <MudIcon Icon="@Icons.Material.Filled.LibraryMusic" Style="@GetBottomItemContentStyle("Downloads")" />
-            <MudText Typo="Typo.caption" Style="@GetBottomItemContentStyle("Downloads")">Library</MudText>
+            <MudText Typo="Typo.caption" Style="@GetBottomItemContentStyle("Downloads")">Download</MudText>
         </div>
         <div @onclick='() => NavigateToTab("other")' class="@GetBottomItemClass("Other")">
             <MudIcon Icon="@Icons.Material.Filled.MoreHoriz" Style="@GetBottomItemContentStyle("Other")" />
@@ -401,11 +403,24 @@
 
     private async Task ResetToDefaultsAsync()
     {
-        var confirmed = await JSRuntime.InvokeAsync<bool>(
-            "confirm",
-            "这会清空所有表记录，并删除下载目录里的所有音频和视频，同时恢复默认设置。确定继续吗？");
+        _isThemePanelOpen = false;
+        await InvokeAsync(StateHasChanged);
 
-        if (!confirmed)
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.ExtraSmall,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmResetDialog>("还原默认", options);
+        if (dialog == null)
+        {
+            return;
+        }
+
+        var result = await dialog.Result;
+        if (result == null || result.Canceled)
         {
             return;
         }

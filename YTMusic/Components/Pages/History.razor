@@ -1,0 +1,82 @@
+@page "/history"
+@using YTMusic.Services
+@inject MusicPlayerService PlayerService
+@inject NavigationManager NavigationManager
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-6">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <MudText Typo="Typo.h6">历史播放列表</MudText>
+        <MudButton Variant="Variant.Text"
+                   Color="Color.Default"
+                   Disabled="@(PlayerService.PlaybackHistory.Count == 0)"
+                   OnClick="ClearHistory">
+            清空
+        </MudButton>
+    </div>
+
+    @if (PlayerService.PlaybackHistory.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">还没有播放记录。</MudAlert>
+    }
+    else
+    {
+        <div class="d-flex flex-column gap-3">
+            @foreach (var item in PlayerService.PlaybackHistory)
+            {
+                <MudPaper Elevation="2"
+                          Class="pa-3 d-flex align-center justify-space-between"
+                          Style="cursor: pointer;"
+                          @onclick="@(() => PlayHistoryItemAsync(item))">
+                    <div class="d-flex align-center gap-3" style="min-width: 0;">
+                        @if (!string.IsNullOrWhiteSpace(item.ThumbnailUrl))
+                        {
+                            <MudImage Src="@item.ThumbnailUrl" Width="56" Height="56" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@(item.IsVideo == true ? Icons.Material.Filled.OndemandVideo : Icons.Material.Filled.MusicNote)"
+                                     Color="Color.Primary"
+                                     Size="Size.Large" />
+                        }
+                        <div style="min-width: 0;">
+                            <MudText Typo="Typo.subtitle2" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                @item.Title
+                            </MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                @item.Author
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @(item.IsVideo == true ? "Video" : "Audio") · @item.PlayedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                            </MudText>
+                        </div>
+                    </div>
+
+                    <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Color="Color.Default" />
+                </MudPaper>
+            }
+        </div>
+    }
+</MudContainer>
+
+@code {
+    private async Task PlayHistoryItemAsync(PlaybackHistoryItem item)
+    {
+        await PlayerService.PlayAsync(new PlayingItem
+        {
+            VideoId = item.VideoId,
+            Title = item.Title,
+            Author = item.Author,
+            ThumbnailUrl = item.ThumbnailUrl,
+            LocalFilePath = item.LocalFilePath,
+            IsVideo = item.IsVideo,
+            DurationSeconds = item.DurationSeconds
+        });
+
+        NavigationManager.NavigateTo("/player");
+    }
+
+    private void ClearHistory()
+    {
+        PlayerService.ClearPlaybackHistory();
+    }
+}
