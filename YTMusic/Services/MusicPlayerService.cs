@@ -367,6 +367,7 @@ namespace YTMusic.Services
                 _nativeVideo.PositionChanged += OnNativeVideoPositionChanged;
                 _nativeVideo.PlayingStateChanged += OnNativeVideoPlayingStateChanged;
                 _nativeVideo.PlaybackEnded += OnNativeVideoPlaybackEnded;
+                _nativeVideo.PlaybackStopped += OnNativeVideoPlaybackStopped;
             }
         }
 
@@ -972,6 +973,23 @@ namespace YTMusic.Services
 
         public async Task ResumeAsync()
         {
+            if (!IsUsingNativePlayback && !IsUsingNativeVideoPlayback && CurrentStreamUrl == null && CurrentVideo != null)
+            {
+                var resumeItem = new PlayingItem
+                {
+                    VideoId = CurrentVideo.VideoId,
+                    Title = CurrentVideo.Title,
+                    Author = CurrentVideo.Author,
+                    ThumbnailUrl = CurrentVideo.ThumbnailUrl,
+                    LocalFilePath = CurrentVideo.LocalFilePath,
+                    DurationSeconds = CurrentVideo.DurationSeconds,
+                    IsVideo = IsCurrentStreamVideo ? true : false
+                };
+
+                await PlayInternalAsync(resumeItem);
+                return;
+            }
+
             if (IsUsingNativePlayback)
             {
                 await _nativeAudio.ResumeAsync();
@@ -1199,6 +1217,26 @@ namespace YTMusic.Services
         private void OnNativeVideoPlaybackEnded()
         {
             _ = Task.Run(OnTrackEndedAsync);
+        }
+
+        private void OnNativeVideoPlaybackStopped()
+        {
+            if (!IsUsingNativeVideoPlayback)
+            {
+                return;
+            }
+
+            IsUsingNativeVideoPlayback = false;
+            IsPlaying = false;
+            IsCurrentStreamVideo = false;
+            CurrentStreamUrl = null;
+
+            if (CurrentVideo != null)
+            {
+                CurrentVideo.IsVideo = false;
+            }
+
+            NotifyStateChanged();
         }
 
     }

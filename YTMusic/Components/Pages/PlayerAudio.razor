@@ -10,41 +10,48 @@
 @inject NavigationManager NavigationManager
 @implements IDisposable
 
-<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+<MudContainer MaxWidth="MaxWidth.False" Class="player-screen player-screen--audio">
     @if (PlayerService.CurrentVideo != null)
     {
-        <MudCard Elevation="4" Class="pa-6">
-            <MudCardMedia Image="@PlayerService.CurrentVideo.ThumbnailUrl" Height="300"
-                          Style="border-radius: 8px; background-size: cover; background-position: center;" />
-
-            <MudCardContent Class="text-center mt-4">
-                @if (!string.IsNullOrEmpty(PlayerService.CurrentPlaylistName))
-                {
-                    <MudText Typo="Typo.caption" Color="Color.Primary" Style="font-weight: bold; text-transform: uppercase;">
-                        正在播放: @PlayerService.CurrentPlaylistName
-                    </MudText>
-                }
-                <MudText Typo="Typo.h5"
-                         Style="font-weight: bold; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                    @PlayerService.CurrentVideo.Title
-                </MudText>
-                <MudText Typo="Typo.subtitle1" Color="Color.Secondary">
-                    @PlayerService.CurrentVideo.Author
-                </MudText>
-            </MudCardContent>
-
-            <div class="px-4 mt-2">
-                <MudSlider T="double" Value="@PlayerService.CurrentTime" Max="@PlayerService.Duration"
-                           ValueChanged="OnSliderValueChanged" Immediate="false" Color="Color.Primary" />
-                <div class="d-flex justify-space-between mt-1">
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">@FormatTime(PlayerService.CurrentTime)</MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">@FormatTime(PlayerService.Duration)</MudText>
-                </div>
+        <div class="player-shell">
+            <div class="player-backdrop"
+                 style="@($"background-image: linear-gradient(180deg, rgba(5,10,15,0.18), rgba(5,10,15,0.92)), url('{PlayerService.CurrentVideo.ThumbnailUrl}');")">
             </div>
 
-            <MudCardActions Class="mt-2" Style="width: 100%; display: flex; flex-direction: column; gap: 4px;">
-                <div class="d-flex align-center justify-space-between" style="width: 100%;">
-                    <div class="d-flex align-center">
+            <div class="player-content">
+                <div class="player-artwork-wrap">
+                    <div class="player-artwork-shadow"></div>
+                    <MudImage Src="@PlayerService.CurrentVideo.ThumbnailUrl"
+                              ObjectFit="ObjectFit.Cover"
+                              Class="player-artwork" />
+                </div>
+
+                <div class="player-meta">
+                    @if (!string.IsNullOrEmpty(PlayerService.CurrentPlaylistName))
+                    {
+                        <MudText Typo="Typo.caption" Class="player-kicker">
+                            正在播放: @PlayerService.CurrentPlaylistName
+                        </MudText>
+                    }
+                    <MudText Typo="Typo.h5" Class="player-title">
+                        @PlayerService.CurrentVideo.Title
+                    </MudText>
+                    <MudText Typo="Typo.body1" Class="player-author">
+                        @PlayerService.CurrentVideo.Author
+                    </MudText>
+                </div>
+
+                <div class="player-progress">
+                    <MudSlider T="double" Value="@PlayerService.CurrentTime" Max="@PlayerService.Duration"
+                               ValueChanged="OnSliderValueChanged" Immediate="false" Color="Color.Primary" />
+                    <div class="player-times">
+                        <MudText Typo="Typo.caption" Class="player-time">@FormatTime(PlayerService.CurrentTime)</MudText>
+                        <MudText Typo="Typo.caption" Class="player-time">@FormatTime(PlayerService.Duration)</MudText>
+                    </div>
+                </div>
+
+                <div class="player-actions-row">
+                    <div class="player-actions-left">
                         @if (CanPlayVideo)
                         {
                             <MudIconButton Icon="@Icons.Material.Filled.OndemandVideo"
@@ -53,24 +60,34 @@
                                            aria-label="Play video" />
                         }
                         <MudIconButton
-                        Icon="@(IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
-                        Color="@(IsFavorite ? Color.Error : Color.Default)" OnClick="OpenFavoriteDialogAsync"
-                        aria-label="Toggle Favorite" />
-                        <MudMenu Icon="@Icons.Material.Filled.Download" Color="Color.Primary" AnchorOrigin="Origin.BottomRight"
-                                 TransformOrigin="Origin.TopRight" aria-label="Download">
+                            Icon="@(IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                            Color="@(IsFavorite ? Color.Error : Color.Default)"
+                            OnClick="OpenFavoriteDialogAsync"
+                            aria-label="Toggle Favorite" />
+                        <MudMenu Icon="@Icons.Material.Filled.Download"
+                                 Color="Color.Primary"
+                                 AnchorOrigin="Origin.BottomRight"
+                                 TransformOrigin="Origin.TopRight"
+                                 aria-label="Download">
                             <MudMenuItem OnClick="@(() => Download(false))">Download Audio</MudMenuItem>
                             <MudMenuItem OnClick="@(() => Download(true))">Download Video</MudMenuItem>
                         </MudMenu>
                     </div>
 
-                    <MudIconButton Icon="@GetPlaybackModeIcon(PlayerService.CurrentMode)" Color="Color.Default"
-                                   OnClick="TogglePlaybackMode" aria-label="Toggle Playback Mode"
+                    <MudIconButton Icon="@GetPlaybackModeIcon(PlayerService.CurrentMode)"
+                                   Color="Color.Default"
+                                   Size="Size.Medium"
+                                   OnClick="TogglePlaybackMode"
+                                   aria-label="Toggle Playback Mode"
                                    Disabled="@(PlayerService.Playlist.Count == 0)" />
                 </div>
 
-                <div class="d-flex align-center justify-center" style="width: 100%; gap: 14px;">
-                    <MudIconButton Icon="@Icons.Material.Filled.SkipPrevious" Size="Size.Large" Variant="Variant.Text"
-                                   OnClick="PlayPreviousTrack" Disabled="@(PlayerService.Playlist.Count == 0)" />
+                <div class="player-controls">
+                    <MudIconButton Icon="@Icons.Material.Filled.SkipPrevious"
+                                   Size="Size.Large"
+                                   Variant="Variant.Text"
+                                   OnClick="PlayPreviousTrack"
+                                   Disabled="@(PlayerService.Playlist.Count == 0)" />
 
                     @if (PlayerService.IsLoading)
                     {
@@ -78,21 +95,25 @@
                     }
                     else
                     {
-                        <MudIconButton
-                        Icon="@(PlayerService.IsPlaying ? Icons.Material.Filled.PauseCircle : Icons.Material.Filled.PlayCircle)"
-                        Size="Size.Large" Color="Color.Primary" OnClick="TogglePlay"
-                        Style="width: 64px; height: 64px; font-size: 3rem;" />
+                        <MudIconButton Icon="@(PlayerService.IsPlaying ? Icons.Material.Filled.PauseCircle : Icons.Material.Filled.PlayCircle)"
+                                       Size="Size.Large"
+                                       Color="Color.Primary"
+                                       OnClick="TogglePlay"
+                                       Class="player-main-button" />
                     }
 
-                    <MudIconButton Icon="@Icons.Material.Filled.SkipNext" Size="Size.Large" Variant="Variant.Text"
-                                   OnClick="PlayNextTrack" Disabled="@(PlayerService.Playlist.Count == 0)" />
+                    <MudIconButton Icon="@Icons.Material.Filled.SkipNext"
+                                   Size="Size.Large"
+                                   Variant="Variant.Text"
+                                   OnClick="PlayNextTrack"
+                                   Disabled="@(PlayerService.Playlist.Count == 0)" />
                 </div>
-            </MudCardActions>
-        </MudCard>
+            </div>
+        </div>
     }
     else
     {
-        <div class="d-flex flex-column align-center justify-center" style="height: 50vh;">
+        <div class="player-empty">
             <MudIcon Icon="@Icons.Material.Filled.MusicOff" Style="font-size: 4rem;" Color="Color.Secondary" Class="mb-4" />
             <MudText Typo="Typo.h5" Color="Color.Secondary">No track is currently playing</MudText>
         </div>

@@ -49,6 +49,7 @@ namespace YTMusic.Platforms.Android.Services
         public static event Action<bool>? PlayingStateChanged;
 
         public static event Action? PlaybackEnded;
+        public static event Action? PlaybackStopped;
 
         protected override void OnCreate(Bundle? savedInstanceState)
         {
@@ -90,6 +91,7 @@ namespace YTMusic.Platforms.Android.Services
 
         protected override void OnDestroy()
         {
+            var shouldNotifyStopped = _player != null;
             StopPositionUpdates();
 
             if (_player != null)
@@ -117,6 +119,11 @@ namespace YTMusic.Platforms.Android.Services
             _mainHandler = null;
             _positionRunnable = null;
             _currentInstance = null;
+            if (shouldNotifyStopped)
+            {
+                PlayingStateChanged?.Invoke(false);
+                PlaybackStopped?.Invoke();
+            }
             base.OnDestroy();
         }
 

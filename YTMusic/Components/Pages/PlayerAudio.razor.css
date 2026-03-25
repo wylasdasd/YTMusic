@@ -1,0 +1,234 @@
+.player-screen {
+    position: relative;
+    min-height: calc(100dvh - 188px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    padding: 18px 0 12px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.player-shell {
+    position: relative;
+    width: min(100%, 760px);
+    min-height: calc(100dvh - 220px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    margin: 0 auto;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 28px;
+}
+
+.player-backdrop {
+    position: absolute;
+    inset: 0;
+    border-radius: 28px;
+    background-position: center;
+    background-size: cover;
+    filter: saturate(1.1);
+    opacity: 0.96;
+}
+
+.player-backdrop::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 28px;
+    background:
+        linear-gradient(180deg, rgba(5, 10, 15, 0.12) 0%, rgba(5, 10, 15, 0.58) 36%, rgba(5, 10, 15, 0.94) 100%);
+    backdrop-filter: blur(20px);
+}
+
+.player-content {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    padding: 24px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.player-artwork-wrap {
+    position: relative;
+    width: min(100%, 440px);
+    margin: 0 auto;
+}
+
+.player-artwork-shadow {
+    position: absolute;
+    inset: 18px 14px -10px;
+    border-radius: 26px;
+    background: rgba(0, 0, 0, 0.34);
+    filter: blur(22px);
+}
+
+.player-artwork {
+    position: relative;
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.24);
+    object-position: center center;
+}
+
+.player-meta {
+    text-align: center;
+}
+
+.player-kicker {
+    color: rgba(255, 255, 255, 0.72);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.player-title {
+    color: #f5f7fa;
+    font-weight: 800;
+    line-height: 1.12;
+    margin-top: 8px;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+}
+
+.player-author {
+    color: rgba(217, 227, 243, 0.82);
+    margin-top: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.player-progress {
+    margin-top: auto;
+}
+
+.player-times {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.player-time {
+    color: rgba(217, 227, 243, 0.82);
+}
+
+.player-actions-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.player-actions-left {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.player-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+}
+
+.player-main-button {
+    width: 68px;
+    height: 68px;
+    font-size: 3rem;
+}
+
+.player-empty {
+    width: 100%;
+    min-height: calc(100dvh - 220px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+@media (max-width: 720px) {
+    .player-screen {
+        padding-top: 12px;
+        padding-bottom: 8px;
+    }
+
+    .player-shell {
+        width: 100%;
+        min-height: calc(100dvh - 204px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    }
+
+    .player-backdrop,
+    .player-backdrop::after {
+        border-radius: 24px;
+    }
+
+    .player-content {
+        padding: 18px 14px 14px;
+        gap: 12px;
+    }
+
+    .player-artwork-wrap {
+        width: min(100%, 320px);
+    }
+
+    .player-title {
+        font-size: 1.95rem;
+    }
+
+    .player-main-button {
+        width: 60px;
+        height: 60px;
+        font-size: 2.7rem;
+    }
+}
+
+@media (max-width: 420px) {
+    .player-screen {
+        min-height: calc(100dvh - 180px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+        padding-top: 8px;
+    }
+
+    .player-shell {
+        min-height: calc(100dvh - 190px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    }
+
+    .player-backdrop,
+    .player-backdrop::after {
+        border-radius: 22px;
+    }
+
+    .player-content {
+        padding: 14px 12px 12px;
+        gap: 10px;
+    }
+
+    .player-artwork-wrap {
+        width: min(100%, 250px);
+    }
+
+    .player-title {
+        font-size: 1.72rem;
+        -webkit-line-clamp: 3;
+    }
+
+    .player-author {
+        font-size: 0.95rem;
+    }
+
+    .player-controls {
+        gap: 10px;
+    }
+
+    .player-main-button {
+        width: 56px;
+        height: 56px;
+        font-size: 2.45rem;
+    }
+}

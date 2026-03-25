@@ -11,61 +11,76 @@
 @inject IJSRuntime JSRuntime
 @implements IDisposable
 
-<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-4">
+<MudContainer MaxWidth="MaxWidth.False" Class="player-screen player-screen--video">
     @{
         var currentVideo = PlayerService.CurrentVideo;
     }
     @if (currentVideo == null)
     {
-        <div class="d-flex flex-column align-center justify-center" style="height: 50vh;">
+        <div class="player-empty">
             <MudIcon Icon="@Icons.Material.Filled.VideoLibrary" Style="font-size: 4rem;" Color="Color.Secondary" Class="mb-4" />
             <MudText Typo="Typo.h5" Color="Color.Secondary">No video is currently playing</MudText>
         </div>
     }
     else
     {
-        <MudPaper Elevation="2" Class="pa-4">
-            @if (!PlayerService.UseNativeVideoPlayback)
-            {
-                <video @ref="_videoElement"
-                       autoplay
-                       playsinline
-                       controls
-                       preload="metadata"
-                       poster="@currentVideo.ThumbnailUrl"
-                       style="display:block;width:100%;max-width:100%;aspect-ratio:16/9;border-radius:12px;background:#000;object-fit:contain;margin-bottom:12px;" />
-            }
+        <div class="player-shell">
+            <div class="player-backdrop"
+                 style="@($"background-image: linear-gradient(180deg, rgba(5,10,15,0.18), rgba(5,10,15,0.92)), url('{currentVideo.ThumbnailUrl}');")">
+            </div>
 
-            <MudText Typo="Typo.h6" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                @currentVideo.Title
-            </MudText>
-            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">@currentVideo.Author</MudText>
+            <div class="player-content player-content--video">
+                @if (!PlayerService.UseNativeVideoPlayback)
+                {
+                    <div class="player-video-frame">
+                        <video @ref="_videoElement"
+                               autoplay
+                               playsinline
+                               controls
+                               preload="metadata"
+                               poster="@currentVideo.ThumbnailUrl"
+                               class="player-video" />
+                    </div>
+                }
 
-            <div class="d-flex align-center justify-space-between">
-                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    @(PlayerService.UseNativeVideoPlayback ? "Android 原生 ExoPlayer 播放中" : "视频播放使用下方视频组件自带控件")
-                </MudText>
-                <div class="d-flex align-center">
-                    @if (CanPlayVideo)
-                    {
-                        <MudIconButton Icon="@Icons.Material.Filled.OndemandVideo"
-                                       Color="Color.Primary"
-                                       Disabled="true"
-                                       aria-label="Video playback available" />
-                    }
-                    <MudIconButton
-                    Icon="@(IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
-                    Color="@(IsFavorite ? Color.Error : Color.Default)"
-                    OnClick="OpenFavoriteDialogAsync"
-                    aria-label="Toggle Favorite" />
-                    <MudMenu Icon="@Icons.Material.Filled.Download" Color="Color.Primary" AnchorOrigin="Origin.BottomRight"
-                             TransformOrigin="Origin.TopRight" aria-label="Download">
-                        <MudMenuItem OnClick="@(() => Download(false))">Download Audio</MudMenuItem>
-                        <MudMenuItem OnClick="@(() => Download(true))">Download Video</MudMenuItem>
-                    </MudMenu>
+                <div class="player-meta player-meta--video">
+                    <MudText Typo="Typo.h5" Class="player-title">
+                        @currentVideo.Title
+                    </MudText>
+                    <MudText Typo="Typo.body1" Class="player-author">
+                        @currentVideo.Author
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="player-video-note">
+                        @(PlayerService.UseNativeVideoPlayback ? "Android 原生 ExoPlayer 播放中" : "视频播放使用下方视频组件自带控件")
+                    </MudText>
+                </div>
+
+                <div class="player-actions-row">
+                    <div class="player-actions-left">
+                        @if (CanPlayVideo)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.OndemandVideo"
+                                           Color="Color.Primary"
+                                           Disabled="true"
+                                           aria-label="Video playback available" />
+                        }
+                        <MudIconButton
+                            Icon="@(IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                            Color="@(IsFavorite ? Color.Error : Color.Default)"
+                            OnClick="OpenFavoriteDialogAsync"
+                            aria-label="Toggle Favorite" />
+                        <MudMenu Icon="@Icons.Material.Filled.Download"
+                                 Color="Color.Primary"
+                                 AnchorOrigin="Origin.BottomRight"
+                                 TransformOrigin="Origin.TopRight"
+                                 aria-label="Download">
+                            <MudMenuItem OnClick="@(() => Download(false))">Download Audio</MudMenuItem>
+                            <MudMenuItem OnClick="@(() => Download(true))">Download Video</MudMenuItem>
+                        </MudMenu>
+                    </div>
                 </div>
             </div>
-        </MudPaper>
+        </div>
     }
 </MudContainer>
 
@@ -114,6 +129,14 @@
         _ = CheckFavoriteStatusAsync();
         _ = CheckVideoAvailabilityAsync();
         InvokeAsync(StateHasChanged);
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!PlayerService.IsCurrentStreamVideo)
+        {
+            NavigationManager.NavigateTo("/player/audio", replace: true);
+        }
     }
 
     private async Task CheckFavoriteStatusAsync()

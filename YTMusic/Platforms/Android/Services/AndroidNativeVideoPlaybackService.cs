@@ -12,6 +12,7 @@ namespace YTMusic.Platforms.Android.Services
         public event Action<double, double>? PositionChanged;
         public event Action<bool>? PlayingStateChanged;
         public event Action? PlaybackEnded;
+        public event Action? PlaybackStopped;
 
         public AndroidNativeVideoPlaybackService()
         {
@@ -19,6 +20,7 @@ namespace YTMusic.Platforms.Android.Services
             VideoPlayerActivity.PositionChanged += OnPositionChanged;
             VideoPlayerActivity.PlayingStateChanged += OnPlayingStateChanged;
             VideoPlayerActivity.PlaybackEnded += OnPlaybackEnded;
+            VideoPlayerActivity.PlaybackStopped += OnPlaybackStopped;
         }
 
         public Task PlayAsync(string source, bool isLocalFile, string? title, string? artist, double? durationSeconds = null)
@@ -52,6 +54,7 @@ namespace YTMusic.Platforms.Android.Services
             VideoPlayerActivity.PositionChanged -= OnPositionChanged;
             VideoPlayerActivity.PlayingStateChanged -= OnPlayingStateChanged;
             VideoPlayerActivity.PlaybackEnded -= OnPlaybackEnded;
+            VideoPlayerActivity.PlaybackStopped -= OnPlaybackStopped;
         }
 
         private void OnPositionChanged(double current, double duration)
@@ -67,6 +70,11 @@ namespace YTMusic.Platforms.Android.Services
         private void OnPlaybackEnded()
         {
             PlaybackEnded?.Invoke();
+        }
+
+        private void OnPlaybackStopped()
+        {
+            PlaybackStopped?.Invoke();
         }
     }
 }
