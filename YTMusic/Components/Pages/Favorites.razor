@@ -3,20 +3,24 @@
 @implements IDisposable
 
 <div class="d-flex align-center justify-center flex-wrap mb-4 gap-4">
-    <MudSelect T="int" Value="ViewModel.SelectedFolderId" ValueChanged="ViewModel.SetFolderAsync" Label="Folder"
-               Variant="Variant.Outlined" Style="max-width: 200px;">
-        @foreach (var folder in ViewModel.Folders)
-        {
-            <MudSelectItem Value="@folder.Id">@folder.Name</MudSelectItem>
-        }
-    </MudSelect>
+    <div style="width: 200px;">
+        <MudSelect T="int" Value="ViewModel.SelectedFolderId" ValueChanged="ViewModel.SetFolderAsync" Label="Folder"
+                   Variant="Variant.Outlined" FullWidth="true">
+            @foreach (var folder in ViewModel.Folders)
+            {
+                <MudSelectItem Value="@folder.Id">@folder.Name</MudSelectItem>
+            }
+        </MudSelect>
+    </div>
 
-    <MudSelect T="int" Value="ViewModel.DownloadFilter" ValueChanged="ViewModel.SetFilterAsync" Label="Filter"
-               Variant="Variant.Outlined" Style="max-width: 200px;">
-        <MudSelectItem Value="0">All Tracks</MudSelectItem>
-        <MudSelectItem Value="1">Downloaded</MudSelectItem>
-        <MudSelectItem Value="2">Not Downloaded</MudSelectItem>
-    </MudSelect>
+    <div style="width: 200px;">
+        <MudSelect T="int" Value="ViewModel.DownloadFilter" ValueChanged="ViewModel.SetFilterAsync" Label="Filter"
+                   Variant="Variant.Outlined" FullWidth="true">
+            <MudSelectItem Value="0">All Tracks</MudSelectItem>
+            <MudSelectItem Value="1">Downloaded</MudSelectItem>
+            <MudSelectItem Value="2">Not Downloaded</MudSelectItem>
+        </MudSelect>
+    </div>
 </div>
 
 <div class="d-flex justify-center flex-wrap mb-4 gap-4">
