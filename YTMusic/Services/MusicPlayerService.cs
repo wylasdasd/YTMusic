@@ -967,7 +967,16 @@ namespace YTMusic.Services
             catch (Exception ex)
             {
                 Console.WriteLine($"Error playing video: {ex.Message}");
-                // 这里可以添加错误处理逻辑，比如弹窗提示
+                await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: false);
+                CurrentVideo = null;
+                CurrentStreamUrl = null;
+                IsPlaying = false;
+                IsUsingNativePlayback = false;
+                IsUsingNativeVideoPlayback = false;
+                IsCurrentStreamVideo = false;
+                IsCurrentStreamWebM = false;
+                CurrentTime = 0;
+                Duration = 100;
             }
             finally
             {
