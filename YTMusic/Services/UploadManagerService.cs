@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Security.Cryptography;
+using System.Text;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using CommonTool.FileHelps;
 
 namespace YTMusic.Services
 {
@@ -34,6 +38,46 @@ namespace YTMusic.Services
 
         public event Action? OnUploadsChanged;
 
+        public void StartUpload(DownloadedTrack track)
+        {
+            if (track == null || string.IsNullOrWhiteSpace(track.LocalFilePath))
+            {
+                return;
+            }
+
+            DownloadTaskInfo taskInfo;
+            var remoteDirectory = BuildMusicDirectory(_settingsService.RemoteDirectory, track.Title);
+            var taskKey = $"{track.LocalFilePath}|{remoteDirectory}";
+
+            lock (_syncRoot)
+            {
+                var hasActiveDuplicate = _activeUploads.Any(upload =>
+                    string.Equals(upload.TaskKey, taskKey, StringComparison.OrdinalIgnoreCase) &&
+                    (upload.Status == DownloadStatus.Pending || upload.Status == DownloadStatus.Downloading));
+
+                if (hasActiveDuplicate)
+                {
+                    return;
+                }
+
+                taskInfo = new DownloadTaskInfo
+                {
+                    TaskKey = taskKey,
+                    Kind = TransferKind.Upload,
+                    Title = track.Title,
+                    SourcePath = track.LocalFilePath,
+                    DestinationPath = remoteDirectory,
+                    Status = DownloadStatus.Pending
+                };
+
+                _activeUploads.Add(taskInfo);
+                TrimHistory_NoLock();
+            }
+
+            NotifyUploadsChanged();
+            _ = ExecuteTrackUploadAsync(track, taskInfo);
+        }
+
         public void StartUpload(string localFilePath, string displayName)
         {
             DownloadTaskInfo taskInfo;
@@ -65,6 +109,70 @@ namespace YTMusic.Services
 
             NotifyUploadsChanged();
             _ = ExecuteUploadAsync(taskInfo);
+        }
+
+        private async Task ExecuteTrackUploadAsync(DownloadedTrack track, DownloadTaskInfo taskInfo)
+        {
+            lock (_syncRoot)
+            {
+                taskInfo.Status = DownloadStatus.Downloading;
+                taskInfo.ErrorMessage = null;
+            }
+            NotifyUploadsChanged();
+
+            try
+            {
+                var remoteDirectory = BuildMusicDirectory(_settingsService.RemoteDirectory, track.Title);
+                await _aListUploadService.CreateDirectoryAsync(remoteDirectory);
+
+                var mediaFileName = Path.GetFileName(track.LocalFilePath);
+                var remoteMediaPath = AListUploadService.BuildRemotePath(remoteDirectory, mediaFileName);
+
+                var mediaProgress = new Progress<double>(p =>
+                {
+                    UpdateCombinedProgress(taskInfo, track.ThumbnailUrl, p, 0);
+                });
+
+                await _aListUploadService.UploadFileToPathAsync(track.LocalFilePath, remoteMediaPath, mediaProgress);
+
+                if (!string.IsNullOrWhiteSpace(track.ThumbnailUrl))
+                {
+                    var coverFileName = BuildCoverFileName(track.ThumbnailUrl);
+                    var remoteCoverPath = AListUploadService.BuildRemotePath(remoteDirectory, coverFileName);
+                    var coverProgress = new Progress<double>(p =>
+                    {
+                        UpdateCombinedProgress(taskInfo, track.ThumbnailUrl, 1.0, p);
+                    });
+
+                    await _aListUploadService.UploadCoverAsync(track.ThumbnailUrl, remoteCoverPath, coverProgress);
+                }
+
+                lock (_syncRoot)
+                {
+                    taskInfo.DestinationPath = remoteDirectory;
+                    taskInfo.Status = DownloadStatus.Completed;
+                    taskInfo.Progress = 1.0;
+                }
+
+                await _localMusicService.MarkTrackUploadedAsync(track.LocalFilePath, remoteDirectory);
+            }
+            catch (Exception ex)
+            {
+                lock (_syncRoot)
+                {
+                    taskInfo.Status = DownloadStatus.Failed;
+                    taskInfo.ErrorMessage = ex.Message;
+                }
+            }
+            finally
+            {
+                lock (_syncRoot)
+                {
+                    TrimHistory_NoLock();
+                }
+
+                NotifyUploadsChanged();
+            }
         }
 
         private async Task ExecuteUploadAsync(DownloadTaskInfo taskInfo)
@@ -126,6 +234,55 @@ namespace YTMusic.Services
         private void NotifyUploadsChanged()
         {
             OnUploadsChanged?.Invoke();
+        }
+
+        private void UpdateCombinedProgress(DownloadTaskInfo taskInfo, string? thumbnailUrl, double mediaProgress, double coverProgress)
+        {
+            var hasCover = !string.IsNullOrWhiteSpace(thumbnailUrl);
+            var combined = hasCover
+                ? (mediaProgress * 0.9) + (coverProgress * 0.1)
+                : mediaProgress;
+
+            bool shouldNotify;
+            lock (_syncRoot)
+            {
+                shouldNotify = Math.Abs(taskInfo.Progress - combined) >= 0.005 || combined >= 1.0;
+                taskInfo.Progress = combined;
+            }
+
+            if (shouldNotify)
+            {
+                NotifyUploadsChanged();
+            }
+        }
+
+        private static string BuildMusicDirectory(string baseDirectory, string title)
+        {
+            var source = string.IsNullOrWhiteSpace(title) ? "unknown" : title.Trim();
+            using var md5 = MD5.Create();
+            var bytes = Encoding.UTF8.GetBytes(source);
+            var hashBytes = md5.ComputeHash(bytes);
+            var hash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+            return AListUploadService.BuildRemotePath(baseDirectory, hash);
+        }
+
+        private static string BuildCoverFileName(string thumbnailUrl)
+        {
+            var extension = ".jpg";
+            try
+            {
+                var uri = new Uri(thumbnailUrl, UriKind.Absolute);
+                var candidate = Path.GetExtension(uri.AbsolutePath);
+                if (!string.IsNullOrWhiteSpace(candidate) && candidate.Length <= 5)
+                {
+                    extension = candidate;
+                }
+            }
+            catch
+            {
+            }
+
+            return $"cover{extension}";
         }
 
         private void TrimHistory_NoLock()

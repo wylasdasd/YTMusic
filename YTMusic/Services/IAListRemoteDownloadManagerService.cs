@@ -5,5 +5,6 @@ namespace YTMusic.Services
         System.Collections.Generic.IReadOnlyList<DownloadTaskInfo> ActiveRemoteDownloads { get; }
         event System.Action? OnRemoteDownloadsChanged;
         void StartRemoteDownload(AListDirectoryItem item);
+        void StartRemoteDirectoryDownload(AListDirectoryItem item, string? displayTitle = null);
     }
 }
