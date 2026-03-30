@@ -106,6 +106,34 @@ namespace YTMusic.Components.Pages
             StateHasChanged?.Invoke();
         }
 
+        public async Task CreateRemoteDirectoryAsync()
+        {
+            if (!_settingsService.IsConfigured ||
+                !string.Equals(BaseUrl, _settingsService.BaseUrl, StringComparison.Ordinal) ||
+                !string.Equals(Token, _settingsService.Token, StringComparison.Ordinal) ||
+                !string.Equals(AListUploadSettingsService.NormalizeDirectory(RemoteDirectory), _settingsService.RemoteDirectory, StringComparison.Ordinal))
+            {
+                await SaveSettingsAsync();
+            }
+
+            if (!_settingsService.IsConfigured)
+            {
+                _snackbar.Add("Please complete AList server, token, and remote directory settings first.", Severity.Warning);
+                return;
+            }
+
+            try
+            {
+                await _aListUploadService.CreateDirectoryAsync(_settingsService.RemoteDirectory);
+                _snackbar.Add($"Directory ready: {_settingsService.RemoteDirectory}", Severity.Success);
+                await RefreshRemoteFilesAsync();
+            }
+            catch (Exception ex)
+            {
+                _snackbar.Add($"Failed to create directory: {ex.Message}", Severity.Error);
+            }
+        }
+
         public async Task RefreshDownloadedFilesAsync()
         {
             IsLoading = true;

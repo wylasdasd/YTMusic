@@ -49,6 +49,9 @@
                     <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ViewModel.PickAndUploadFilesAsync">
                         Choose Files
                     </MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ViewModel.CreateRemoteDirectoryAsync">
+                        Create Directory
+                    </MudButton>
                     <MudText Typo="Typo.caption" Color="Color.Secondary">Current target: @ViewModel.NormalizedRemoteDirectory</MudText>
                 </div>
             </ChildContent>
