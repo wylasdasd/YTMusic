@@ -2,7 +2,7 @@
 @using YTMusic.Services
 @implements IDisposable
 
-<div class="d-flex align-center mb-4 gap-4">
+<div class="d-flex align-center justify-center flex-wrap mb-4 gap-4">
     <MudSelect T="int" Value="ViewModel.SelectedFolderId" ValueChanged="ViewModel.SetFolderAsync" Label="Folder"
                Variant="Variant.Outlined" Style="max-width: 200px;">
         @foreach (var folder in ViewModel.Folders)
@@ -19,7 +19,7 @@
     </MudSelect>
 </div>
 
-<div class="d-flex mb-4 gap-4">
+<div class="d-flex justify-center flex-wrap mb-4 gap-4">
     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlayArrow"
                OnClick="PlayAllAsync" Disabled="@(!ViewModel.Tracks.Any())">
         播放全部
@@ -42,7 +42,7 @@ else if (!ViewModel.Tracks.Any())
 }
 else
 {
-    <MudGrid Class="mt-4">
+    <MudGrid Class="mt-4 justify-center">
         @foreach (var track in ViewModel.Tracks)
         {
             <MudItem xs="12" sm="6" md="4" lg="3">
