@@ -47,22 +47,12 @@ namespace YTMusic.Services
 
             DownloadTaskInfo taskInfo;
             var remoteDirectory = BuildMusicDirectory(_settingsService.RemoteDirectory, track.Title);
-            var taskKey = $"{track.LocalFilePath}|{remoteDirectory}";
 
             lock (_syncRoot)
             {
-                var hasActiveDuplicate = _activeUploads.Any(upload =>
-                    string.Equals(upload.TaskKey, taskKey, StringComparison.OrdinalIgnoreCase) &&
-                    (upload.Status == DownloadStatus.Pending || upload.Status == DownloadStatus.Downloading));
-
-                if (hasActiveDuplicate)
-                {
-                    return;
-                }
-
                 taskInfo = new DownloadTaskInfo
                 {
-                    TaskKey = taskKey,
+                    TaskKey = Guid.NewGuid().ToString("N"),
                     Kind = TransferKind.Upload,
                     Title = track.Title,
                     SourcePath = track.LocalFilePath,
@@ -81,22 +71,12 @@ namespace YTMusic.Services
         public void StartUpload(string localFilePath, string displayName)
         {
             DownloadTaskInfo taskInfo;
-            var taskKey = $"{localFilePath}|{_settingsService.RemoteDirectory}";
 
             lock (_syncRoot)
             {
-                var hasActiveDuplicate = _activeUploads.Any(upload =>
-                    string.Equals(upload.TaskKey, taskKey, StringComparison.OrdinalIgnoreCase) &&
-                    (upload.Status == DownloadStatus.Pending || upload.Status == DownloadStatus.Downloading));
-
-                if (hasActiveDuplicate)
-                {
-                    return;
-                }
-
                 taskInfo = new DownloadTaskInfo
                 {
-                    TaskKey = taskKey,
+                    TaskKey = Guid.NewGuid().ToString("N"),
                     Kind = TransferKind.Upload,
                     Title = displayName,
                     SourcePath = localFilePath,

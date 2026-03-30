@@ -40,18 +40,9 @@ namespace YTMusic.Services
 
             lock (_syncRoot)
             {
-                var hasActiveDuplicate = _activeRemoteDownloads.Any(download =>
-                    string.Equals(download.TaskKey, item.Path, StringComparison.OrdinalIgnoreCase) &&
-                    (download.Status == DownloadStatus.Pending || download.Status == DownloadStatus.Downloading));
-
-                if (hasActiveDuplicate)
-                {
-                    return;
-                }
-
                 taskInfo = new DownloadTaskInfo
                 {
-                    TaskKey = item.Path,
+                    TaskKey = Guid.NewGuid().ToString("N"),
                     Kind = TransferKind.RemoteDownload,
                     Title = item.Name,
                     SourcePath = item.Path,
@@ -78,18 +69,9 @@ namespace YTMusic.Services
 
             lock (_syncRoot)
             {
-                var hasActiveDuplicate = _activeRemoteDownloads.Any(download =>
-                    string.Equals(download.TaskKey, item.Path, StringComparison.OrdinalIgnoreCase) &&
-                    (download.Status == DownloadStatus.Pending || download.Status == DownloadStatus.Downloading));
-
-                if (hasActiveDuplicate)
-                {
-                    return;
-                }
-
                 taskInfo = new DownloadTaskInfo
                 {
-                    TaskKey = item.Path,
+                    TaskKey = Guid.NewGuid().ToString("N"),
                     Kind = TransferKind.RemoteDownload,
                     Title = title,
                     SourcePath = item.Path,
@@ -202,7 +184,7 @@ namespace YTMusic.Services
                 }
 
                 var mediaFileName = BuildLocalMediaFileName(resolvedTitle, mediaItem.Name);
-                var localMediaPath = BuildAvailablePath(localDirectory, mediaFileName);
+                var localMediaPath = Path.Combine(localDirectory, FileHelp.SafeFileName(mediaFileName));
 
                 var mediaProgress = new Progress<double>(p => UpdateProgress(taskInfo, coverItem != null, p, 0));
                 await _aListUploadService.DownloadFileToPathAsync(mediaItem.Path, localMediaPath, mediaProgress);
@@ -211,7 +193,7 @@ namespace YTMusic.Services
                 if (coverItem != null)
                 {
                     var coverFileName = BuildLocalCoverFileName(localMediaPath, coverItem.Name);
-                    localCoverPath = BuildAvailablePath(localDirectory, coverFileName);
+                    localCoverPath = Path.Combine(localDirectory, FileHelp.SafeFileName(coverFileName));
                     var coverProgress = new Progress<double>(p => UpdateProgress(taskInfo, true, 1.0, p));
                     await _aListUploadService.DownloadFileToPathAsync(coverItem.Path, localCoverPath, coverProgress);
                 }
@@ -415,23 +397,6 @@ namespace YTMusic.Services
                 ".jpeg" => "image/jpeg",
                 _ => "image/jpeg"
             };
-        }
-
-        private static string BuildAvailablePath(string localDirectory, string fileName)
-        {
-            var safeName = FileHelp.SafeFileName(fileName);
-            var nameWithoutExtension = Path.GetFileNameWithoutExtension(safeName);
-            var extension = Path.GetExtension(safeName);
-            var candidate = Path.Combine(localDirectory, safeName);
-            var index = 1;
-
-            while (File.Exists(candidate))
-            {
-                candidate = Path.Combine(localDirectory, $"{nameWithoutExtension} ({index}){extension}");
-                index++;
-            }
-
-            return candidate;
         }
 
         private void TrimHistory_NoLock()

@@ -281,7 +281,7 @@ namespace YTMusic.Services
 
             var localDirectory = StoragePaths.GetDownloadedMusicDirectory();
             FileHelp.EnsureDirectoryExists(localDirectory);
-            var localFilePath = GetAvailableLocalFilePath(localDirectory, fileName);
+            var localFilePath = Path.Combine(localDirectory, FileHelp.SafeFileName(fileName));
             return await DownloadFileToPathAsync(remotePath, localFilePath, progress, cancellationToken);
         }
 
@@ -471,23 +471,6 @@ namespace YTMusic.Services
             var retryBody = await retryResponse.Content.ReadAsStringAsync(cancellationToken);
             retryResponse.Dispose();
             throw new InvalidOperationException(GetErrorMessage(retryBody, GetErrorMessage(responseBody, $"Download failed with HTTP 401/403.")));
-        }
-
-        private static string GetAvailableLocalFilePath(string localDirectory, string fileName)
-        {
-            var safeName = FileHelp.SafeFileName(fileName);
-            var nameWithoutExtension = Path.GetFileNameWithoutExtension(safeName);
-            var extension = Path.GetExtension(safeName);
-            var candidate = Path.Combine(localDirectory, safeName);
-            var index = 1;
-
-            while (File.Exists(candidate))
-            {
-                candidate = Path.Combine(localDirectory, $"{nameWithoutExtension} ({index}){extension}");
-                index++;
-            }
-
-            return candidate;
         }
 
         private static bool TryGetLocalPath(string source, out string localPath)
