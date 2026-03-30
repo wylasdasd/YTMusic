@@ -12,6 +12,8 @@ namespace YTMusic.Services
         Task ResetAllAsync();
         Task AddDownloadedTrackAsync(DownloadedTrack track);
         Task RemoveDownloadedTrackAsync(string videoId, string filePath);
+        Task MarkTrackUploadedAsync(string localFilePath, string remotePath);
+        Task<DownloadedTrack?> GetDownloadedTrackByRemoteSourcePathAsync(string remoteSourcePath);
         
         // Keep for legacy fallback or direct disk access if needed
         Task<IReadOnlyList<LocalAudioFile>> GetDownloadedAudioFilesAsync();
@@ -27,6 +29,10 @@ namespace YTMusic.Services
         public string LocalFilePath { get; set; } = string.Empty;
         public bool IsVideo { get; set; }
         public DateTime DownloadedDate { get; set; }
+        public bool HasUploaded { get; set; }
+        public DateTime? UploadedDate { get; set; }
+        public string? UploadedRemotePath { get; set; }
+        public string? RemoteSourcePath { get; set; }
     }
 
     public class LocalAudioFile

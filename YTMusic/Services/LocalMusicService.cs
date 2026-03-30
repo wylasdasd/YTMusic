@@ -49,7 +49,11 @@ namespace YTMusic.Services
                     ThumbnailUrl TEXT,
                     LocalFilePath TEXT NOT NULL,
                     IsVideo INTEGER NOT NULL DEFAULT 0,
-                    DownloadedDate DATETIME NOT NULL
+                    DownloadedDate DATETIME NOT NULL,
+                    HasUploaded INTEGER NOT NULL DEFAULT 0,
+                    UploadedDate DATETIME NULL,
+                    UploadedRemotePath TEXT NULL,
+                    RemoteSourcePath TEXT NULL
                 );";
             connection.Execute(createTableSql);
 
@@ -57,6 +61,38 @@ namespace YTMusic.Services
             try
             {
                 connection.Execute("ALTER TABLE DownloadedTracks ADD COLUMN IsVideo INTEGER NOT NULL DEFAULT 0;");
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                connection.Execute("ALTER TABLE DownloadedTracks ADD COLUMN HasUploaded INTEGER NOT NULL DEFAULT 0;");
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                connection.Execute("ALTER TABLE DownloadedTracks ADD COLUMN UploadedDate DATETIME NULL;");
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                connection.Execute("ALTER TABLE DownloadedTracks ADD COLUMN UploadedRemotePath TEXT NULL;");
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                connection.Execute("ALTER TABLE DownloadedTracks ADD COLUMN RemoteSourcePath TEXT NULL;");
             }
             catch
             {
@@ -143,14 +179,63 @@ namespace YTMusic.Services
             return null;
         }
 
+        public async Task<DownloadedTrack?> GetDownloadedTrackByRemoteSourcePathAsync(string remoteSourcePath)
+        {
+            if (string.IsNullOrWhiteSpace(remoteSourcePath))
+            {
+                return null;
+            }
+
+            using var connection = new SqliteConnection(_connectionString);
+            var track = await connection.QueryFirstOrDefaultAsync<DownloadedTrack>(
+                "SELECT * FROM DownloadedTracks WHERE RemoteSourcePath = @RemoteSourcePath LIMIT 1;",
+                new { RemoteSourcePath = remoteSourcePath });
+
+            if (track == null)
+            {
+                return null;
+            }
+
+            if (File.Exists(track.LocalFilePath))
+            {
+                return track;
+            }
+
+            await RemoveDownloadedTrackAsync(track.VideoId, string.Empty);
+            return null;
+        }
+
         public async Task AddDownloadedTrackAsync(DownloadedTrack track)
         {
             using var connection = new SqliteConnection(_connectionString);
             string sql = @"
-                INSERT OR REPLACE INTO DownloadedTracks (VideoId, Title, Author, ThumbnailUrl, LocalFilePath, IsVideo, DownloadedDate) 
-                VALUES (@VideoId, @Title, @Author, @ThumbnailUrl, @LocalFilePath, @IsVideo, @DownloadedDate);";
+                INSERT OR REPLACE INTO DownloadedTracks (VideoId, Title, Author, ThumbnailUrl, LocalFilePath, IsVideo, DownloadedDate, HasUploaded, UploadedDate, UploadedRemotePath, RemoteSourcePath) 
+                VALUES (@VideoId, @Title, @Author, @ThumbnailUrl, @LocalFilePath, @IsVideo, @DownloadedDate, @HasUploaded, @UploadedDate, @UploadedRemotePath, @RemoteSourcePath);";
                 
             await connection.ExecuteAsync(sql, track);
+        }
+
+        public async Task MarkTrackUploadedAsync(string localFilePath, string remotePath)
+        {
+            if (string.IsNullOrWhiteSpace(localFilePath))
+            {
+                return;
+            }
+
+            using var connection = new SqliteConnection(_connectionString);
+            const string sql = @"
+                UPDATE DownloadedTracks
+                SET HasUploaded = 1,
+                    UploadedDate = @UploadedDate,
+                    UploadedRemotePath = @UploadedRemotePath
+                WHERE LocalFilePath = @LocalFilePath;";
+
+            await connection.ExecuteAsync(sql, new
+            {
+                LocalFilePath = localFilePath,
+                UploadedDate = DateTime.UtcNow,
+                UploadedRemotePath = remotePath
+            });
         }
 
         public async Task ResetAllAsync()

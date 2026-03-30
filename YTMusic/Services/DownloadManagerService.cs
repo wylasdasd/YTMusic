@@ -53,6 +53,8 @@ namespace YTMusic.Services
 
                 taskInfo = new DownloadTaskInfo
                 {
+                    TaskKey = $"{videoId}:{isVideo}",
+                    Kind = TransferKind.Download,
                     VideoId = videoId,
                     Title = title,
                     IsVideo = isVideo,
@@ -113,6 +115,7 @@ namespace YTMusic.Services
 
                 lock (_syncRoot)
                 {
+                    taskInfo.DestinationPath = filePath;
                     taskInfo.Status = DownloadStatus.Completed;
                     taskInfo.Progress = 1.0;
                 }

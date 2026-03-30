@@ -30,14 +30,14 @@
     </MudChip>
 </div>
 
-@if (!ViewModel.FilteredDownloads.Any())
+@if (!ViewModel.FilteredTransfers.Any())
 {
     <MudAlert Severity="Severity.Info" Class="mt-4">@GetEmptyMessage()</MudAlert>
 }
 else
 {
     <div class="d-flex flex-column gap-4 mt-4">
-        @foreach (var task in ViewModel.FilteredDownloads.Reverse())
+        @foreach (var task in ViewModel.FilteredTransfers.Reverse())
         {
             <MudPaper Elevation="2" Class="pa-4">
                 <div class="d-flex justify-space-between align-center mb-2">
@@ -45,7 +45,7 @@ else
                         @task.Title
                     </MudText>
                     <MudChip Size="Size.Small" Color="GetStatusColor(task.Status)" T="string">
-                        @(task.IsVideo ? "Video" : "Audio") - @task.Status.ToString()
+                        @GetTaskLabel(task)
                     </MudChip>
                 </div>
                 
@@ -57,6 +57,10 @@ else
                 else if (task.Status == DownloadStatus.Failed)
                 {
                     <MudText Typo="Typo.caption" Color="Color.Error">@task.ErrorMessage</MudText>
+                }
+                else if (task.Kind == TransferKind.Upload && !string.IsNullOrWhiteSpace(task.DestinationPath))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">AList: @task.DestinationPath</MudText>
                 }
             </MudPaper>
         }
@@ -87,9 +91,24 @@ else
 
     private string GetEmptyMessage() => ViewModel.CurrentFilter switch
     {
-        TransfersVM.TransferFilter.Active => "No active downloads.",
-        TransfersVM.TransferFilter.Completed => "No completed downloads yet.",
-        TransfersVM.TransferFilter.Failed => "No failed downloads.",
+        TransfersVM.TransferFilter.Active => "No active transfers.",
+        TransfersVM.TransferFilter.Completed => "No completed transfers yet.",
+        TransfersVM.TransferFilter.Failed => "No failed transfers.",
         _ => "No transfers yet."
     };
+
+    private string GetTaskLabel(DownloadTaskInfo task)
+    {
+        if (task.Kind == TransferKind.Upload)
+        {
+            return $"Upload - {task.Status}";
+        }
+
+        if (task.Kind == TransferKind.RemoteDownload)
+        {
+            return $"AList Download - {task.Status}";
+        }
+
+        return $"{(task.IsVideo ? "Video" : "Audio")} Download - {task.Status}";
+    }
 }

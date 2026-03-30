@@ -60,9 +60,13 @@ namespace YTMusic
             builder.Services.AddSingleton<ILocalMusicService, LocalMusicService>();
             builder.Services.AddSingleton<GlobalStateService>();
             builder.Services.AddSingleton<UiPreferencesService>();
+            builder.Services.AddSingleton<AListUploadSettingsService>();
             builder.Services.AddSingleton<AppResetService>();
             builder.Services.AddSingleton<IFavoriteService, FavoriteService>();
             builder.Services.AddSingleton<IDownloadManagerService, DownloadManagerService>();
+            builder.Services.AddSingleton<AListUploadService>();
+            builder.Services.AddSingleton<IUploadManagerService, UploadManagerService>();
+            builder.Services.AddSingleton<IAListRemoteDownloadManagerService, AListRemoteDownloadManagerService>();
             builder.Services.AddSingleton<MusicPlayerService>();
             builder.Services.AddSingleton<WindowChromeService>();
 #if ANDROID
@@ -79,6 +83,7 @@ namespace YTMusic
             builder.Services.AddTransient<YTMusic.Components.Pages.DownloadsVM>();
             builder.Services.AddTransient<YTMusic.Components.Pages.TransfersVM>();
             builder.Services.AddTransient<YTMusic.Components.Pages.FavoritesVM>();
+            builder.Services.AddTransient<YTMusic.Components.Pages.UploadVM>();
             builder.Services.AddMudServices();
 
 #if DEBUG
