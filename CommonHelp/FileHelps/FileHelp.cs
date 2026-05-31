@@ -23,8 +23,15 @@ namespace CommonTool.FileHelps
         {
             if (string.IsNullOrWhiteSpace(path))
                 return;
+                
 
-            var dir = Path.GetDirectoryName(path) ?? path;
+            // 约定：传入目录路径时创建该目录；传入文件路径时创建其父目录。
+            // 仅使用 Path.GetDirectoryName 会把目录路径错误地解析为其父目录（例如 C:\a\b 会得到 C:\a）。
+            // 这里按“像文件路径”与“像目录路径”做区分，优先保证目录路径可被正确创建。
+            var dir = Path.HasExtension(path)
+                ? (Path.GetDirectoryName(path) ?? path)
+                : path;
+
             if (string.IsNullOrWhiteSpace(dir))
                 return;
 

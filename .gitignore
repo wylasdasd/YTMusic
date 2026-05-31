@@ -361,3 +361,8 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Ignore nested git metadata under CommonHelp
+/CommonHelp/.git/
+/CommonHelp/.gitignore
+/CommonHelp/.gitattributes

@@ -13,6 +13,24 @@
             "stopAtEntry": false
         },
         {
+            "name": "Cursor: .NET MAUI Windows (YTMusic)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "dotnet",
+            "args": [
+                "run",
+                "--project",
+                "${workspaceFolder}/YTMusic/YTMusic.csproj",
+                "-f",
+                "net10.0-windows10.0.19041.0",
+                "--no-build"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "stopAtEntry": false
+        },
+        {
             "name": ".NET Core Launch (console) - Tests",
             "type": "coreclr",
             "request": "launch",
