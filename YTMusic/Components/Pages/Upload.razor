@@ -8,8 +8,8 @@
             <TitleContent>
                 <div class="d-flex align-center justify-space-between flex-grow-1 pr-2">
                     <div>
-                        <MudText Typo="Typo.h6">AList Upload Settings</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">默认收起，需要时再展开修改。</MudText>
+                        <MudText Typo="Typo.h6">Upload Settings</MudText>
+
                     </div>
                     <MudChip T="string" Color="@(ViewModel.IsConfigured ? Color.Success : Color.Warning)">
                         @(ViewModel.IsConfigured ? "Configured" : "Need Settings")
@@ -59,15 +59,11 @@
     </MudExpansionPanels>
 
     <MudTabs Elevation="1" Rounded="true" @bind-ActivePanelIndex="ViewModel.SelectedTabIndex">
-        <MudTabPanel Text="Upload Local">
+        <MudTabPanel Text="Upload Local"
+                     BadgeData="@GetUploadLocalTabBadgeData()"
+                     BadgeColor="Color.Error">
             <MudPaper Elevation="2" Class="pa-4 mb-4">
-                <div class="d-flex align-center justify-space-between flex-wrap gap-3 mb-3">
-                    <div>
-                        <MudText Typo="Typo.h6">Downloaded Files</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">从本地下载列表里挑选后上传到 AList，结构为 Remote Directory/&lt;歌名md5&gt;/&lt;md5&gt;.音视频 + metadata.json（DownloadedTracks 子集）。</MudText>
-                    </div>
-                    <MudChip T="string" Color="Color.Primary">@ViewModel.SelectedFilePaths.Count selected</MudChip>
-                </div>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">从本地下载列表里挑选后上传到 AList</MudText>
 
                 <div class="d-flex flex-wrap gap-3 align-center">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!ViewModel.HasSelection)" OnClick="ViewModel.UploadSelectedAsync">
@@ -172,15 +168,11 @@
             }
         </MudTabPanel>
 
-        <MudTabPanel Text="Uploaded Files">
+        <MudTabPanel Text="Uploaded Files"
+                     BadgeData="@GetUploadedFilesTabBadgeData()"
+                     BadgeColor="Color.Info">
             <MudPaper Elevation="2" Class="pa-4 mb-4">
-                <div class="d-flex align-center justify-space-between flex-wrap gap-3 mb-3">
-                    <div>
-                    
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">根据 Remote Directory 浏览远端目录，优先读取 metadata.json（与 DownloadedTracks 同字段子集）。</MudText>
-                    </div>
-                    <MudChip T="string" Color="Color.Info">@ViewModel.RemoteFiles.Count files</MudChip>
-                </div>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">根据 Remote Directory 浏览远端目录</MudText>
 
                 <div class="d-flex flex-wrap gap-3 align-center">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!ViewModel.IsConfigured)" OnClick="ViewModel.RefreshRemoteFilesAsync">
@@ -255,6 +247,12 @@
     {
         ViewModel.Dispose();
     }
+
+    private string? GetUploadLocalTabBadgeData()
+        => ViewModel.HasSelection ? $"{ViewModel.SelectedFilePaths.Count}" : null;
+
+    private string? GetUploadedFilesTabBadgeData()
+        => ViewModel.RemoteFiles.Count > 0 ? $"{ViewModel.RemoteFiles.Count}" : null;
 
     private static Color GetStatusColor(DownloadStatus status) => status switch
     {
