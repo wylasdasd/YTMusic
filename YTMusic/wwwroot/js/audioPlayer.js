@@ -124,7 +124,7 @@ window.audioPlayer = {
         this.nativeVideo = null;
     },
 
-    loadAndPlay: function (url, isWebM, isVideo) {
+    loadSource: function (url, isWebM, isVideo) {
         if (!url) return;
 
         this.pendingUrl = url;
@@ -154,7 +154,11 @@ window.audioPlayer = {
         }
 
         this.activePlayer.src = url;
-        this.activePlayer.play().catch(e => this.reportError("loadAndPlay.play", this.activePlayer, e));
+    },
+
+    loadAndPlay: function (url, isWebM, isVideo) {
+        this.loadSource(url, isWebM, isVideo);
+        this.play();
     },
 
     play: function () {

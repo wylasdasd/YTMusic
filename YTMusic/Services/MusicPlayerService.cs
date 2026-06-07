@@ -993,6 +993,8 @@ namespace YTMusic.Services
 
         public async Task PauseAsync()
         {
+            SetPlayingState(false);
+
             if (IsUsingNativePlayback)
             {
                 await _nativeAudio.PauseAsync();
@@ -1004,7 +1006,6 @@ namespace YTMusic.Services
             else
             {
                 OnRequestPause?.Invoke();
-                SetPlayingState(false);
             }
         }
 
@@ -1027,6 +1028,8 @@ namespace YTMusic.Services
                 return;
             }
 
+            SetPlayingState(true);
+
             if (IsUsingNativePlayback)
             {
                 await _nativeAudio.ResumeAsync();
@@ -1038,7 +1041,6 @@ namespace YTMusic.Services
             else
             {
                 OnRequestPlay?.Invoke();
-                SetPlayingState(true);
             }
         }
 

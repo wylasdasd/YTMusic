@@ -53,7 +53,7 @@
                 {
                     _lastUrl = PlayerService.CurrentStreamUrl;
                     _lastIsVideo = PlayerService.IsCurrentStreamVideo;
-                    await JSRuntime.InvokeVoidAsync("audioPlayer.loadAndPlay", PlayerService.CurrentStreamUrl, PlayerService.IsCurrentStreamWebM, PlayerService.IsCurrentStreamVideo);
+                    await SyncWebStreamAsync();
                 }
             }
             catch (Exception ex)
@@ -74,8 +74,27 @@
             {
                 _lastUrl = PlayerService.CurrentStreamUrl;
                 _lastIsVideo = PlayerService.IsCurrentStreamVideo;
-                await JSRuntime.InvokeVoidAsync("audioPlayer.loadAndPlay", PlayerService.CurrentStreamUrl, PlayerService.IsCurrentStreamWebM, PlayerService.IsCurrentStreamVideo);
+                await SyncWebStreamAsync();
             }
+        }
+    }
+
+    private async Task SyncWebStreamAsync()
+    {
+        if (PlayerService.IsUsingNativePlayback || PlayerService.CurrentStreamUrl == null)
+        {
+            return;
+        }
+
+        await JSRuntime.InvokeVoidAsync(
+            "audioPlayer.loadSource",
+            PlayerService.CurrentStreamUrl,
+            PlayerService.IsCurrentStreamWebM,
+            PlayerService.IsCurrentStreamVideo);
+
+        if (PlayerService.IsPlaying)
+        {
+            await JSRuntime.InvokeVoidAsync("audioPlayer.play");
         }
     }
 

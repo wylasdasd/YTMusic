@@ -1,0 +1,50 @@
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body1">
+            确定要取消收藏「@TrackTitle」吗？
+        </MudText>
+        @if (IsDownloaded)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+                本地已下载文件可仅移出收藏夹，或同时删除文件。
+            </MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Color="Color.Default">取消</MudButton>
+        @if (IsDownloaded)
+        {
+            <MudButton OnClick="UnfavoriteOnly" Color="Color.Primary" Variant="Variant.Outlined">仅取消收藏</MudButton>
+            <MudButton OnClick="UnfavoriteAndDelete" Color="Color.Error" Variant="Variant.Filled">取消收藏并删除文件</MudButton>
+        }
+        else
+        {
+            <MudButton OnClick="UnfavoriteOnly" Color="Color.Error" Variant="Variant.Filled">取消收藏</MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+  [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+  [Parameter] public string TrackTitle { get; set; } = string.Empty;
+
+  [Parameter] public bool IsDownloaded { get; set; }
+
+  private void Cancel()
+  {
+    MudDialog.Cancel();
+  }
+
+  private void UnfavoriteOnly()
+  {
+    MudDialog.Close(DialogResult.Ok("unfavorite"));
+  }
+
+  private void UnfavoriteAndDelete()
+  {
+    MudDialog.Close(DialogResult.Ok("delete"));
+  }
+}
