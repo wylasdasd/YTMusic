@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Security.Cryptography;
-using System.Text;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using CommonTool.FileHelps;
 
@@ -102,36 +102,65 @@ namespace YTMusic.Services
 
             try
             {
-                var remoteDirectory = BuildMusicDirectory(_settingsService.RemoteDirectory, track.Title);
+                var directoryKey = BuildMusicDirectoryKey(track.Title);
+                var remoteDirectory = AListUploadService.BuildRemotePath(_settingsService.RemoteDirectory, directoryKey);
                 await _aListUploadService.CreateDirectoryAsync(remoteDirectory);
 
-                var mediaFileName = Path.GetFileName(track.LocalFilePath);
+                var mediaExtension = Path.GetExtension(track.LocalFilePath);
+                var mediaFileName = $"{directoryKey}{mediaExtension}";
                 var remoteMediaPath = AListUploadService.BuildRemotePath(remoteDirectory, mediaFileName);
+                var hasCover = !string.IsNullOrWhiteSpace(track.ThumbnailUrl);
+                string? coverFileName = null;
 
                 var mediaProgress = new Progress<double>(p =>
                 {
-                    UpdateCombinedProgress(taskInfo, track.ThumbnailUrl, p, 0);
+                    UpdateCombinedProgress(taskInfo, hasCover, p, 0, 0);
                 });
 
                 await _aListUploadService.UploadFileToPathAsync(track.LocalFilePath, remoteMediaPath, mediaProgress);
 
-                if (!string.IsNullOrWhiteSpace(track.ThumbnailUrl))
+                string? coverError = null;
+                if (hasCover)
                 {
-                    var coverFileName = BuildCoverFileName(track.ThumbnailUrl);
+                    coverFileName = BuildCoverFileName(track.ThumbnailUrl!);
                     var remoteCoverPath = AListUploadService.BuildRemotePath(remoteDirectory, coverFileName);
                     var coverProgress = new Progress<double>(p =>
                     {
-                        UpdateCombinedProgress(taskInfo, track.ThumbnailUrl, 1.0, p);
+                        UpdateCombinedProgress(taskInfo, true, 1.0, p, 0);
                     });
 
-                    await _aListUploadService.UploadCoverAsync(track.ThumbnailUrl, remoteCoverPath, coverProgress);
+                    try
+                    {
+                        await _aListUploadService.UploadCoverAsync(track.ThumbnailUrl, remoteCoverPath, coverProgress);
+                    }
+                    catch (Exception ex)
+                    {
+                        coverError = ex.Message;
+                        coverFileName = null;
+                    }
                 }
+
+                var metadata = new RemoteTrackMetadata
+                {
+                    Title = track.Title,
+                    Author = track.Author ?? string.Empty,
+                    CoverPath = coverFileName
+                };
+                var remoteMetadataPath = AListUploadService.BuildRemotePath(remoteDirectory, RemoteTrackMetadata.FileName);
+                var metadataProgress = new Progress<double>(p =>
+                {
+                    UpdateCombinedProgress(taskInfo, hasCover, hasCover ? 1.0 : 0.9, hasCover ? 1.0 : 0, p);
+                });
+                await _aListUploadService.UploadJsonToPathAsync(metadata, remoteMetadataPath, metadataProgress);
 
                 lock (_syncRoot)
                 {
                     taskInfo.DestinationPath = remoteDirectory;
                     taskInfo.Status = DownloadStatus.Completed;
                     taskInfo.Progress = 1.0;
+                    taskInfo.ErrorMessage = string.IsNullOrWhiteSpace(coverError)
+                        ? null
+                        : $"音频和 metadata 已上传，封面失败: {coverError}";
                 }
 
                 await _localMusicService.MarkTrackUploadedAsync(track.LocalFilePath, remoteDirectory);
@@ -216,12 +245,11 @@ namespace YTMusic.Services
             OnUploadsChanged?.Invoke();
         }
 
-        private void UpdateCombinedProgress(DownloadTaskInfo taskInfo, string? thumbnailUrl, double mediaProgress, double coverProgress)
+        private void UpdateCombinedProgress(DownloadTaskInfo taskInfo, bool hasCover, double mediaProgress, double coverProgress, double metadataProgress)
         {
-            var hasCover = !string.IsNullOrWhiteSpace(thumbnailUrl);
             var combined = hasCover
-                ? (mediaProgress * 0.9) + (coverProgress * 0.1)
-                : mediaProgress;
+                ? (mediaProgress * 0.85) + (coverProgress * 0.1) + (metadataProgress * 0.05)
+                : (mediaProgress * 0.9) + (metadataProgress * 0.1);
 
             bool shouldNotify;
             lock (_syncRoot)
@@ -238,12 +266,16 @@ namespace YTMusic.Services
 
         private static string BuildMusicDirectory(string baseDirectory, string title)
         {
+            return AListUploadService.BuildRemotePath(baseDirectory, BuildMusicDirectoryKey(title));
+        }
+
+        private static string BuildMusicDirectoryKey(string title)
+        {
             var source = string.IsNullOrWhiteSpace(title) ? "unknown" : title.Trim();
             using var md5 = MD5.Create();
             var bytes = Encoding.UTF8.GetBytes(source);
             var hashBytes = md5.ComputeHash(bytes);
-            var hash = Convert.ToHexString(hashBytes).ToLowerInvariant();
-            return AListUploadService.BuildRemotePath(baseDirectory, hash);
+            return Convert.ToHexString(hashBytes).ToLowerInvariant();
         }
 
         private static string BuildCoverFileName(string thumbnailUrl)

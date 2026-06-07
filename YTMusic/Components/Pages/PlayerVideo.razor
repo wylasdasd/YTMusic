@@ -32,15 +32,7 @@
             <div class="player-content player-content--video">
                 @if (!PlayerService.UseNativeVideoPlayback)
                 {
-                    <div class="player-video-frame">
-                        <video @ref="_videoElement"
-                               autoplay
-                               playsinline
-                               controls
-                               preload="metadata"
-                               poster="@currentVideo.ThumbnailUrl"
-                               class="player-video" />
-                    </div>
+                    <div class="player-video-frame" @ref="_videoFrame"></div>
                 }
 
                 <div class="player-meta player-meta--video">
@@ -86,8 +78,8 @@
     private bool IsFavorite = false;
     private string? _currentCheckedVideoId;
     private string? _currentCheckedVideoSourceId;
-    private ElementReference _videoElement;
-    private bool _videoBound;
+    private ElementReference _videoFrame;
+    private bool _videoAttached;
     private bool CanPlayVideo;
 
     protected override void OnInitialized()
@@ -115,10 +107,10 @@
             return;
         }
 
-        if (PlayerService.CurrentVideo != null && !_videoBound)
+        if (PlayerService.CurrentVideo != null && !_videoAttached)
         {
-            await JSRuntime.InvokeVoidAsync("audioPlayer.setVideoElement", _videoElement);
-            _videoBound = true;
+            await JSRuntime.InvokeVoidAsync("audioPlayer.attachVideoTo", _videoFrame);
+            _videoAttached = true;
         }
     }
 
@@ -136,14 +128,33 @@
             {
                 _ = JSRuntime.InvokeVoidAsync("audioPlayer.clearVideoElement");
             }
-            _videoBound = false;
+            _videoAttached = false;
             NavigationManager.NavigateTo("/player/audio", replace: true);
             return;
         }
 
         _ = CheckFavoriteStatusAsync();
         _ = CheckVideoAvailabilityAsync();
+        _ = AttachVideoIfNeededAsync();
         InvokeAsync(StateHasChanged);
+    }
+
+    private async Task AttachVideoIfNeededAsync()
+    {
+        if (PlayerService.UseNativeVideoPlayback || _videoAttached || PlayerService.CurrentVideo == null)
+        {
+            return;
+        }
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("audioPlayer.attachVideoTo", _videoFrame);
+            _videoAttached = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[PlayerVideo] attach video failed: {ex.Message}");
+        }
     }
 
     protected override void OnAfterRender(bool firstRender)
@@ -260,7 +271,8 @@
                 await JSRuntime.InvokeVoidAsync("audioPlayer.clearVideoElement");
             }
 
-            _videoBound = false;
+            await JSRuntime.InvokeVoidAsync("audioPlayer.detachVideo");
+            _videoAttached = false;
             NavigationManager.NavigateTo("/player/audio", replace: true);
         }
     }
@@ -283,10 +295,10 @@
     public void Dispose()
     {
         PlayerService.OnChange -= OnStateChanged;
-        if (!PlayerService.UseNativeVideoPlayback)
+        if (!PlayerService.UseNativeVideoPlayback && PlayerService.IsCurrentStreamVideo)
         {
-            _ = JSRuntime.InvokeVoidAsync("audioPlayer.clearVideoElement");
+            _ = JSRuntime.InvokeVoidAsync("audioPlayer.detachVideo");
         }
-        _videoBound = false;
+        _videoAttached = false;
     }
 }

@@ -431,9 +431,25 @@ namespace YTMusic.Components.Pages
             try
             {
                 var children = await _aListUploadService.ListDirectoryItemsAsync(directoryPath);
+                var metadataItem = children.FirstOrDefault(child =>
+                    !child.IsDir &&
+                    child.Name.Equals(RemoteTrackMetadata.FileName, StringComparison.OrdinalIgnoreCase));
+                if (metadataItem != null)
+                {
+                    var metadata = await _aListUploadService.TryDownloadJsonAsync<RemoteTrackMetadata>(metadataItem.Path);
+                    if (!string.IsNullOrWhiteSpace(metadata?.Title))
+                    {
+                        return metadata.Title;
+                    }
+                }
+
+                var directoryKey = directoryPath.TrimEnd('/').Split('/').LastOrDefault();
                 var mediaItem = children
                     .Where(child => !child.IsDir && IsMediaFile(child.Name))
-                    .OrderByDescending(child => child.Size)
+                    .OrderByDescending(child =>
+                        !string.IsNullOrWhiteSpace(directoryKey) &&
+                        string.Equals(Path.GetFileNameWithoutExtension(child.Name), directoryKey, StringComparison.OrdinalIgnoreCase))
+                    .ThenByDescending(child => child.Size)
                     .FirstOrDefault();
 
                 return mediaItem == null

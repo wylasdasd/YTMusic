@@ -3,11 +3,16 @@
 @inject IJSRuntime JSRuntime
 @implements IDisposable
 
-<!-- Persistent audio element across navigation -->
+<!-- Persistent media elements across navigation -->
 <audio @ref="_audioElement" autoplay style="display:none;" />
+<div @ref="_videoHost" class="ytm-global-video-host" aria-hidden="true">
+    <video @ref="_videoElement" playsinline preload="metadata" controls class="ytm-global-video" />
+</div>
 
 @code {
     private ElementReference _audioElement;
+    private ElementReference _videoElement;
+    private ElementReference _videoHost;
     private DotNetObjectReference<GlobalAudioPlayer>? _objRef;
     private string? _lastUrl = null;
     private bool _lastIsVideo;
@@ -68,7 +73,7 @@
         if (firstRender)
         {
             _objRef = DotNetObjectReference.Create(this);
-            await JSRuntime.InvokeVoidAsync("audioPlayer.init", _audioElement, null, _objRef);
+            await JSRuntime.InvokeVoidAsync("audioPlayer.init", _audioElement, _videoElement, _videoHost, _objRef);
 
             if (!PlayerService.IsUsingNativePlayback && PlayerService.CurrentStreamUrl != null)
             {

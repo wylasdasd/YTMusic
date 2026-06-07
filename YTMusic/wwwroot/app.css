@@ -2,6 +2,24 @@ html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
+.ytm-global-video-host {
+    display: none;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
+.ytm-global-video,
+video.player-video {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    aspect-ratio: 16 / 9;
+    max-height: min(48dvh, 400px);
+    background: #000;
+    object-fit: contain;
+}
+
 .app-startup-loading {
     min-height: 100vh;
     display: flex;

@@ -166,22 +166,30 @@ namespace YTMusic.Services
 
             try
             {
+                var directoryKey = directoryItem.Name;
                 var resolvedTitle = await ResolveDirectoryTitleAsync(directoryItem.Path, title);
                 var children = await _aListUploadService.ListDirectoryItemsAsync(directoryItem.Path);
-                var mediaItem = SelectMediaItem(children);
+                var metadata = await TryLoadRemoteMetadataAsync(children, directoryItem.Path);
+                var mediaItem = SelectMediaItem(children, directoryKey);
                 if (mediaItem == null)
                 {
                     throw new InvalidOperationException("No audio or video file was found in this AList directory.");
                 }
 
-                var coverItem = SelectCoverItem(children);
+                var coverItem = SelectCoverItem(children, metadata?.CoverPath);
                 var localDirectory = StoragePaths.GetDownloadedMusicDirectory();
                 FileHelp.EnsureDirectoryExists(localDirectory);
 
-                if (IsLikelyMd5(resolvedTitle))
+                if (metadata != null && !string.IsNullOrWhiteSpace(metadata.Title))
+                {
+                    resolvedTitle = metadata.Title;
+                }
+                else if (IsLikelyMd5(resolvedTitle))
                 {
                     resolvedTitle = Path.GetFileNameWithoutExtension(mediaItem.Name);
                 }
+
+                var resolvedAuthor = string.IsNullOrWhiteSpace(metadata?.Author) ? "AList" : metadata.Author;
 
                 var mediaFileName = BuildLocalMediaFileName(resolvedTitle, mediaItem.Name);
                 var localMediaPath = Path.Combine(localDirectory, FileHelp.SafeFileName(mediaFileName));
@@ -202,7 +210,7 @@ namespace YTMusic.Services
                 {
                     VideoId = $"alist:{mediaItem.Path}",
                     Title = resolvedTitle,
-                    Author = "AList",
+                    Author = resolvedAuthor,
                     ThumbnailUrl = string.IsNullOrWhiteSpace(localCoverPath) ? null : BuildCoverDataUrl(localCoverPath),
                     LocalFilePath = localMediaPath,
                     IsVideo = IsVideoFile(mediaItem.Name),
@@ -295,16 +303,55 @@ namespace YTMusic.Services
             }
         }
 
-        private static AListDirectoryItem? SelectMediaItem(IReadOnlyList<AListDirectoryItem> items)
+        private async Task<RemoteTrackMetadata?> TryLoadRemoteMetadataAsync(IReadOnlyList<AListDirectoryItem> items, string directoryPath)
         {
-            return items
+            var metadataItem = items.FirstOrDefault(item =>
+                !item.IsDir &&
+                item.Name.Equals(RemoteTrackMetadata.FileName, StringComparison.OrdinalIgnoreCase));
+
+            if (metadataItem == null)
+            {
+                var metadataPath = AListUploadService.BuildRemotePath(directoryPath, RemoteTrackMetadata.FileName);
+                return await _aListUploadService.TryDownloadJsonAsync<RemoteTrackMetadata>(metadataPath);
+            }
+
+            return await _aListUploadService.TryDownloadJsonAsync<RemoteTrackMetadata>(metadataItem.Path);
+        }
+
+        private static AListDirectoryItem? SelectMediaItem(IReadOnlyList<AListDirectoryItem> items, string? directoryKey = null)
+        {
+            var mediaItems = items
                 .Where(item => !item.IsDir && IsMediaFile(item.Name))
+                .ToList();
+
+            if (!string.IsNullOrWhiteSpace(directoryKey))
+            {
+                var preferred = mediaItems.FirstOrDefault(item =>
+                    string.Equals(Path.GetFileNameWithoutExtension(item.Name), directoryKey, StringComparison.OrdinalIgnoreCase));
+                if (preferred != null)
+                {
+                    return preferred;
+                }
+            }
+
+            return mediaItems
                 .OrderByDescending(item => item.Size)
                 .FirstOrDefault();
         }
 
-        private static AListDirectoryItem? SelectCoverItem(IReadOnlyList<AListDirectoryItem> items)
+        private static AListDirectoryItem? SelectCoverItem(IReadOnlyList<AListDirectoryItem> items, string? coverPath = null)
         {
+            if (!string.IsNullOrWhiteSpace(coverPath))
+            {
+                var preferred = items.FirstOrDefault(item =>
+                    !item.IsDir &&
+                    item.Name.Equals(coverPath, StringComparison.OrdinalIgnoreCase));
+                if (preferred != null)
+                {
+                    return preferred;
+                }
+            }
+
             return items
                 .Where(item => !item.IsDir && IsImageFile(item.Name))
                 .OrderBy(item => item.Name.StartsWith("cover", StringComparison.OrdinalIgnoreCase) ? 0 : 1)

@@ -41,10 +41,22 @@ window.audioPlayer = {
         }
     },
 
-    init: function (audioElement, videoElement, helper) {
+    normalizeStreamUrl: function (url) {
+        if (!url) return "";
+        try {
+            const parsed = new URL(url, window.location.origin);
+            parsed.search = "";
+            return parsed.toString();
+        } catch {
+            return url.split("?")[0];
+        }
+    },
+
+    init: function (audioElement, videoElement, videoHost, helper) {
         this.dotNetHelper = helper;
         this.nativeAudio = audioElement;
         this.nativeVideo = videoElement || null;
+        this.videoHost = videoHost || null;
         this.activePlayer = audioElement;
 
         if (typeof OGVPlayer !== 'undefined') {
@@ -106,38 +118,61 @@ window.audioPlayer = {
         this.nativeVideo.style.display = this.isVideoActive ? "block" : "none";
     },
 
-    setVideoElement: function (videoElement) {
-        this.nativeVideo = videoElement || null;
-        this.bindEvents(this.nativeVideo);
-        this.updateVideoVisibility();
-        if (this.nativeVideo && this.pendingUrl && this.pendingIsVideo) {
-            this.loadAndPlay(this.pendingUrl, this.pendingIsWebM, true);
+    attachVideoTo: function (container) {
+        if (!this.nativeVideo || !container) return;
+        if (this.nativeVideo.parentElement !== container) {
+            container.appendChild(this.nativeVideo);
         }
+        this.nativeVideo.classList.add("player-video");
+        this.nativeVideo.style.display = "block";
+        this.updateVideoVisibility();
+    },
+
+    detachVideo: function () {
+        if (!this.nativeVideo || !this.videoHost) return;
+        if (this.nativeVideo.parentElement !== this.videoHost) {
+            this.videoHost.appendChild(this.nativeVideo);
+        }
+        this.nativeVideo.style.display = "none";
     },
 
     clearVideoElement: function () {
         if (!this.nativeVideo) return;
         if (this.activePlayer === this.nativeVideo) {
             this.activePlayer.pause();
+            this.activePlayer.src = "";
+            this.activePlayer.load();
             this.activePlayer = this.nativeAudio;
         }
-        this.nativeVideo = null;
+        this.isVideoActive = false;
+        this.detachVideo();
     },
 
     loadSource: function (url, isWebM, isVideo) {
         if (!url) return;
 
+        const nextIsVideo = !!isVideo;
+        const nextKey = this.normalizeStreamUrl(url) + "|" + nextIsVideo;
+        const currentSrc = this.activePlayer && (this.activePlayer.currentSrc || this.activePlayer.src);
+        const currentKey = currentSrc
+            ? this.normalizeStreamUrl(currentSrc) + "|" + this.isVideoActive
+            : "";
+
         this.pendingUrl = url;
         this.pendingIsWebM = !!isWebM;
-        this.pendingIsVideo = !!isVideo;
-        this.isSeeking = false;
-        this.isVideoActive = !!isVideo;
+        this.pendingIsVideo = nextIsVideo;
+        this.isVideoActive = nextIsVideo;
         this.updateVideoVisibility();
 
-        if (this.isVideoActive && !this.nativeVideo) {
-            // Video host isn't ready yet; wait for setVideoElement to re-trigger playback.
+        if (!this.nativeVideo && this.isVideoActive) {
             return;
         }
+
+        if (nextKey === currentKey && currentSrc) {
+            return;
+        }
+
+        this.isSeeking = false;
 
         if (this.activePlayer) {
             this.activePlayer.pause();

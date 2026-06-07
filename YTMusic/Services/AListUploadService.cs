@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,6 +25,11 @@ namespace YTMusic.Services
     public class AListUploadService
     {
         private static readonly HttpClient _httpClient = new();
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = true
+        };
         private readonly AListUploadSettingsService _settingsService;
 
         public AListUploadService(AListUploadSettingsService settingsService)
@@ -50,32 +56,7 @@ namespace YTMusic.Services
             }
 
             var remoteFilePath = CombineRemotePath(_settingsService.RemoteDirectory, fileName);
-            var encodedRemoteFilePath = EncodeRemotePath(remoteFilePath);
-
-            using var request = new HttpRequestMessage(HttpMethod.Put, $"{_settingsService.BaseUrl}/api/fs/put");
-            request.Headers.TryAddWithoutValidation("Authorization", _settingsService.Token);
-            request.Headers.TryAddWithoutValidation("File-Path", encodedRemoteFilePath);
-
-            var sourceStream = File.OpenRead(localFilePath);
-            request.Content = new ProgressStreamContent(sourceStream, progress);
-            request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-
-            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new InvalidOperationException(GetErrorMessage(body, $"Upload failed with HTTP {(int)response.StatusCode}."));
-            }
-
-            var apiMessage = GetApiMessage(body);
-            if (!string.IsNullOrWhiteSpace(apiMessage) &&
-                !apiMessage.Equals("success", StringComparison.OrdinalIgnoreCase) &&
-                !apiMessage.Equals("ok", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(apiMessage);
-            }
-
+            await UploadFileToPathAsync(localFilePath, remoteFilePath, progress, cancellationToken);
             return remoteFilePath;
         }
 
@@ -86,9 +67,32 @@ namespace YTMusic.Services
                 throw new FileNotFoundException("The selected file no longer exists.", localFilePath);
             }
 
-            await using var sourceStream = File.OpenRead(localFilePath);
-            await UploadStreamToPathAsync(sourceStream, remoteFilePath, progress, cancellationToken);
-            return remoteFilePath;
+            var expectedSize = new FileInfo(localFilePath).Length;
+            if (expectedSize <= 0)
+            {
+                throw new InvalidOperationException("The selected file is empty.");
+            }
+
+            const int maxAttempts = 3;
+            Exception? lastError = null;
+
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                try
+                {
+                    await using var sourceStream = File.OpenRead(localFilePath);
+                    await UploadStreamToPathAsync(sourceStream, remoteFilePath, progress, cancellationToken);
+                    await VerifyRemoteFileSizeAsync(remoteFilePath, expectedSize, cancellationToken);
+                    return remoteFilePath;
+                }
+                catch (Exception ex) when (attempt < maxAttempts && IsRetryableUploadException(ex))
+                {
+                    lastError = ex;
+                    await Task.Delay(TimeSpan.FromMilliseconds(400 * attempt), cancellationToken);
+                }
+            }
+
+            throw lastError ?? new InvalidOperationException("Upload failed.");
         }
 
         public async Task CreateDirectoryAsync(string remoteDirectoryPath, CancellationToken cancellationToken = default)
@@ -136,6 +140,8 @@ namespace YTMusic.Services
             }
 
             using var downloadRequest = new HttpRequestMessage(HttpMethod.Get, coverUrl);
+            downloadRequest.Headers.TryAddWithoutValidation("User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
             using var downloadResponse = await _httpClient.SendAsync(downloadRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             if (!downloadResponse.IsSuccessStatusCode)
             {
@@ -143,9 +149,30 @@ namespace YTMusic.Services
                 throw new InvalidOperationException(GetErrorMessage(body, $"Failed to fetch cover with HTTP {(int)downloadResponse.StatusCode}."));
             }
 
+            var extension = ".jpg";
+            try
+            {
+                var uri = new Uri(coverUrl, UriKind.Absolute);
+                var candidate = Path.GetExtension(uri.AbsolutePath);
+                if (!string.IsNullOrWhiteSpace(candidate) && candidate.Length <= 5)
+                {
+                    extension = candidate;
+                }
+            }
+            catch
+            {
+            }
+
             await using var coverStream = await downloadResponse.Content.ReadAsStreamAsync(cancellationToken);
-            await UploadStreamToPathAsync(coverStream, remoteFilePath, progress, cancellationToken);
-            return remoteFilePath;
+            var tempPath = await WriteTempFileAsync(coverStream, extension, cancellationToken);
+            try
+            {
+                return await UploadFileToPathAsync(tempPath, remoteFilePath, progress, cancellationToken);
+            }
+            finally
+            {
+                TryDeleteFile(tempPath);
+            }
         }
 
         public async Task<string> UploadCoverAsync(string coverSource, string remoteFilePath, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
@@ -163,11 +190,75 @@ namespace YTMusic.Services
             if (coverSource.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
             {
                 await using var dataStream = CreateDataUriStream(coverSource);
-                await UploadStreamToPathAsync(dataStream, remoteFilePath, progress, cancellationToken);
-                return remoteFilePath;
+                var tempPath = await WriteTempFileAsync(dataStream, ".jpg", cancellationToken);
+                try
+                {
+                    return await UploadFileToPathAsync(tempPath, remoteFilePath, progress, cancellationToken);
+                }
+                finally
+                {
+                    TryDeleteFile(tempPath);
+                }
             }
 
             return await UploadCoverFromUrlAsync(coverSource, remoteFilePath, progress, cancellationToken);
+        }
+
+        public async Task<string> UploadJsonToPathAsync<T>(T payload, string remoteFilePath, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+        {
+            var json = JsonSerializer.Serialize(payload, JsonOptions);
+            var tempPath = Path.Combine(Path.GetTempPath(), $"ytmusic-meta-{Guid.NewGuid():N}.json");
+            await File.WriteAllTextAsync(tempPath, json, Encoding.UTF8, cancellationToken);
+            try
+            {
+                return await UploadFileToPathAsync(tempPath, remoteFilePath, progress, cancellationToken);
+            }
+            finally
+            {
+                TryDeleteFile(tempPath);
+            }
+        }
+
+        public async Task<T?> TryDownloadJsonAsync<T>(string remotePath, CancellationToken cancellationToken = default)
+        {
+            if (!_settingsService.IsConfigured || string.IsNullOrWhiteSpace(remotePath))
+            {
+                return default;
+            }
+
+            try
+            {
+                using var metadataRequest = new HttpRequestMessage(HttpMethod.Post, $"{_settingsService.BaseUrl}/api/fs/get");
+                metadataRequest.Headers.TryAddWithoutValidation("Authorization", _settingsService.Token);
+                metadataRequest.Content = JsonContent.Create(new { path = remotePath });
+
+                using var metadataResponse = await _httpClient.SendAsync(metadataRequest, cancellationToken);
+                var metadataBody = await metadataResponse.Content.ReadAsStringAsync(cancellationToken);
+                if (!metadataResponse.IsSuccessStatusCode)
+                {
+                    return default;
+                }
+
+                using var metadataDocument = JsonDocument.Parse(metadataBody);
+                var downloadUrl = GetDownloadUrl(metadataDocument);
+                if (string.IsNullOrWhiteSpace(downloadUrl))
+                {
+                    return default;
+                }
+
+                using var response = await SendDownloadRequestAsync(downloadUrl, cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return default;
+                }
+
+                await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                return await JsonSerializer.DeserializeAsync<T>(responseStream, JsonOptions, cancellationToken);
+            }
+            catch
+            {
+                return default;
+            }
         }
 
         public async Task<IReadOnlyList<AListDirectoryItem>> ListDirectoryItemsAsync(string? remotePath = null, CancellationToken cancellationToken = default)
@@ -523,6 +614,32 @@ namespace YTMusic.Services
             }
         }
 
+        private static async Task<string> WriteTempFileAsync(Stream sourceStream, string extension, CancellationToken cancellationToken)
+        {
+            var safeExtension = string.IsNullOrWhiteSpace(extension) ? ".bin" : extension;
+            var tempPath = Path.Combine(Path.GetTempPath(), $"ytmusic-upload-{Guid.NewGuid():N}{safeExtension}");
+            await using (var fileStream = File.Create(tempPath))
+            {
+                await sourceStream.CopyToAsync(fileStream, cancellationToken);
+            }
+
+            return tempPath;
+        }
+
+        private static void TryDeleteFile(string path)
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+            catch
+            {
+            }
+        }
+
         private async Task UploadStreamToPathAsync(Stream sourceStream, string remoteFilePath, IProgress<double>? progress, CancellationToken cancellationToken)
         {
             if (!_settingsService.IsConfigured)
@@ -540,7 +657,7 @@ namespace YTMusic.Services
             using var request = new HttpRequestMessage(HttpMethod.Put, $"{_settingsService.BaseUrl}/api/fs/put");
             request.Headers.TryAddWithoutValidation("Authorization", _settingsService.Token);
             request.Headers.TryAddWithoutValidation("File-Path", encodedRemoteFilePath);
-            request.Content = new ProgressStreamContent(sourceStream, progress);
+            request.Content = new ProgressStreamContent(sourceStream, progress, disposeSource: false);
             request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
             using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
@@ -560,40 +677,133 @@ namespace YTMusic.Services
             }
         }
 
+        private async Task VerifyRemoteFileSizeAsync(string remoteFilePath, long expectedSize, CancellationToken cancellationToken)
+        {
+            var parentPath = GetRemoteParentPath(remoteFilePath);
+            var fileName = GetRemoteFileName(remoteFilePath);
+            var items = await ListDirectoryItemsAsync(parentPath, cancellationToken);
+            var remoteItem = items.FirstOrDefault(item =>
+                !item.IsDir && item.Name.Equals(fileName, StringComparison.OrdinalIgnoreCase));
+
+            if (remoteItem == null)
+            {
+                throw new InvalidOperationException("Upload finished but the remote file was not found.");
+            }
+
+            if (remoteItem.Size != expectedSize)
+            {
+                throw new InvalidOperationException(
+                    $"Upload size mismatch. Local: {expectedSize} bytes, remote: {remoteItem.Size} bytes.");
+            }
+        }
+
+        private static string GetRemoteParentPath(string remotePath)
+        {
+            var normalized = remotePath.Replace('\\', '/').TrimEnd('/');
+            var lastSlash = normalized.LastIndexOf('/');
+            return lastSlash <= 0 ? "/" : normalized[..lastSlash];
+        }
+
+        private static string GetRemoteFileName(string remotePath)
+        {
+            var normalized = remotePath.Replace('\\', '/').TrimEnd('/');
+            var lastSlash = normalized.LastIndexOf('/');
+            return lastSlash < 0 ? normalized : normalized[(lastSlash + 1)..];
+        }
+
+        private static bool IsRetryableStatusCode(HttpStatusCode statusCode)
+        {
+            var code = (int)statusCode;
+            return code == 502 || code == 503 || code == 504 || code == 429;
+        }
+
+        private static bool IsRetryableUploadException(Exception ex)
+        {
+            if (ex is InvalidOperationException invalidOperationException)
+            {
+                var message = invalidOperationException.Message;
+                if (message.Contains("HTTP 502", StringComparison.Ordinal) ||
+                    message.Contains("HTTP 503", StringComparison.Ordinal) ||
+                    message.Contains("HTTP 504", StringComparison.Ordinal) ||
+                    message.Contains("HTTP 429", StringComparison.Ordinal) ||
+                    message.Contains("Upload size mismatch", StringComparison.Ordinal) ||
+                    message.Contains("Upload stream ended early", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return ex is IOException or HttpRequestException;
+        }
+
         private sealed class ProgressStreamContent : HttpContent
         {
             private readonly Stream _sourceStream;
             private readonly IProgress<double>? _progress;
             private readonly int _bufferSize;
+            private readonly bool _disposeSource;
+            private readonly long _startPosition;
+            private readonly long _contentLength;
 
-            public ProgressStreamContent(Stream sourceStream, IProgress<double>? progress, int bufferSize = 81_920)
+            public ProgressStreamContent(Stream sourceStream, IProgress<double>? progress, bool disposeSource = false, int bufferSize = 81_920)
             {
                 _sourceStream = sourceStream;
                 _progress = progress;
+                _disposeSource = disposeSource;
                 _bufferSize = bufferSize;
 
                 if (_sourceStream.CanSeek)
                 {
-                    Headers.ContentLength = _sourceStream.Length;
+                    _startPosition = _sourceStream.Position;
+                    _contentLength = _sourceStream.Length - _startPosition;
+                    Headers.ContentLength = _contentLength;
+                }
+                else
+                {
+                    _startPosition = 0;
+                    _contentLength = -1;
                 }
             }
 
             protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context)
             {
-                var buffer = new byte[_bufferSize];
-                long totalRead = 0;
-                var totalLength = _sourceStream.CanSeek ? _sourceStream.Length : -1;
-
-                int read;
-                while ((read = await _sourceStream.ReadAsync(buffer.AsMemory(0, buffer.Length))) > 0)
+                if (_sourceStream.CanSeek)
                 {
-                    await stream.WriteAsync(buffer.AsMemory(0, read));
-                    totalRead += read;
+                    _sourceStream.Position = _startPosition;
+                }
 
-                    if (_progress != null && totalLength > 0)
+                var buffer = new byte[_bufferSize];
+                long totalSent = 0;
+
+                while (_contentLength < 0 || totalSent < _contentLength)
+                {
+                    var toRead = _contentLength < 0
+                        ? buffer.Length
+                        : (int)Math.Min(buffer.Length, _contentLength - totalSent);
+                    if (toRead <= 0)
                     {
-                        _progress.Report((double)totalRead / totalLength);
+                        break;
                     }
+
+                    var read = await _sourceStream.ReadAsync(buffer.AsMemory(0, toRead));
+                    if (read == 0)
+                    {
+                        break;
+                    }
+
+                    await stream.WriteAsync(buffer.AsMemory(0, read));
+                    totalSent += read;
+
+                    if (_progress != null && _contentLength > 0)
+                    {
+                        _progress.Report((double)totalSent / _contentLength);
+                    }
+                }
+
+                if (_contentLength > 0 && totalSent != _contentLength)
+                {
+                    throw new InvalidOperationException(
+                        $"Upload stream ended early. Expected {_contentLength} bytes, sent {totalSent} bytes.");
                 }
 
                 _progress?.Report(1.0);
@@ -601,9 +811,9 @@ namespace YTMusic.Services
 
             protected override bool TryComputeLength(out long length)
             {
-                if (_sourceStream.CanSeek)
+                if (_contentLength >= 0)
                 {
-                    length = _sourceStream.Length;
+                    length = _contentLength;
                     return true;
                 }
 
@@ -613,7 +823,7 @@ namespace YTMusic.Services
 
             protected override void Dispose(bool disposing)
             {
-                if (disposing)
+                if (disposing && _disposeSource)
                 {
                     _sourceStream.Dispose();
                 }
