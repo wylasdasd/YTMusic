@@ -68,6 +68,7 @@ namespace YTMusic
             builder.Services.AddSingleton<IUploadManagerService, UploadManagerService>();
             builder.Services.AddSingleton<IAListRemoteDownloadManagerService, AListRemoteDownloadManagerService>();
             builder.Services.AddSingleton<MusicPlayerService>();
+            builder.Services.AddSingleton<NetworkErrorService>();
             builder.Services.AddSingleton<WindowChromeService>();
 #if ANDROID
             builder.Services.AddSingleton<INativeAudioPlaybackService, YTMusic.Platforms.Android.Services.AndroidNativeAudioPlaybackService>();

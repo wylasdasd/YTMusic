@@ -10,6 +10,7 @@
 @inject UiPreferencesService UiPreferences
 @inject MusicPlayerService PlayerService
 @inject AppResetService AppResetService
+@inject NetworkErrorService NetworkErrorService
 @implements IDisposable
 
 <MudThemeProvider Theme="@CurrentMudTheme" IsDarkMode="@CurrentIsDark" />
@@ -181,6 +182,7 @@
     {
         GlobalState.OnChange += StateHasChanged;
         UiPreferences.OnChange += StateHasChanged;
+        NetworkErrorService.SnackbarRequested += OnNetworkSnackbarRequested;
         if (_themes.Length > 0)
         {
             _themeIndex = Math.Clamp(UiPreferences.ThemeIndex, 0, _themes.Length - 1);
@@ -448,8 +450,19 @@
         }
     }
 
+    private void OnNetworkSnackbarRequested(string message)
+    {
+        _ = InvokeAsync(() =>
+        {
+            GlobalState.HideLoading();
+            Snackbar.Add(message, Severity.Error);
+            return Task.CompletedTask;
+        });
+    }
+
     public void Dispose()
     {
+        NetworkErrorService.SnackbarRequested -= OnNetworkSnackbarRequested;
         GlobalState.OnChange -= StateHasChanged;
         UiPreferences.OnChange -= StateHasChanged;
         if (_locationChangedHandler != null)

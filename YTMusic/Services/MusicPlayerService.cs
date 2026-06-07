@@ -313,6 +313,7 @@ namespace YTMusic.Services
         private readonly INativeVideoPlaybackService _nativeVideo;
         private readonly ILocalMusicService _localMusicService;
         private readonly UiPreferencesService _uiPreferences;
+        private readonly NetworkErrorService _networkErrorService;
         private LocalAudioProxy? _proxy;
         private LocalFileProxy? _fileProxy;
         private readonly SemaphoreSlim _fileProxyInitLock = new SemaphoreSlim(1, 1);
@@ -347,12 +348,13 @@ namespace YTMusic.Services
         private List<int> _shuffleIndices = new List<int>();
         private readonly List<PlaybackHistoryItem> _playbackHistory = new List<PlaybackHistoryItem>();
 
-        public MusicPlayerService(INativeAudioPlaybackService nativeAudio, INativeVideoPlaybackService nativeVideo, ILocalMusicService localMusicService, UiPreferencesService uiPreferences)
+        public MusicPlayerService(INativeAudioPlaybackService nativeAudio, INativeVideoPlaybackService nativeVideo, ILocalMusicService localMusicService, UiPreferencesService uiPreferences, NetworkErrorService networkErrorService)
         {
             _nativeAudio = nativeAudio;
             _nativeVideo = nativeVideo;
             _localMusicService = localMusicService;
             _uiPreferences = uiPreferences;
+            _networkErrorService = networkErrorService;
             _youtubeClient = new YoutubeClient();
             UseWebM = _uiPreferences.PreferHighQualityAudio;
 
@@ -514,6 +516,7 @@ namespace YTMusic.Services
             catch (Exception ex)
             {
                 Console.WriteLine($"Error playing local file: {ex.Message}");
+                _ = _networkErrorService.NotifyFailureAsync("播放", ex);
             }
             finally
             {
@@ -878,9 +881,11 @@ namespace YTMusic.Services
                     return;
                 }
 
+                using var streamCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
                 if (video.IsVideo == true)
                 {
-                    var muxedStreamInfo = await GetPreferredMuxedVideoStreamInfoAsync(video.VideoId);
+                    var muxedStreamInfo = await GetPreferredMuxedVideoStreamInfoAsync(video.VideoId, streamCts.Token);
 
                     if (muxedStreamInfo != null)
                     {
@@ -923,7 +928,7 @@ namespace YTMusic.Services
                     }
                 }
 
-                var streamInfo = await GetPreferredAudioStreamInfoAsync(video.VideoId, UseWebM);
+                var streamInfo = await GetPreferredAudioStreamInfoAsync(video.VideoId, UseWebM, streamCts.Token);
 
                 if (streamInfo != null)
                 {
@@ -963,10 +968,15 @@ namespace YTMusic.Services
 
                     IsPlaying = true;
                 }
+                else
+                {
+                    await _networkErrorService.NotifyFailureAsync("播放");
+                }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error playing video: {ex.Message}");
+                await _networkErrorService.NotifyFailureAsync("播放", ex);
                 await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: false);
                 CurrentVideo = null;
                 CurrentStreamUrl = null;
@@ -1108,7 +1118,7 @@ namespace YTMusic.Services
             }
         }
 
-        private async Task<IStreamInfo?> GetPreferredAudioStreamInfoAsync(string videoId, bool useWebM)
+        private async Task<IStreamInfo?> GetPreferredAudioStreamInfoAsync(string videoId, bool useWebM, CancellationToken cancellationToken = default)
         {
             if (OperatingSystem.IsAndroid())
             {
@@ -1116,7 +1126,7 @@ namespace YTMusic.Services
                 // Force manifest parsing off the UI thread to avoid NetworkOnMainThreadException.
                 return await Task.Run(async () =>
                 {
-                    var streamManifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId);
+                    var streamManifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId, cancellationToken);
                     if (useWebM)
                     {
                         return streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate();
@@ -1125,10 +1135,10 @@ namespace YTMusic.Services
                     return streamManifest.GetAudioOnlyStreams()
                         .Where(s => s.Container == Container.Mp4)
                         .GetWithHighestBitrate() ?? streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate();
-                });
+                }, cancellationToken);
             }
 
-            var manifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId);
+            var manifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId, cancellationToken);
             if (useWebM)
             {
                 return manifest.GetAudioOnlyStreams().GetWithHighestBitrate();
@@ -1139,18 +1149,18 @@ namespace YTMusic.Services
                 .GetWithHighestBitrate() ?? manifest.GetAudioOnlyStreams().GetWithHighestBitrate();
         }
 
-        private async Task<IStreamInfo?> GetPreferredMuxedVideoStreamInfoAsync(string videoId)
+        private async Task<IStreamInfo?> GetPreferredMuxedVideoStreamInfoAsync(string videoId, CancellationToken cancellationToken = default)
         {
             if (OperatingSystem.IsAndroid())
             {
                 return await Task.Run(async () =>
                 {
-                    var streamManifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId);
+                    var streamManifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId, cancellationToken);
                     return streamManifest.GetMuxedStreams().GetWithHighestVideoQuality();
-                });
+                }, cancellationToken);
             }
 
-            var manifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId);
+            var manifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId, cancellationToken);
             return manifest.GetMuxedStreams().GetWithHighestVideoQuality();
         }
 

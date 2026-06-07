@@ -51,6 +51,7 @@ namespace YTMusic.Components.Pages
         private readonly IDownloadManagerService _downloadManager;
         private readonly IFavoriteService _favoriteService;
         private readonly IDialogService _dialogService;
+        private readonly NetworkErrorService _networkErrorService;
 
         public Action? StateHasChanged { get; set; }
 
@@ -63,13 +64,14 @@ namespace YTMusic.Components.Pages
         private IAsyncEnumerator<VideoSearchResult>? _searchEnumerator;
         public bool HasMore { get; private set; } = false;
 
-        public SearchVM(IYouTubeService youTubeService, ISnackbar snackbar, IDownloadManagerService downloadManager, IFavoriteService favoriteService, IDialogService dialogService)
+        public SearchVM(IYouTubeService youTubeService, ISnackbar snackbar, IDownloadManagerService downloadManager, IFavoriteService favoriteService, IDialogService dialogService, NetworkErrorService networkErrorService)
         {
             _youTubeService = youTubeService;
             _snackbar = snackbar;
             _downloadManager = downloadManager;
             _favoriteService = favoriteService;
             _dialogService = dialogService;
+            _networkErrorService = networkErrorService;
         }
 
         public async Task SearchAsync()
@@ -134,7 +136,7 @@ namespace YTMusic.Components.Pages
             }
             catch (Exception ex)
             {
-                _snackbar.Add($"Search failed: {ex.Message}", Severity.Error);
+                _ = _networkErrorService.NotifyFailureAsync("搜索", ex);
             }
             finally
             {

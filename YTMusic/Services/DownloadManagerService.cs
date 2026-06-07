@@ -12,6 +12,7 @@ namespace YTMusic.Services
         private readonly IYouTubeService _youTubeService;
         private readonly IFavoriteService _favoriteService;
         private readonly ILocalMusicService _localMusicService;
+        private readonly NetworkErrorService _networkErrorService;
         private readonly object _syncRoot = new();
         private readonly List<DownloadTaskInfo> _activeDownloads = new();
 
@@ -27,11 +28,12 @@ namespace YTMusic.Services
         }
         public event Action? OnDownloadsChanged;
 
-        public DownloadManagerService(IYouTubeService youTubeService, IFavoriteService favoriteService, ILocalMusicService localMusicService)
+        public DownloadManagerService(IYouTubeService youTubeService, IFavoriteService favoriteService, ILocalMusicService localMusicService, NetworkErrorService networkErrorService)
         {
             _youTubeService = youTubeService;
             _favoriteService = favoriteService;
             _localMusicService = localMusicService;
+            _networkErrorService = networkErrorService;
         }
 
         public void StartDownload(string videoId, string title, bool isVideo)
@@ -126,6 +128,11 @@ namespace YTMusic.Services
                 {
                     taskInfo.Status = DownloadStatus.Failed;
                     taskInfo.ErrorMessage = ex.Message;
+                }
+
+                if (NetworkErrorService.IsNetworkRelated(ex))
+                {
+                    _ = _networkErrorService.NotifyFailureAsync("下载", ex);
                 }
             }
             finally
