@@ -1,0 +1,50 @@
+@namespace YTMusic.Components
+@using YTMusic.Services
+@inject UiPreferencesService UiPreferences
+@implements IDisposable
+
+@if (!string.IsNullOrEmpty(Text))
+{
+    <div class="@WrapperClass" style="@WrapperStyle">
+        <MudText Typo="@Typo"
+                 Class="@TitleClass"
+                 Color="@Color"
+                 Style="@Style">@Text</MudText>
+    </div>
+}
+
+@code {
+    [Parameter] public string Text { get; set; } = string.Empty;
+    [Parameter] public Typo Typo { get; set; } = Typo.subtitle1;
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public Color Color { get; set; } = Color.Default;
+    [Parameter] public string? Style { get; set; }
+    [Parameter] public string? WrapperClass { get; set; }
+    [Parameter] public string? WrapperStyle { get; set; }
+
+    private string TitleClass
+    {
+        get
+        {
+            var mode = UiPreferences.MediaTitleTwoLines
+                ? "ytm-media-title-clamp"
+                : "ytm-media-title-wrap";
+            return string.IsNullOrWhiteSpace(Class) ? mode : $"{Class} {mode}";
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        UiPreferences.OnChange += OnPreferencesChanged;
+    }
+
+    private void OnPreferencesChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        UiPreferences.OnChange -= OnPreferencesChanged;
+    }
+}

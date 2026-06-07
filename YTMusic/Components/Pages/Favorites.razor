@@ -57,9 +57,7 @@ else
                         <MudCardMedia Image="@track.ThumbnailUrl" Height="160" />
                     }
                     <MudCardContent Style="flex-grow: 1;">
-                        <MudText Typo="Typo.subtitle1"
-                                 Style="display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;">
-                            @track.Title</MudText>
+                        <MediaTitle Text="@track.Title" Typo="Typo.subtitle1" />
                     </MudCardContent>
                     <MudCardActions Class="favorites-card__footer">
                         @if (track.IsDownloaded)

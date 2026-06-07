@@ -64,7 +64,7 @@
                 <div class="d-flex align-center justify-space-between flex-wrap gap-3 mb-3">
                     <div>
                         <MudText Typo="Typo.h6">Downloaded Files</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">从本地下载列表里挑选后上传到 AList，结构为 Remote Directory/&lt;歌名md5&gt;/&lt;md5&gt;.音视频、cover.*、metadata.json。</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">从本地下载列表里挑选后上传到 AList，结构为 Remote Directory/&lt;歌名md5&gt;/&lt;md5&gt;.音视频 + metadata.json（DownloadedTracks 子集）。</MudText>
                     </div>
                     <MudChip T="string" Color="Color.Primary">@ViewModel.SelectedFilePaths.Count selected</MudChip>
                 </div>
@@ -118,14 +118,14 @@
                                 }
                                 <div class="d-flex flex-column flex-grow-1" style="overflow: hidden;">
                                     <div class="d-flex align-center gap-2 flex-wrap">
-                                        <MudText Typo="Typo.subtitle2" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                            @file.Title
-                                        </MudText>
+                                        <div style="min-width: 0; flex: 1 1 auto;">
+                                            <MediaTitle Text="@file.Title" Typo="Typo.subtitle2" />
+                                        </div>
                                         <MudChip T="string"
                                                  Size="Size.Small"
-                                                 Color="@(file.HasUploaded ? Color.Success : Color.Default)"
-                                                 Variant="@(file.HasUploaded ? Variant.Filled : Variant.Outlined)">
-                                            @(file.HasUploaded ? "Uploaded" : "Not Uploaded")
+                                                 Color="@(ViewModel.ShouldShowUploadedTag(file) ? Color.Success : Color.Default)"
+                                                 Variant="@(ViewModel.ShouldShowUploadedTag(file) ? Variant.Filled : Variant.Outlined)">
+                                            @(ViewModel.ShouldShowUploadedTag(file) ? "Uploaded" : "Not Uploaded")
                                         </MudChip>
                                         @if (uploadTask != null)
                                         {
@@ -138,7 +138,7 @@
                                         }
                                     </div>
                                     <MudText Typo="Typo.body2" Color="Color.Secondary">@file.Author</MudText>
-                                    @if (file.HasUploaded && !string.IsNullOrWhiteSpace(file.UploadedRemotePath))
+                                    @if (ViewModel.ShouldShowUploadedTag(file) && !string.IsNullOrWhiteSpace(file.UploadedRemotePath))
                                     {
                                         <MudText Typo="Typo.caption" Color="Color.Success" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                             @file.UploadedRemotePath
@@ -172,24 +172,21 @@
             }
         </MudTabPanel>
 
-        <MudTabPanel Text="AList Files">
+        <MudTabPanel Text="Uploaded Files">
             <MudPaper Elevation="2" Class="pa-4 mb-4">
                 <div class="d-flex align-center justify-space-between flex-wrap gap-3 mb-3">
                     <div>
-                        <MudText Typo="Typo.h6">AList Directory Browser</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">根据 Remote Directory 浏览远端目录，优先读取 metadata.json 中的 title/author/coverPath。</MudText>
+                    
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">根据 Remote Directory 浏览远端目录，优先读取 metadata.json（与 DownloadedTracks 同字段子集）。</MudText>
                     </div>
                     <MudChip T="string" Color="Color.Info">@ViewModel.RemoteFiles.Count files</MudChip>
                 </div>
 
                 <div class="d-flex flex-wrap gap-3 align-center">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!ViewModel.IsConfigured)" OnClick="ViewModel.RefreshRemoteFilesAsync">
-                        Refresh AList Files
+                        Refresh Uploaded Files
                     </MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="@(!ViewModel.CanBrowseUp)" OnClick="ViewModel.BrowseUpAsync">
-                        Up
-                    </MudButton>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Directory: @ViewModel.CurrentRemoteBrowsePath</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Directory: @ViewModel.NormalizedRemoteDirectory</MudText>
                 </div>
             </MudPaper>
 
@@ -214,70 +211,27 @@
                     {
                         <MudPaper Elevation="1" Class="pa-3">
                             <div class="d-flex align-center gap-3">
-                                <MudIcon Icon="@(file.Item.IsDir ? Icons.Material.Filled.Folder : Icons.Material.Filled.InsertDriveFile)"
-                                         Size="Size.Large"
-                                         Color="@(file.Item.IsDir ? Color.Warning : Color.Info)" />
-                                <div class="d-flex flex-column flex-grow-1" style="overflow: hidden;">
-                                    <div class="d-flex align-center gap-2 flex-wrap">
-                                        <MudText Typo="Typo.subtitle2" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                            @file.DisplayName
-                                        </MudText>
-                                        @if (file.Item.IsDir)
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
-                                                Folder
-                                            </MudChip>
-                                            <MudChip T="string"
-                                                     Size="Size.Small"
-                                                     Color="@(ViewModel.IsRemoteDirectoryDownloaded(file.Item.Path) ? Color.Success : Color.Default)"
-                                                     Variant="@(ViewModel.IsRemoteDirectoryDownloaded(file.Item.Path) ? Variant.Filled : Variant.Outlined)">
-                                                @(ViewModel.IsRemoteDirectoryDownloaded(file.Item.Path) ? "Downloaded" : "Not Downloaded")
-                                            </MudChip>
-                                        }
-                                        else
-                                        {
-                                            <MudChip T="string"
-                                                     Size="Size.Small"
-                                                     Color="@(ViewModel.IsRemoteDownloaded(file.Item.Path) ? Color.Success : Color.Default)"
-                                                     Variant="@(ViewModel.IsRemoteDownloaded(file.Item.Path) ? Variant.Filled : Variant.Outlined)">
-                                                @(ViewModel.IsRemoteDownloaded(file.Item.Path) ? "Downloaded" : "Not Downloaded")
-                                            </MudChip>
-                                        }
-                                    </div>
-                                    @if (!string.IsNullOrWhiteSpace(file.Subtitle))
-                                    {
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">MD5: @file.Subtitle</MudText>
-                                    }
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@file.Item.Path</MudText>
-                                    @if (!file.Item.IsDir)
-                                    {
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@FormatSize(file.Item.Size)</MudText>
-                                    }
-                                </div>
-                                @if (file.Item.IsDir)
+                                @if (!string.IsNullOrWhiteSpace(file.ThumbnailUrl))
                                 {
-                                    <div class="d-flex flex-wrap gap-2">
-                                        <MudButton Variant="Variant.Outlined"
-                                                   Color="Color.Primary"
-                                                   OnClick="@(() => ViewModel.DownloadRemoteDirectory(file))">
-                                            Download
-                                        </MudButton>
-                                        <MudButton Variant="Variant.Filled"
-                                                   Color="Color.Warning"
-                                                   OnClick="@(() => ViewModel.OpenRemoteDirectoryAsync(file.Item))">
-                                            Open
-                                        </MudButton>
-                                    </div>
+                                    <MudImage Src="@file.ThumbnailUrl" Width="56" Height="56" ObjectFit="ObjectFit.Cover" Class="rounded" />
                                 }
                                 else
                                 {
-                                    <MudButton Variant="Variant.Filled"
-                                               Color="Color.Primary"
-                                               Disabled="@ViewModel.IsRemoteDownloaded(file.Item.Path)"
-                                               OnClick="@(() => ViewModel.DownloadRemoteFile(file.Item))">
-                                        Download
-                                    </MudButton>
+                                    <MudIcon Icon="@Icons.Material.Filled.MusicNote" Size="Size.Large" Color="Color.Primary" />
                                 }
+                                <div class="d-flex flex-column flex-grow-1" style="overflow: hidden;">
+                                    <MediaTitle Text="@file.DisplayName" Typo="Typo.subtitle2" />
+                                    @if (!string.IsNullOrWhiteSpace(file.Subtitle))
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@file.Subtitle</MudText>
+                                    }
+                                </div>
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Primary"
+                                           Disabled="@ViewModel.IsRemoteDirectoryDownloaded(file.Item.Path)"
+                                           OnClick="@(() => ViewModel.DownloadRemoteDirectory(file))">
+                                    Download
+                                </MudButton>
                             </div>
                         </MudPaper>
                     }

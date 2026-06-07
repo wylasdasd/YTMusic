@@ -30,7 +30,6 @@ namespace YTMusic.Services
             await _localMusicService.ResetAllAsync();
             ClearDownloadedMediaDirectory();
             _uiPreferencesService.ResetToDefaults();
-            _musicPlayerService.SetUseWebM(_uiPreferencesService.PreferHighQualityAudio);
         }
 
         private static void ClearDownloadedMediaDirectory()

@@ -25,9 +25,7 @@ else
                 }
 
                 <div class="d-flex flex-column flex-grow-1" style="overflow: hidden;">
-                    <MudText Typo="Typo.subtitle1" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                        @file.Title
-                    </MudText>
+                    <MediaTitle Text="@file.Title" Typo="Typo.subtitle1" />
                 </div>
 
                 @if (file.IsVideo)

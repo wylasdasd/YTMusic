@@ -41,9 +41,9 @@ else
         {
             <MudPaper Elevation="2" Class="pa-4">
                 <div class="d-flex justify-space-between align-center mb-2">
-                    <MudText Typo="Typo.subtitle1" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%;">
-                        @task.Title
-                    </MudText>
+                    <MediaTitle Text="@task.Title"
+                                Typo="Typo.subtitle1"
+                                WrapperStyle="max-width: 70%; flex: 1; min-width: 0;" />
                     <MudChip Size="Size.Small" Color="GetStatusColor(task.Status)" T="string">
                         @GetTaskLabel(task)
                     </MudChip>

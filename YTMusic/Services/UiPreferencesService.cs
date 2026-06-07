@@ -6,12 +6,12 @@ namespace YTMusic.Services
     public class UiPreferencesService
     {
         private const string ShowFavoriteCardImagesKey = "ui.showFavoriteCardImages";
+        private const string MediaTitleTwoLinesKey = "ui.mediaTitleTwoLines";
         private const string ThemeIndexKey = "ui.themeIndex";
-        private const string PreferHighQualityAudioKey = "ui.preferHighQualityAudio";
 
         public bool ShowFavoriteCardImages { get; private set; } = Preferences.Default.Get(ShowFavoriteCardImagesKey, true);
+        public bool MediaTitleTwoLines { get; private set; } = LoadMediaTitleTwoLines();
         public int ThemeIndex { get; private set; } = Preferences.Default.Get(ThemeIndexKey, 0);
-        public bool PreferHighQualityAudio { get; private set; } = Preferences.Default.Get(PreferHighQualityAudioKey, true);
 
         public event Action? OnChange;
 
@@ -27,6 +27,18 @@ namespace YTMusic.Services
             OnChange?.Invoke();
         }
 
+        public void SetMediaTitleTwoLines(bool value)
+        {
+            if (MediaTitleTwoLines == value)
+            {
+                return;
+            }
+
+            MediaTitleTwoLines = value;
+            Preferences.Default.Set(MediaTitleTwoLinesKey, value);
+            OnChange?.Invoke();
+        }
+
         public void SetThemeIndex(int value)
         {
             if (ThemeIndex == value)
@@ -39,28 +51,28 @@ namespace YTMusic.Services
             OnChange?.Invoke();
         }
 
-        public void SetPreferHighQualityAudio(bool value)
-        {
-            if (PreferHighQualityAudio == value)
-            {
-                return;
-            }
-
-            PreferHighQualityAudio = value;
-            Preferences.Default.Set(PreferHighQualityAudioKey, value);
-            OnChange?.Invoke();
-        }
-
         public void ResetToDefaults()
         {
             ShowFavoriteCardImages = true;
+            MediaTitleTwoLines = true;
             ThemeIndex = 0;
-            PreferHighQualityAudio = true;
 
             Preferences.Default.Remove(ShowFavoriteCardImagesKey);
+            Preferences.Default.Remove(MediaTitleTwoLinesKey);
             Preferences.Default.Remove(ThemeIndexKey);
-            Preferences.Default.Remove(PreferHighQualityAudioKey);
+            Preferences.Default.Remove("ui.scrollMediaTitles");
+            Preferences.Default.Remove("ui.preferHighQualityAudio");
             OnChange?.Invoke();
+        }
+
+        private static bool LoadMediaTitleTwoLines()
+        {
+            if (Preferences.Default.ContainsKey(MediaTitleTwoLinesKey))
+            {
+                return Preferences.Default.Get(MediaTitleTwoLinesKey, true);
+            }
+
+            return Preferences.Default.Get("ui.scrollMediaTitles", true);
         }
     }
 }

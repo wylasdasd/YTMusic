@@ -129,6 +129,40 @@ h1:focus {
     text-align: start;
 }
 
+.ytm-media-title-clamp {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: break-word;
+}
+
+.ytm-media-title-wrap {
+    white-space: normal;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.player-title {
+    color: var(--ytm-text-primary);
+    font-weight: 800;
+    line-height: 1.12;
+    margin-top: 8px;
+}
+
+.ytm-media-title-wrap.player-title {
+    display: block;
+    -webkit-line-clamp: unset;
+}
+
+.ytm-media-title-wrap.ytm-card__title {
+    min-height: auto;
+    display: block;
+    -webkit-line-clamp: unset;
+}
+
 .status-bar-safe-area {
     display: none;
 }

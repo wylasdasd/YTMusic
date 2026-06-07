@@ -312,7 +312,6 @@ namespace YTMusic.Services
         private readonly INativeAudioPlaybackService _nativeAudio;
         private readonly INativeVideoPlaybackService _nativeVideo;
         private readonly ILocalMusicService _localMusicService;
-        private readonly UiPreferencesService _uiPreferences;
         private readonly NetworkErrorService _networkErrorService;
         private LocalAudioProxy? _proxy;
         private LocalFileProxy? _fileProxy;
@@ -333,7 +332,6 @@ namespace YTMusic.Services
         public bool IsUsingNativePlayback { get; private set; }
         public bool UseNativeVideoPlayback => _nativeVideo.IsSupported && OperatingSystem.IsAndroid();
         public bool IsUsingNativeVideoPlayback { get; private set; }
-        public bool UseWebM { get; private set; }
         public bool IsCurrentStreamWebM { get; private set; }
         public bool IsCurrentStreamVideo { get; private set; }
         public double CurrentTime { get; private set; } = 0;
@@ -349,15 +347,13 @@ namespace YTMusic.Services
         private List<int> _shuffleIndices = new List<int>();
         private readonly List<PlaybackHistoryItem> _playbackHistory = new List<PlaybackHistoryItem>();
 
-        public MusicPlayerService(INativeAudioPlaybackService nativeAudio, INativeVideoPlaybackService nativeVideo, ILocalMusicService localMusicService, UiPreferencesService uiPreferences, NetworkErrorService networkErrorService)
+        public MusicPlayerService(INativeAudioPlaybackService nativeAudio, INativeVideoPlaybackService nativeVideo, ILocalMusicService localMusicService, NetworkErrorService networkErrorService)
         {
             _nativeAudio = nativeAudio;
             _nativeVideo = nativeVideo;
             _localMusicService = localMusicService;
-            _uiPreferences = uiPreferences;
             _networkErrorService = networkErrorService;
             _youtubeClient = new YoutubeClient();
-            UseWebM = _uiPreferences.PreferHighQualityAudio;
 
             if (!_nativeAudio.IsSupported && !OperatingSystem.IsAndroid())
             {
@@ -379,18 +375,6 @@ namespace YTMusic.Services
                 _nativeVideo.PlaybackEnded += OnNativeVideoPlaybackEnded;
                 _nativeVideo.PlaybackStopped += OnNativeVideoPlaybackStopped;
             }
-        }
-
-        public void SetUseWebM(bool value)
-        {
-            if (UseWebM == value)
-            {
-                return;
-            }
-
-            UseWebM = value;
-            _uiPreferences.SetPreferHighQualityAudio(value);
-            NotifyStateChanged();
         }
 
         public async Task ResetStateAsync()
@@ -1019,7 +1003,7 @@ namespace YTMusic.Services
                     }
                 }
 
-                var streamInfo = await GetPreferredAudioStreamInfoAsync(video.VideoId, UseWebM, streamCts.Token);
+                var streamInfo = await GetPreferredAudioStreamInfoAsync(video.VideoId, streamCts.Token);
 
                 if (streamInfo != null)
                 {
@@ -1210,7 +1194,7 @@ namespace YTMusic.Services
             }
         }
 
-        private async Task<IStreamInfo?> GetPreferredAudioStreamInfoAsync(string videoId, bool useWebM, CancellationToken cancellationToken = default)
+        private async Task<IStreamInfo?> GetPreferredAudioStreamInfoAsync(string videoId, CancellationToken cancellationToken = default)
         {
             if (OperatingSystem.IsAndroid())
             {
@@ -1219,25 +1203,15 @@ namespace YTMusic.Services
                 return await Task.Run(async () =>
                 {
                     var streamManifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId, cancellationToken);
-                    if (useWebM)
-                    {
-                        return streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate();
-                    }
-
                     return streamManifest.GetAudioOnlyStreams()
-                        .Where(s => s.Container == Container.Mp4)
+                        .Where(s => s.Container == Container.WebM)
                         .GetWithHighestBitrate() ?? streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate();
                 }, cancellationToken);
             }
 
             var manifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId, cancellationToken);
-            if (useWebM)
-            {
-                return manifest.GetAudioOnlyStreams().GetWithHighestBitrate();
-            }
-
             return manifest.GetAudioOnlyStreams()
-                .Where(s => s.Container == Container.Mp4)
+                .Where(s => s.Container == Container.WebM)
                 .GetWithHighestBitrate() ?? manifest.GetAudioOnlyStreams().GetWithHighestBitrate();
         }
 

@@ -176,50 +176,53 @@ namespace YTMusic.Services
                     throw new InvalidOperationException("No audio or video file was found in this AList directory.");
                 }
 
-                var coverItem = SelectCoverItem(children, metadata?.CoverPath);
                 var localDirectory = StoragePaths.GetDownloadedMusicDirectory();
                 FileHelp.EnsureDirectoryExists(localDirectory);
 
-                if (metadata != null && !string.IsNullOrWhiteSpace(metadata.Title))
+                var resolvedTitleFromMetadata = metadata?.Title;
+                if (!string.IsNullOrWhiteSpace(resolvedTitleFromMetadata))
                 {
-                    resolvedTitle = metadata.Title;
+                    resolvedTitle = resolvedTitleFromMetadata;
                 }
                 else if (IsLikelyMd5(resolvedTitle))
                 {
                     resolvedTitle = Path.GetFileNameWithoutExtension(mediaItem.Name);
                 }
 
-                var resolvedAuthor = string.IsNullOrWhiteSpace(metadata?.Author) ? "AList" : metadata.Author;
-
                 var mediaFileName = BuildLocalMediaFileName(resolvedTitle, mediaItem.Name);
                 var localMediaPath = Path.Combine(localDirectory, FileHelp.SafeFileName(mediaFileName));
 
-                var mediaProgress = new Progress<double>(p => UpdateProgress(taskInfo, coverItem != null, p, 0));
+                var mediaProgress = new Progress<double>(p => UpdateProgress(taskInfo, p));
                 await _aListUploadService.DownloadFileToPathAsync(mediaItem.Path, localMediaPath, mediaProgress);
 
-                string? localCoverPath = null;
-                if (coverItem != null)
+                DownloadedTrack downloadedTrack;
+                if (metadata != null)
                 {
-                    var coverFileName = BuildLocalCoverFileName(localMediaPath, coverItem.Name);
-                    localCoverPath = Path.Combine(localDirectory, FileHelp.SafeFileName(coverFileName));
-                    var coverProgress = new Progress<double>(p => UpdateProgress(taskInfo, true, 1.0, p));
-                    await _aListUploadService.DownloadFileToPathAsync(coverItem.Path, localCoverPath, coverProgress);
+                    downloadedTrack = metadata.ToDownloadedTrack(localMediaPath, mediaItem.Path);
+                    if (string.IsNullOrWhiteSpace(downloadedTrack.Title))
+                    {
+                        downloadedTrack.Title = resolvedTitle;
+                    }
+                }
+                else
+                {
+                    downloadedTrack = new DownloadedTrack
+                    {
+                        VideoId = $"alist:{mediaItem.Path}",
+                        Title = resolvedTitle,
+                        Author = "AList",
+                        LocalFilePath = localMediaPath,
+                        DownloadedDate = DateTime.UtcNow,
+                        RemoteSourcePath = mediaItem.Path
+                    };
                 }
 
-                await _localMusicService.AddDownloadedTrackAsync(new DownloadedTrack
+                if (IsVideoFile(mediaItem.Name))
                 {
-                    VideoId = $"alist:{mediaItem.Path}",
-                    Title = resolvedTitle,
-                    Author = resolvedAuthor,
-                    ThumbnailUrl = string.IsNullOrWhiteSpace(localCoverPath) ? null : BuildCoverDataUrl(localCoverPath),
-                    LocalFilePath = localMediaPath,
-                    IsVideo = IsVideoFile(mediaItem.Name),
-                    DownloadedDate = DateTime.UtcNow,
-                    HasUploaded = false,
-                    UploadedDate = null,
-                    UploadedRemotePath = null,
-                    RemoteSourcePath = mediaItem.Path
-                });
+                    downloadedTrack.IsVideo = true;
+                }
+
+                await _localMusicService.AddDownloadedTrackAsync(downloadedTrack);
 
                 lock (_syncRoot)
                 {
@@ -284,13 +287,10 @@ namespace YTMusic.Services
             OnRemoteDownloadsChanged?.Invoke();
         }
 
-        private void UpdateProgress(DownloadTaskInfo taskInfo, bool hasCover, double mediaProgress, double coverProgress)
+        private void UpdateProgress(DownloadTaskInfo taskInfo, double mediaProgress)
         {
-            var combined = hasCover
-                ? (mediaProgress * 0.9) + (coverProgress * 0.1)
-                : mediaProgress;
-
             bool shouldNotify;
+            var combined = mediaProgress;
             lock (_syncRoot)
             {
                 shouldNotify = Math.Abs(taskInfo.Progress - combined) >= 0.005 || combined >= 1.0;
@@ -339,25 +339,7 @@ namespace YTMusic.Services
                 .FirstOrDefault();
         }
 
-        private static AListDirectoryItem? SelectCoverItem(IReadOnlyList<AListDirectoryItem> items, string? coverPath = null)
-        {
-            if (!string.IsNullOrWhiteSpace(coverPath))
-            {
-                var preferred = items.FirstOrDefault(item =>
-                    !item.IsDir &&
-                    item.Name.Equals(coverPath, StringComparison.OrdinalIgnoreCase));
-                if (preferred != null)
-                {
-                    return preferred;
-                }
-            }
-
-            return items
-                .Where(item => !item.IsDir && IsImageFile(item.Name))
-                .OrderBy(item => item.Name.StartsWith("cover", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
-                .ThenByDescending(item => item.Size)
-                .FirstOrDefault();
-        }
+        // 封面文件下载已停用：SelectCoverItem / IsImageFile / BuildLocalCoverFileName / BuildCoverDataUrl / GetImageMimeType
 
         private static bool IsMediaFile(string fileName)
         {
@@ -386,16 +368,6 @@ namespace YTMusic.Services
                    extension.Equals(".avi", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static bool IsImageFile(string fileName)
-        {
-            var extension = Path.GetExtension(fileName);
-            return extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".png", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".webp", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase);
-        }
-
         private static bool IsLikelyMd5(string? value)
         {
             if (string.IsNullOrWhiteSpace(value) || value.Length != 32)
@@ -416,34 +388,6 @@ namespace YTMusic.Services
             }
 
             return $"{safeTitle}{extension}";
-        }
-
-        private static string BuildLocalCoverFileName(string localMediaPath, string remoteCoverName)
-        {
-            var mediaBaseName = Path.GetFileNameWithoutExtension(localMediaPath);
-            var extension = Path.GetExtension(remoteCoverName);
-            return $"{mediaBaseName}-cover{extension}";
-        }
-
-        private static string BuildCoverDataUrl(string localCoverPath)
-        {
-            var mimeType = GetImageMimeType(localCoverPath);
-            var bytes = File.ReadAllBytes(localCoverPath);
-            return $"data:{mimeType};base64,{Convert.ToBase64String(bytes)}";
-        }
-
-        private static string GetImageMimeType(string filePath)
-        {
-            var extension = Path.GetExtension(filePath);
-            return extension.ToLowerInvariant() switch
-            {
-                ".png" => "image/png",
-                ".webp" => "image/webp",
-                ".bmp" => "image/bmp",
-                ".jpg" => "image/jpeg",
-                ".jpeg" => "image/jpeg",
-                _ => "image/jpeg"
-            };
         }
 
         private void TrimHistory_NoLock()

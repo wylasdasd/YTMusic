@@ -24,7 +24,14 @@ namespace YTMusic.Services
 
     public class AListUploadService
     {
+        private const long MaxInMemoryUploadBytes = 512L * 1024 * 1024;
+
         private static readonly HttpClient _httpClient = new();
+        private static readonly HttpClient _uploadHttpClient = new()
+        {
+            // 默认 100s 超时在大文件/慢网上会中断 PUT，远端可能只留下半截文件。
+            Timeout = TimeSpan.FromHours(6)
+        };
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -73,6 +80,17 @@ namespace YTMusic.Services
                 throw new InvalidOperationException("The selected file is empty.");
             }
 
+            byte[]? payload = null;
+            if (expectedSize <= MaxInMemoryUploadBytes)
+            {
+                payload = await File.ReadAllBytesAsync(localFilePath, cancellationToken);
+                if (payload.LongLength != expectedSize)
+                {
+                    throw new InvalidOperationException(
+                        $"Local file read incomplete. Expected {expectedSize} bytes, read {payload.LongLength} bytes.");
+                }
+            }
+
             const int maxAttempts = 3;
             Exception? lastError = null;
 
@@ -80,9 +98,20 @@ namespace YTMusic.Services
             {
                 try
                 {
-                    await using var sourceStream = File.OpenRead(localFilePath);
-                    await UploadStreamToPathAsync(sourceStream, remoteFilePath, progress, cancellationToken);
-                    await VerifyRemoteFileSizeAsync(remoteFilePath, expectedSize, cancellationToken);
+                    if (payload != null)
+                    {
+                        await using var memoryStream = new MemoryStream(payload, writable: false);
+                        await UploadStreamToPathAsync(memoryStream, remoteFilePath, progress, cancellationToken);
+                    }
+                    else
+                    {
+                        await UploadLargeFileToPathAsync(localFilePath, remoteFilePath, progress, cancellationToken);
+                    }
+
+                    // 轮询校验远端大小，避免元数据未刷新误报，同时能发现上传不完整。
+                    await VerifyRemoteFileSizeWithRetryAsync(remoteFilePath, expectedSize, cancellationToken);
+                    progress?.Report(1.0);
+
                     return remoteFilePath;
                 }
                 catch (Exception ex) when (attempt < maxAttempts && IsRetryableUploadException(ex))
@@ -660,7 +689,7 @@ namespace YTMusic.Services
             request.Content = new ProgressStreamContent(sourceStream, progress, disposeSource: false);
             request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
-            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using var response = await _uploadHttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (!response.IsSuccessStatusCode)
@@ -675,6 +704,74 @@ namespace YTMusic.Services
             {
                 throw new InvalidOperationException(apiMessage);
             }
+        }
+
+        private async Task UploadLargeFileToPathAsync(string localFilePath, string remoteFilePath, IProgress<double>? progress, CancellationToken cancellationToken)
+        {
+            if (!_settingsService.IsConfigured)
+            {
+                throw new InvalidOperationException("Please complete AList server and token settings first.");
+            }
+
+            if (string.IsNullOrWhiteSpace(remoteFilePath))
+            {
+                throw new InvalidOperationException("Remote upload path is required.");
+            }
+
+            await using var sourceStream = File.OpenRead(localFilePath);
+            var encodedRemoteFilePath = EncodeRemotePath(remoteFilePath);
+
+            using var request = new HttpRequestMessage(HttpMethod.Put, $"{_settingsService.BaseUrl}/api/fs/put");
+            request.Headers.TryAddWithoutValidation("Authorization", _settingsService.Token);
+            request.Headers.TryAddWithoutValidation("File-Path", encodedRemoteFilePath);
+
+            var streamContent = new StreamContent(sourceStream);
+            streamContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+            streamContent.Headers.ContentLength = sourceStream.Length;
+            request.Content = streamContent;
+
+            using var response = await _uploadHttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException(GetErrorMessage(body, $"Upload failed with HTTP {(int)response.StatusCode}."));
+            }
+
+            var apiMessage = GetApiMessage(body);
+            if (!string.IsNullOrWhiteSpace(apiMessage) &&
+                !apiMessage.Equals("success", StringComparison.OrdinalIgnoreCase) &&
+                !apiMessage.Equals("ok", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(apiMessage);
+            }
+        }
+
+        private async Task VerifyRemoteFileSizeWithRetryAsync(string remoteFilePath, long expectedSize, CancellationToken cancellationToken)
+        {
+            const int maxAttempts = 5;
+            Exception? lastError = null;
+
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                try
+                {
+                    await VerifyRemoteFileSizeAsync(remoteFilePath, expectedSize, cancellationToken);
+                    return;
+                }
+                catch (InvalidOperationException ex)
+                {
+                    lastError = ex;
+                    if (attempt >= maxAttempts)
+                    {
+                        break;
+                    }
+
+                    await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+                }
+            }
+
+            throw lastError ?? new InvalidOperationException("Upload verification failed.");
         }
 
         private async Task VerifyRemoteFileSizeAsync(string remoteFilePath, long expectedSize, CancellationToken cancellationToken)
@@ -785,13 +882,13 @@ namespace YTMusic.Services
                         break;
                     }
 
-                    var read = await _sourceStream.ReadAsync(buffer.AsMemory(0, toRead));
+                    var read = await _sourceStream.ReadAsync(buffer.AsMemory(0, toRead), CancellationToken.None);
                     if (read == 0)
                     {
                         break;
                     }
 
-                    await stream.WriteAsync(buffer.AsMemory(0, read));
+                    await stream.WriteAsync(buffer.AsMemory(0, read), CancellationToken.None);
                     totalSent += read;
 
                     if (_progress != null && _contentLength > 0)
@@ -806,7 +903,7 @@ namespace YTMusic.Services
                         $"Upload stream ended early. Expected {_contentLength} bytes, sent {totalSent} bytes.");
                 }
 
-                _progress?.Report(1.0);
+                // 不在此处 Report(1.0)：还需等待 HTTP 响应与远端校验，由 UploadFileToPathAsync 在确认成功后上报。
             }
 
             protected override bool TryComputeLength(out long length)

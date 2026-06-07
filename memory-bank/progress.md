@@ -6,13 +6,13 @@
 - [x] `Upload Local` 支持基于本地已下载文件批量上传到 AList。
 - [x] 上传目录约定为 `Remote Directory/<歌名md5>`，上传前自动 `mkdir`。
 - [x] AList 上传支持主音视频 + 封面一起上传。
-- [x] AList 浏览页 `AList Files`：支持目录浏览、返回上级、单文件下载、整目录下载。
+- [x] AList 浏览页 `Uploaded Files`：支持目录浏览、返回上级、单文件下载、整目录下载。
 - [x] AList 目录整首下载按本地下载数据库逻辑入库（主媒体 + 封面）。
 - [x] AList 下载封面改存 `data:image/...;base64,...`，修复下载页/播放页封面显示问题。
 - [x] `DownloadedTracks` 新增上传与远端来源追踪字段（`HasUploaded`、`UploadedDate`、`UploadedRemotePath`、`RemoteSourcePath`）。
 - [x] 上传状态直接内嵌到 `Upload Local` 文件列表项中，移除单独的上传任务页签。
 - [x] AList 上传与目录下载允许重复执行；本地同名下载默认覆盖。
-- [x] `AList Files` 目录展示直接读取主音视频文件名作为显示名。
+- [x] `Uploaded Files` 目录展示直接读取主音视频文件名作为显示名。
 - [x] 修复不可播放 YouTube 视频导致播放器回退到上一首的状态残留 bug。
 - [x] 基础搜索与播放 (YouTube API 集成)。
 - [x] 用于流媒体的本地音频代理。

@@ -11,9 +11,9 @@
                 <MudImage Src="@ThumbnailUrl" Width="80" Height="45" ObjectFit="ObjectFit.Cover" Elevation="1" />
             }
             <div>
-                <MudText Typo="Typo.subtitle1"
-                         Style="font-weight: 500; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;">
-                    @Title</MudText>
+                <MediaTitle Text="@Title"
+                            Typo="Typo.subtitle1"
+                            Style="font-weight: 500;" />
                     <MudText Typo="Typo.body2" Color="Color.Secondary">@Author</MudText>
                 </div>
             </div>

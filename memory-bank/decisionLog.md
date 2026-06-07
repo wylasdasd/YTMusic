@@ -23,7 +23,7 @@
   - MAUI Blazor 页面的 `MudImage`、CSS `background-image`、`video poster` 对本地 `file://` 图片路径兼容性不稳定。
   - Data URL 可以复用现有所有 `ThumbnailUrl` 显示链路，无需新增本地图片代理层。
 
-## 2026-03-30: `AList Files` 目录展示直接读取主音视频文件名
+## 2026-03-30: `Uploaded Files` 目录展示直接读取主音视频文件名
 - **决策**:
   - 远端目录项展示名不再尝试从本地上传/下载记录推导，只要是目录就直接读取内部主音视频文件名，去扩展名后显示。
 - **依据**:

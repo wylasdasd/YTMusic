@@ -13,7 +13,7 @@
   - 上传设置面板支持默认收起；设置区新增 `Create Directory` 按钮，可对当前 `Remote Directory` 直接执行 `mkdir`。
   - `Upload Local` 以本地已下载文件为主入口，不再依赖文件选择器；文件选择器仍作为补充能力保留。
   - 上传目录固定为 `Remote Directory/<歌名md5>`，上传前会先创建目录，再上传主音视频文件与封面文件。
-  - AList 浏览页新增 `AList Files` 页签，可在 `Remote Directory` 下浏览目录、下钻目录、返回上级，并下载单文件或整目录。
+  - AList 浏览页新增 `Uploaded Files` 页签，可在 `Remote Directory` 下浏览目录、下钻目录、返回上级，并下载单文件或整目录。
   - AList 目录展示规则已收敛为：目录项直接读取目录内主音视频文件名并去扩展名，作为展示名；仅在读取失败时退回目录名。
   - AList 目录下载会识别“主音视频 + 封面图”，下载后按本地下载数据库逻辑入库；封面会转成 `data:image/...;base64,...` 存入 `ThumbnailUrl`，避免 `file://` 路径在 MAUI Blazor 中不显示。
   - AList 下载/上传任务均已接入 `Transfers`；上传进度进一步内嵌到 `Upload Local` 每个条目中，单独的 `Upload Tasks` 页签已删除。

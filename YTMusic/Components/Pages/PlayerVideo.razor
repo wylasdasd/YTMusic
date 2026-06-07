@@ -36,9 +36,9 @@
                 }
 
                 <div class="player-meta player-meta--video">
-                    <MudText Typo="Typo.h5" Class="player-title">
-                        @currentVideo.Title
-                    </MudText>
+                    <MediaTitle Text="@currentVideo.Title"
+                                Typo="Typo.h5"
+                                Class="player-title" />
                     <MudText Typo="Typo.body1" Class="player-author">
                         @currentVideo.Author
                     </MudText>

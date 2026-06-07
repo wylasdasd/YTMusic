@@ -68,12 +68,8 @@
     padding: 12px 14px 4px;
 }
 
-.ytm-card__title {
+.ytm-card__title.ytm-media-title-clamp {
     min-height: 2.9rem;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    overflow: hidden;
     line-height: 1.45;
 }
 

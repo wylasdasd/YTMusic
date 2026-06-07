@@ -119,14 +119,14 @@
                 <div class="ytm-setting-copy">
                     <span class="ytm-theme-dot" style="background: var(--ytm-accent);"></span>
                     <div class="ytm-setting-text">
-                        <span>High Quality Audio</span>
-                        <small>Use WebM/Opus when available</small>
+                        <span>两行显示</span>
+                        <small>开启后标题最多两行，超出显示省略号；关闭则完整显示</small>
                     </div>
                 </div>
                 <MudSwitch T="bool"
                            Color="Color.Primary"
-                           Value="UiPreferences.PreferHighQualityAudio"
-                           ValueChanged="OnPreferHighQualityAudioChanged" />
+                           Value="UiPreferences.MediaTitleTwoLines"
+                           ValueChanged="OnMediaTitleTwoLinesChanged" />
             </div>
             <button class="ytm-theme-item" @onclick="CopyDownloadPathAsync">
                 <span class="ytm-theme-dot" style="background: var(--ytm-accent);"></span>
@@ -397,9 +397,9 @@
         return Task.CompletedTask;
     }
 
-    private Task OnPreferHighQualityAudioChanged(bool value)
+    private Task OnMediaTitleTwoLinesChanged(bool value)
     {
-        PlayerService.SetUseWebM(value);
+        UiPreferences.SetMediaTitleTwoLines(value);
         return Task.CompletedTask;
     }
 

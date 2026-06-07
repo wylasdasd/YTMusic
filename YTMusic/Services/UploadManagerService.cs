@@ -12,6 +12,7 @@ namespace YTMusic.Services
     public class UploadManagerService : IUploadManagerService
     {
         private const int MaxRetainedTasks = 100;
+        private const double MaxInProgressUpload = 0.99;
         private readonly AListUploadService _aListUploadService;
         private readonly AListUploadSettingsService _settingsService;
         private readonly ILocalMusicService _localMusicService;
@@ -109,59 +110,29 @@ namespace YTMusic.Services
                 var mediaExtension = Path.GetExtension(track.LocalFilePath);
                 var mediaFileName = $"{directoryKey}{mediaExtension}";
                 var remoteMediaPath = AListUploadService.BuildRemotePath(remoteDirectory, mediaFileName);
-                var hasCover = !string.IsNullOrWhiteSpace(track.ThumbnailUrl);
-                string? coverFileName = null;
-
-                var mediaProgress = new Progress<double>(p =>
-                {
-                    UpdateCombinedProgress(taskInfo, hasCover, p, 0, 0);
-                });
-
-                await _aListUploadService.UploadFileToPathAsync(track.LocalFilePath, remoteMediaPath, mediaProgress);
-
-                string? coverError = null;
-                if (hasCover)
-                {
-                    coverFileName = BuildCoverFileName(track.ThumbnailUrl!);
-                    var remoteCoverPath = AListUploadService.BuildRemotePath(remoteDirectory, coverFileName);
-                    var coverProgress = new Progress<double>(p =>
-                    {
-                        UpdateCombinedProgress(taskInfo, true, 1.0, p, 0);
-                    });
-
-                    try
-                    {
-                        await _aListUploadService.UploadCoverAsync(track.ThumbnailUrl, remoteCoverPath, coverProgress);
-                    }
-                    catch (Exception ex)
-                    {
-                        coverError = ex.Message;
-                        coverFileName = null;
-                    }
-                }
-
-                var metadata = new RemoteTrackMetadata
-                {
-                    Title = track.Title,
-                    Author = track.Author ?? string.Empty,
-                    CoverPath = coverFileName
-                };
+                // metadata.json = DownloadedTracks 子集（见 RemoteTrackMetadata）；先传 metadata，再传音视频。
+                var metadata = RemoteTrackMetadata.FromDownloadedTrack(track);
                 var remoteMetadataPath = AListUploadService.BuildRemotePath(remoteDirectory, RemoteTrackMetadata.FileName);
                 var metadataProgress = new Progress<double>(p =>
                 {
-                    UpdateCombinedProgress(taskInfo, hasCover, hasCover ? 1.0 : 0.9, hasCover ? 1.0 : 0, p);
+                    UpdateCombinedProgress(taskInfo, 0, p);
                 });
                 await _aListUploadService.UploadJsonToPathAsync(metadata, remoteMetadataPath, metadataProgress);
+
+                var mediaProgress = new Progress<double>(p =>
+                {
+                    UpdateCombinedProgress(taskInfo, p, 1.0);
+                });
+                await _aListUploadService.UploadFileToPathAsync(track.LocalFilePath, remoteMediaPath, mediaProgress);
 
                 lock (_syncRoot)
                 {
                     taskInfo.DestinationPath = remoteDirectory;
                     taskInfo.Status = DownloadStatus.Completed;
                     taskInfo.Progress = 1.0;
-                    taskInfo.ErrorMessage = string.IsNullOrWhiteSpace(coverError)
-                        ? null
-                        : $"音频和 metadata 已上传，封面失败: {coverError}";
+                    taskInfo.ErrorMessage = null;
                 }
+                NotifyUploadsChanged();
 
                 await _localMusicService.MarkTrackUploadedAsync(track.LocalFilePath, remoteDirectory);
             }
@@ -197,17 +168,7 @@ namespace YTMusic.Services
             {
                 var progress = new Progress<double>(p =>
                 {
-                    bool shouldNotify;
-                    lock (_syncRoot)
-                    {
-                        shouldNotify = Math.Abs(taskInfo.Progress - p) >= 0.005 || p >= 1.0;
-                        taskInfo.Progress = p;
-                    }
-
-                    if (shouldNotify)
-                    {
-                        NotifyUploadsChanged();
-                    }
+                    UpdateSingleFileProgress(taskInfo, p);
                 });
 
                 var remotePath = await _aListUploadService.UploadFileAsync(taskInfo.SourcePath!, taskInfo.Title, progress);
@@ -218,6 +179,7 @@ namespace YTMusic.Services
                     taskInfo.Status = DownloadStatus.Completed;
                     taskInfo.Progress = 1.0;
                 }
+                NotifyUploadsChanged();
 
                 await _localMusicService.MarkTrackUploadedAsync(taskInfo.SourcePath!, remotePath);
             }
@@ -245,17 +207,27 @@ namespace YTMusic.Services
             OnUploadsChanged?.Invoke();
         }
 
-        private void UpdateCombinedProgress(DownloadTaskInfo taskInfo, bool hasCover, double mediaProgress, double coverProgress, double metadataProgress)
+        private void UpdateCombinedProgress(DownloadTaskInfo taskInfo, double mediaProgress, double metadataProgress)
         {
-            var combined = hasCover
-                ? (mediaProgress * 0.85) + (coverProgress * 0.1) + (metadataProgress * 0.05)
-                : (mediaProgress * 0.9) + (metadataProgress * 0.1);
+            // metadata.json 10%（先传）+ 音视频 90%（后传）；未完成前最高 99%，确认成功后才设 100%。
+            var combined = (metadataProgress * 0.1) + (mediaProgress * 0.9);
+            ApplyInProgressUpload(taskInfo, combined);
+        }
+
+        private void UpdateSingleFileProgress(DownloadTaskInfo taskInfo, double progress)
+        {
+            ApplyInProgressUpload(taskInfo, progress);
+        }
+
+        private void ApplyInProgressUpload(DownloadTaskInfo taskInfo, double progress)
+        {
+            var capped = Math.Min(MaxInProgressUpload, progress);
 
             bool shouldNotify;
             lock (_syncRoot)
             {
-                shouldNotify = Math.Abs(taskInfo.Progress - combined) >= 0.005 || combined >= 1.0;
-                taskInfo.Progress = combined;
+                shouldNotify = Math.Abs(taskInfo.Progress - capped) >= 0.005;
+                taskInfo.Progress = capped;
             }
 
             if (shouldNotify)
@@ -276,25 +248,6 @@ namespace YTMusic.Services
             var bytes = Encoding.UTF8.GetBytes(source);
             var hashBytes = md5.ComputeHash(bytes);
             return Convert.ToHexString(hashBytes).ToLowerInvariant();
-        }
-
-        private static string BuildCoverFileName(string thumbnailUrl)
-        {
-            var extension = ".jpg";
-            try
-            {
-                var uri = new Uri(thumbnailUrl, UriKind.Absolute);
-                var candidate = Path.GetExtension(uri.AbsolutePath);
-                if (!string.IsNullOrWhiteSpace(candidate) && candidate.Length <= 5)
-                {
-                    extension = candidate;
-                }
-            }
-            catch
-            {
-            }
-
-            return $"cover{extension}";
         }
 
         private void TrimHistory_NoLock()

@@ -14,6 +14,7 @@ namespace YTMusic.Components.Pages
         public required AListDirectoryItem Item { get; init; }
         public required string DisplayName { get; init; }
         public string? Subtitle { get; init; }
+        public string? ThumbnailUrl { get; init; }
     }
 
     public class UploadVM : IDisposable
@@ -58,8 +59,6 @@ namespace YTMusic.Components.Pages
         public int SelectedTabIndex { get; set; }
         public List<DownloadedTrack> DownloadedFiles { get; private set; } = new();
         public List<AListBrowserItem> RemoteFiles { get; private set; } = new();
-        public string CurrentRemoteBrowsePath { get; private set; } = "/";
-        public bool CanBrowseUp => !string.Equals(CurrentRemoteBrowsePath, NormalizedRemoteDirectory, StringComparison.OrdinalIgnoreCase);
 
         public IReadOnlyList<DownloadTaskInfo> Uploads => _uploadManager.ActiveUploads;
         public IReadOnlyList<DownloadTaskInfo> RemoteDownloads => _remoteDownloadManager.ActiveRemoteDownloads;
@@ -82,12 +81,23 @@ namespace YTMusic.Components.Pages
                 .FirstOrDefault();
         }
 
+        public bool IsUploadInProgress(string localFilePath)
+        {
+            var task = GetLatestUploadForFile(localFilePath);
+            return task != null &&
+                   task.Status is DownloadStatus.Pending or DownloadStatus.Downloading;
+        }
+
+        public bool ShouldShowUploadedTag(DownloadedTrack file)
+        {
+            return file.HasUploaded && !IsUploadInProgress(file.LocalFilePath);
+        }
+
         public async Task LoadAsync()
         {
             BaseUrl = _settingsService.BaseUrl;
             Token = _settingsService.Token;
             RemoteDirectory = _settingsService.RemoteDirectory;
-            CurrentRemoteBrowsePath = _settingsService.RemoteDirectory;
             IsSettingsExpanded = false;
             await RefreshDownloadedFilesAsync();
             await RefreshRemoteFilesAsync();
@@ -100,7 +110,6 @@ namespace YTMusic.Components.Pages
             BaseUrl = _settingsService.BaseUrl;
             Token = _settingsService.Token;
             RemoteDirectory = _settingsService.RemoteDirectory;
-            CurrentRemoteBrowsePath = _settingsService.RemoteDirectory;
             _snackbar.Add("AList upload settings saved.", Severity.Success);
             await RefreshRemoteFilesAsync();
             StateHasChanged?.Invoke();
@@ -186,7 +195,6 @@ namespace YTMusic.Components.Pages
             if (!_settingsService.IsConfigured)
             {
                 RemoteFiles.Clear();
-                CurrentRemoteBrowsePath = "/";
                 StateHasChanged?.Invoke();
                 return;
             }
@@ -196,11 +204,9 @@ namespace YTMusic.Components.Pages
 
             try
             {
-                CurrentRemoteBrowsePath = NormalizeBrowsePath(CurrentRemoteBrowsePath);
-
-                var remoteItems = (await _aListUploadService.ListDirectoryItemsAsync(CurrentRemoteBrowsePath))
-                    .OrderByDescending(item => item.IsDir)
-                    .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                var remoteItems = (await _aListUploadService.ListDirectoryItemsAsync(NormalizedRemoteDirectory))
+                    .Where(item => item.IsDir)
+                    .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
                 var browserItems = new List<AListBrowserItem>(remoteItems.Count);
@@ -221,36 +227,6 @@ namespace YTMusic.Components.Pages
                 IsRemoteLoading = false;
                 StateHasChanged?.Invoke();
             }
-        }
-
-        public async Task OpenRemoteDirectoryAsync(AListDirectoryItem item)
-        {
-            if (!item.IsDir)
-            {
-                return;
-            }
-
-            CurrentRemoteBrowsePath = item.Path;
-            await RefreshRemoteFilesAsync();
-        }
-
-        public async Task BrowseUpAsync()
-        {
-            if (!CanBrowseUp)
-            {
-                return;
-            }
-
-            var current = NormalizeBrowsePath(CurrentRemoteBrowsePath);
-            var parent = GetParentPath(current);
-            var root = NormalizeBrowsePath(NormalizedRemoteDirectory);
-            if (parent.Length < root.Length)
-            {
-                parent = root;
-            }
-
-            CurrentRemoteBrowsePath = parent;
-            await RefreshRemoteFilesAsync();
         }
 
         public void ToggleSelectAll(bool isSelected)
@@ -414,19 +390,12 @@ namespace YTMusic.Components.Pages
 
         private async Task<AListBrowserItem> ToBrowserItemAsync(AListDirectoryItem item)
         {
-            if (item.IsDir)
-            {
-                var mediaTitle = await TryResolveDirectoryMediaTitleAsync(item.Path);
-                if (!string.IsNullOrWhiteSpace(mediaTitle))
-                {
-                    return CreateBrowserItem(item, mediaTitle, item.Name);
-                }
-            }
-
-            return CreateBrowserItem(item, item.Name, null);
+            var (title, thumbnailUrl) = await TryResolveDirectoryInfoAsync(item.Path);
+            var displayName = string.IsNullOrWhiteSpace(title) ? item.Name : title;
+            return CreateBrowserItem(item, displayName, item.Name, thumbnailUrl);
         }
 
-        private async Task<string?> TryResolveDirectoryMediaTitleAsync(string directoryPath)
+        private async Task<(string? Title, string? ThumbnailUrl)> TryResolveDirectoryInfoAsync(string directoryPath)
         {
             try
             {
@@ -437,9 +406,9 @@ namespace YTMusic.Components.Pages
                 if (metadataItem != null)
                 {
                     var metadata = await _aListUploadService.TryDownloadJsonAsync<RemoteTrackMetadata>(metadataItem.Path);
-                    if (!string.IsNullOrWhiteSpace(metadata?.Title))
+                    if (metadata != null)
                     {
-                        return metadata.Title;
+                        return (metadata.Title, metadata.ThumbnailUrl);
                     }
                 }
 
@@ -453,12 +422,12 @@ namespace YTMusic.Components.Pages
                     .FirstOrDefault();
 
                 return mediaItem == null
-                    ? null
-                    : Path.GetFileNameWithoutExtension(mediaItem.Name);
+                    ? (null, null)
+                    : (Path.GetFileNameWithoutExtension(mediaItem.Name), null);
             }
             catch
             {
-                return null;
+                return (null, null);
             }
         }
 
@@ -479,36 +448,15 @@ namespace YTMusic.Components.Pages
                    extension.Equals(".avi", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static AListBrowserItem CreateBrowserItem(AListDirectoryItem item, string displayName, string? subtitle)
+        private static AListBrowserItem CreateBrowserItem(AListDirectoryItem item, string displayName, string? subtitle, string? thumbnailUrl = null)
         {
             return new AListBrowserItem
             {
                 Item = item,
                 DisplayName = displayName,
-                Subtitle = subtitle
+                Subtitle = subtitle,
+                ThumbnailUrl = thumbnailUrl
             };
-        }
-
-        private string NormalizeBrowsePath(string? path)
-        {
-            return AListUploadSettingsService.NormalizeDirectory(string.IsNullOrWhiteSpace(path) ? NormalizedRemoteDirectory : path);
-        }
-
-        private static string GetParentPath(string path)
-        {
-            var normalized = AListUploadSettingsService.NormalizeDirectory(path);
-            if (normalized == "/")
-            {
-                return "/";
-            }
-
-            var lastSlash = normalized.LastIndexOf('/');
-            if (lastSlash <= 0)
-            {
-                return "/";
-            }
-
-            return normalized[..lastSlash];
         }
 
         public void Dispose()

@@ -89,16 +89,6 @@
     letter-spacing: 0.08em;
 }
 
-.player-title {
-    color: var(--ytm-text-primary);
-    font-weight: 800;
-    line-height: 1.12;
-    margin-top: 8px;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-    overflow: hidden;
-}
 
 .player-author {
     color: var(--ytm-text-secondary);
@@ -219,7 +209,6 @@
 
     .player-title {
         font-size: 1.72rem;
-        -webkit-line-clamp: 3;
     }
 
     .player-author {

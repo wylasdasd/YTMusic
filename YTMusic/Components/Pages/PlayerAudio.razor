@@ -33,9 +33,9 @@
                             正在播放: @PlayerService.CurrentPlaylistName
                         </MudText>
                     }
-                    <MudText Typo="Typo.h5" Class="player-title">
-                        @PlayerService.CurrentVideo.Title
-                    </MudText>
+                    <MediaTitle Text="@PlayerService.CurrentVideo.Title"
+                                Typo="Typo.h5"
+                                Class="player-title" />
                     <MudText Typo="Typo.body1" Class="player-author">
                         @PlayerService.CurrentVideo.Author
                     </MudText>
