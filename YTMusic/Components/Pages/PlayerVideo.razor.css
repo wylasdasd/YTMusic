@@ -35,7 +35,10 @@
     inset: 0;
     border-radius: 28px;
     background:
-        linear-gradient(180deg, rgba(5, 10, 15, 0.12) 0%, rgba(5, 10, 15, 0.58) 36%, rgba(5, 10, 15, 0.94) 100%);
+        linear-gradient(180deg,
+            color-mix(in srgb, var(--ytm-bg-base) 12%, transparent) 0%,
+            color-mix(in srgb, var(--ytm-bg-base) 58%, transparent) 36%,
+            color-mix(in srgb, var(--ytm-bg-base) 94%, transparent) 100%);
     backdrop-filter: blur(20px);
 }
 
@@ -54,7 +57,7 @@
 }
 
 .player-title {
-    color: #f5f7fa;
+    color: var(--ytm-text-primary);
     font-weight: 800;
     line-height: 1.12;
     margin-top: 8px;
@@ -65,7 +68,7 @@
 }
 
 .player-author {
-    color: rgba(217, 227, 243, 0.82);
+    color: var(--ytm-text-secondary);
     margin-top: 8px;
     white-space: nowrap;
     overflow: hidden;
@@ -131,7 +134,8 @@
 }
 
 .player-video-note {
-    color: rgba(217, 227, 243, 0.72);
+    color: var(--ytm-text-secondary);
+    opacity: 0.72;
     margin-top: 8px;
     display: block;
 }
