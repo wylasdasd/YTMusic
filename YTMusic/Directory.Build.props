@@ -1,0 +1,9 @@
+<Project>
+  <!--
+    设计时只分析 Windows TFM，避免多目标 Razor 重复生成 TypeInference（MudSelectItem CS0121 假红线）。
+    仅作用于 YTMusic 主项目，不影响 CommonHelp 等类库。
+  -->
+  <PropertyGroup Condition="'$(DesignTimeBuild)' == 'true'">
+    <TargetFrameworks>net10.0-windows10.0.19041.0</TargetFrameworks>
+  </PropertyGroup>
+</Project>

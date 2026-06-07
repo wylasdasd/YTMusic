@@ -1,9 +1,0 @@
-<Project>
-  <!--
-    Cursor/VS Code 设计时只分析一个 TFM，避免多目标生成重复的 Razor TypeInference，
-    从而消除 MudSelectItem 等组件上的 CS0121 假阳性红线（dotnet build 不受影响）。
-  -->
-  <PropertyGroup Condition="'$(DesignTimeBuild)' == 'true'">
-    <TargetFrameworks>net10.0-windows10.0.19041.0</TargetFrameworks>
-  </PropertyGroup>
-</Project>
