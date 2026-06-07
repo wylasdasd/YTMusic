@@ -8,7 +8,7 @@
                    Variant="Variant.Outlined" FullWidth="true" Dense="true">
             @foreach (var folder in ViewModel.Folders)
             {
-                <MudSelectItem Value="@folder.Id">@folder.Name</MudSelectItem>
+                <MudSelectItem T="int" Value="@folder.Id">@folder.Name</MudSelectItem>
             }
         </MudSelect>
     </div>
@@ -16,9 +16,9 @@
     <div class="favorites-toolbar__field">
         <MudSelect T="int" Value="ViewModel.DownloadFilter" ValueChanged="ViewModel.SetFilterAsync" Label="Filter"
                    Variant="Variant.Outlined" FullWidth="true" Dense="true">
-            <MudSelectItem Value="0">All Tracks</MudSelectItem>
-            <MudSelectItem Value="1">Downloaded</MudSelectItem>
-            <MudSelectItem Value="2">Not Downloaded</MudSelectItem>
+            <MudSelectItem T="int" Value="0">All Tracks</MudSelectItem>
+            <MudSelectItem T="int" Value="1">Downloaded</MudSelectItem>
+            <MudSelectItem T="int" Value="2">Not Downloaded</MudSelectItem>
         </MudSelect>
     </div>
 </div>

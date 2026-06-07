@@ -1,6 +1,16 @@
 @using MudBlazor
 
-<MudDialog>
+<style>
+    .confirm-remove-dialog .mud-dialog-actions {
+        flex-direction: column;
+        gap: 8px;
+    }
+    .confirm-remove-dialog .mud-dialog-actions .mud-button {
+        margin: 0;
+    }
+</style>
+
+<MudDialog Class="confirm-remove-dialog">
     <DialogContent>
         <MudText Typo="Typo.body1">
             确定要取消收藏「@TrackTitle」吗？
@@ -13,15 +23,16 @@
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel" Color="Color.Default">取消</MudButton>
         @if (IsDownloaded)
         {
-            <MudButton OnClick="UnfavoriteOnly" Color="Color.Primary" Variant="Variant.Outlined">仅取消收藏</MudButton>
-            <MudButton OnClick="UnfavoriteAndDelete" Color="Color.Error" Variant="Variant.Filled">取消收藏并删除文件</MudButton>
+            <MudButton OnClick="UnfavoriteAndDelete" Color="Color.Error" Variant="Variant.Filled" FullWidth="true">取消收藏并删除文件</MudButton>
+            <MudButton OnClick="UnfavoriteOnly" Color="Color.Primary" Variant="Variant.Outlined" FullWidth="true">仅取消收藏</MudButton>
+            <MudButton OnClick="Cancel" Color="Color.Default" FullWidth="true">取消</MudButton>
         }
         else
         {
-            <MudButton OnClick="UnfavoriteOnly" Color="Color.Error" Variant="Variant.Filled">取消收藏</MudButton>
+            <MudButton OnClick="UnfavoriteOnly" Color="Color.Error" Variant="Variant.Filled" FullWidth="true">取消收藏</MudButton>
+            <MudButton OnClick="Cancel" Color="Color.Default" FullWidth="true">取消</MudButton>
         }
     </DialogActions>
 </MudDialog>
