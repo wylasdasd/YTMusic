@@ -57,13 +57,11 @@
 
                 <div class="player-actions-row">
                     <div class="player-actions-left">
-                        @if (CanPlayVideo)
-                        {
-                            <MudIconButton Icon="@Icons.Material.Filled.OndemandVideo"
-                                           Color="Color.Primary"
-                                           Disabled="true"
-                                           aria-label="Video playback available" />
-                        }
+                        <MudIconButton Icon="@Icons.Material.Filled.MusicNote"
+                                       Color="Color.Secondary"
+                                       OnClick="PlayAudioAsync"
+                                       Disabled="@PlayerService.IsSwitchingTrack"
+                                       aria-label="Switch to audio" />
                         <MudIconButton
                             Icon="@(IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
                             Color="@(IsFavorite ? Color.Error : Color.Default)"
@@ -246,6 +244,25 @@
 
         _currentCheckedVideoId = null;
         await CheckFavoriteStatusAsync();
+    }
+
+    private async Task PlayAudioAsync()
+    {
+        if (PlayerService.IsSwitchingTrack)
+        {
+            return;
+        }
+
+        if (await PlayerService.PlayCurrentAsAudioAsync())
+        {
+            if (!PlayerService.UseNativeVideoPlayback)
+            {
+                await JSRuntime.InvokeVoidAsync("audioPlayer.clearVideoElement");
+            }
+
+            _videoBound = false;
+            NavigationManager.NavigateTo("/player/audio", replace: true);
+        }
     }
 
     private void Download(bool isVideo)

@@ -28,8 +28,10 @@ namespace YTMusic.Components.Pages
                 GlobalState.ShowLoading();
                 StateHasChanged();
 
-                await PlayerService.PlayAsync(video);
-                NavigationManager.NavigateTo("/player");
+                if (await PlayerService.PlayAsync(video))
+                {
+                    NavigationManager.NavigateTo("/player");
+                }
             }
             finally
             {

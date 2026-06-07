@@ -77,13 +77,17 @@ else
 
     private async Task PlayLocalAudioFile(YTMusic.Services.DownloadedTrack file)
     {
-        await PlayerService.PlayLocalFileAsync(file.LocalFilePath, file.Title, false, file.Author, file.ThumbnailUrl);
-        NavigationManager.NavigateTo("/player");
+        if (await PlayerService.PlayLocalFileAsync(file.LocalFilePath, file.Title, false, file.Author, file.ThumbnailUrl))
+        {
+            NavigationManager.NavigateTo("/player");
+        }
     }
 
     private async Task PlayLocalVideoFile(YTMusic.Services.DownloadedTrack file)
     {
-        await PlayerService.PlayLocalFileAsync(file.LocalFilePath, file.Title, true, file.Author, file.ThumbnailUrl);
-        NavigationManager.NavigateTo("/player");
+        if (await PlayerService.PlayLocalFileAsync(file.LocalFilePath, file.Title, true, file.Author, file.ThumbnailUrl))
+        {
+            NavigationManager.NavigateTo("/player");
+        }
     }
 }

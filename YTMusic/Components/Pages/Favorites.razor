@@ -132,9 +132,11 @@ else
 
                 string folderName = ViewModel.Folders.FirstOrDefault(f => f.Id == ViewModel.SelectedFolderId)?.Name ?? "收藏夹";
 
-                await PlayerService.PlayPlaylistAsync(playlist, startIndex, folderName, MusicPlayerService.PlaybackMode.Sequential);
+                if (await PlayerService.PlayPlaylistAsync(playlist, startIndex, folderName, MusicPlayerService.PlaybackMode.Sequential))
+                {
+                    NavigationManager.NavigateTo("/player");
+                }
             }
-            NavigationManager.NavigateTo("/player");
         }
         finally
         {
@@ -174,8 +176,10 @@ else
 
             string folderName = ViewModel.Folders.FirstOrDefault(f => f.Id == ViewModel.SelectedFolderId)?.Name ?? "收藏夹";
 
-            await PlayerService.PlayPlaylistAsync(playlist, 0, folderName, mode);
-            NavigationManager.NavigateTo("/player");
+            if (await PlayerService.PlayPlaylistAsync(playlist, 0, folderName, mode))
+            {
+                NavigationManager.NavigateTo("/player");
+            }
         }
         finally
         {
@@ -196,14 +200,15 @@ else
             GlobalState.ShowLoading();
             StateHasChanged();
 
-            await PlayerService.PlayLocalFileAsync(
+            if (await PlayerService.PlayLocalFileAsync(
                 track.LocalVideoFilePath,
                 track.Title,
                 true,
                 track.Author,
-                track.ThumbnailUrl);
-
-            NavigationManager.NavigateTo("/player");
+                track.ThumbnailUrl))
+            {
+                NavigationManager.NavigateTo("/player");
+            }
         }
         finally
         {

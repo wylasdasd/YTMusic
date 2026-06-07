@@ -52,11 +52,20 @@
 
                 <div class="player-actions-row">
                     <div class="player-actions-left">
-                        @if (CanPlayVideo)
+                        @if (PlayerService.IsCurrentStreamVideo)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.MusicNote"
+                                           Color="Color.Secondary"
+                                           OnClick="PlayAudioAsync"
+                                           Disabled="@PlayerService.IsSwitchingTrack"
+                                           aria-label="Switch to audio" />
+                        }
+                        else if (PlayerService.CanShowVideoToggle())
                         {
                             <MudIconButton Icon="@Icons.Material.Filled.OndemandVideo"
                                            Color="Color.Secondary"
                                            OnClick="PlayVideoAsync"
+                                           Disabled="@PlayerService.IsSwitchingTrack"
                                            aria-label="Play video" />
                         }
                         <MudIconButton
@@ -87,7 +96,7 @@
                                    Size="Size.Large"
                                    Variant="Variant.Text"
                                    OnClick="PlayPreviousTrack"
-                                   Disabled="@(PlayerService.Playlist.Count == 0)" />
+                                   Disabled="@(PlayerService.Playlist.Count == 0 || PlayerService.IsSwitchingTrack)" />
 
                     @if (PlayerService.IsLoading)
                     {
@@ -99,6 +108,7 @@
                                        Size="Size.Large"
                                        Color="Color.Primary"
                                        OnClick="TogglePlay"
+                                       Disabled="@PlayerService.IsSwitchingTrack"
                                        Class="player-main-button" />
                     }
 
@@ -106,7 +116,7 @@
                                    Size="Size.Large"
                                    Variant="Variant.Text"
                                    OnClick="PlayNextTrack"
-                                   Disabled="@(PlayerService.Playlist.Count == 0)" />
+                                   Disabled="@(PlayerService.Playlist.Count == 0 || PlayerService.IsSwitchingTrack)" />
                 </div>
             </div>
         </div>
@@ -123,17 +133,13 @@
 @code {
     private bool IsFavorite = false;
     private string? _currentCheckedVideoId;
-    private string? _currentCheckedVideoSourceId;
     private DateTime _lastSliderInteraction = DateTime.MinValue;
     private double _lastReportedTime = 0;
-    private bool CanPlayVideo;
-
     protected override void OnInitialized()
     {
         PlayerService.OnChange += OnStateChanged;
         PlayerService.OnTimeChanged += OnTimeChanged;
         _ = CheckFavoriteStatusAsync();
-        _ = CheckVideoAvailabilityAsync();
     }
 
     private void OnStateChanged()
@@ -148,7 +154,6 @@
         }
 
         _ = CheckFavoriteStatusAsync();
-        _ = CheckVideoAvailabilityAsync();
         InvokeAsync(StateHasChanged);
     }
 
@@ -196,31 +201,6 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task CheckVideoAvailabilityAsync()
-    {
-        var currentVideo = PlayerService.CurrentVideo;
-        if (currentVideo == null)
-        {
-            CanPlayVideo = false;
-            _currentCheckedVideoSourceId = null;
-            return;
-        }
-
-        var sourceId = !string.IsNullOrWhiteSpace(currentVideo.LocalFilePath)
-            ? currentVideo.LocalFilePath
-            : currentVideo.VideoId;
-
-        if (_currentCheckedVideoSourceId == sourceId)
-        {
-            return;
-        }
-
-        _currentCheckedVideoSourceId = sourceId;
-        CanPlayVideo = await PlayerService.CanPlayCurrentAsVideoAsync();
-
-        await InvokeAsync(StateHasChanged);
-    }
-
     private async Task OpenFavoriteDialogAsync()
     {
         var currentVideo = PlayerService.CurrentVideo;
@@ -261,7 +241,7 @@
 
     private async Task PlayVideoAsync()
     {
-        if (!CanPlayVideo)
+        if (!PlayerService.CanShowVideoToggle() || PlayerService.IsSwitchingTrack)
         {
             return;
         }
@@ -270,6 +250,19 @@
         if (switched && !(OperatingSystem.IsAndroid() && PlayerService.UseNativeVideoPlayback))
         {
             NavigationManager.NavigateTo("/player/video");
+        }
+    }
+
+    private async Task PlayAudioAsync()
+    {
+        if (PlayerService.IsSwitchingTrack)
+        {
+            return;
+        }
+
+        if (await PlayerService.PlayCurrentAsAudioAsync())
+        {
+            NavigationManager.NavigateTo("/player/audio", replace: true);
         }
     }
 

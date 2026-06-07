@@ -61,7 +61,7 @@
 @code {
     private async Task PlayHistoryItemAsync(PlaybackHistoryItem item)
     {
-        await PlayerService.PlayAsync(new PlayingItem
+        if (await PlayerService.PlayAsync(new PlayingItem
         {
             VideoId = item.VideoId,
             Title = item.Title,
@@ -70,9 +70,10 @@
             LocalFilePath = item.LocalFilePath,
             IsVideo = item.IsVideo,
             DurationSeconds = item.DurationSeconds
-        });
-
-        NavigationManager.NavigateTo("/player");
+        }))
+        {
+            NavigationManager.NavigateTo("/player");
+        }
     }
 
     private void ClearHistory()
