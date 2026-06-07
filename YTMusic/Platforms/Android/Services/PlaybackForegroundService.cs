@@ -64,7 +64,7 @@ namespace YTMusic.Platforms.Android.Services
             base.OnCreate();
 
             _mainHandler = new Handler(Looper.MainLooper!);
-            _player = new ExoPlayerBuilder(this).Build();
+            _player = AndroidExoPlayerFactory.CreateMusicPlayer(this);
             _player.AddListener(this);
             EnsureNotificationChannel();
 

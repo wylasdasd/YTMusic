@@ -75,7 +75,7 @@ namespace YTMusic.Platforms.Android.Services
 
             SetContentView(root);
 
-            _player = new ExoPlayerBuilder(this).Build();
+            _player = AndroidExoPlayerFactory.CreateVideoPlayer(this);
             _player.AddListener(this);
             _playerView.Player = _player;
             BindCustomSettingsButton();
