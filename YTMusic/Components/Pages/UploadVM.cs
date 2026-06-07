@@ -67,6 +67,10 @@ namespace YTMusic.Components.Pages
         public string NormalizedRemoteDirectory => AListUploadSettingsService.NormalizeDirectory(RemoteDirectory);
         public bool HasSelection => _selectedFilePaths.Count > 0;
 
+        public bool IsAllSelected =>
+            DownloadedFiles.Count > 0 &&
+            DownloadedFiles.All(file => _selectedFilePaths.Contains(file.LocalFilePath));
+
         public DownloadTaskInfo? GetLatestUploadForFile(string localFilePath)
         {
             if (string.IsNullOrWhiteSpace(localFilePath))

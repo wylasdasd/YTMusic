@@ -58,8 +58,12 @@
         </MudExpansionPanel>
     </MudExpansionPanels>
 
-    <MudTabs Elevation="1" Rounded="true" @bind-ActivePanelIndex="ViewModel.SelectedTabIndex">
-        <MudTabPanel Text="Upload Local"
+    <MudTabs Elevation="1"
+             Rounded="true"
+             MinimumTabWidth="50%"
+             @bind-ActivePanelIndex="ViewModel.SelectedTabIndex">
+        <MudTabPanel Text="Local"
+                     Icon="@Icons.Material.Filled.Upload"
                      BadgeData="@GetUploadLocalTabBadgeData()"
                      BadgeColor="Color.Error">
             <MudPaper Elevation="2" Class="pa-4 mb-4">
@@ -69,15 +73,14 @@
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!ViewModel.HasSelection)" OnClick="ViewModel.UploadSelectedAsync">
                         Upload Selected
                     </MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="@(() => ViewModel.ToggleSelectAll(true))">
-                        Select All
-                    </MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="@(() => ViewModel.ToggleSelectAll(false))">
-                        Clear
-                    </MudButton>
-                    <MudButton Variant="Variant.Text" Color="Color.Secondary" OnClick="ViewModel.RefreshDownloadedFilesAsync">
-                        Refresh
-                    </MudButton>
+                    <MudToggleIconButton Toggled="@ViewModel.IsAllSelected"
+                                         ToggledChanged="@ViewModel.ToggleSelectAll"
+                                         Icon="@Icons.Material.Filled.SelectAll"
+                                         ToggledIcon="@Icons.Material.Filled.Deselect"
+                                         Variant="Variant.Text"
+                                         Color="Color.Info"
+                                         Title="@(ViewModel.IsAllSelected ? "Clear" : "Select All")"
+                                         Disabled="@(!ViewModel.DownloadedFiles.Any())" />
                 </div>
             </MudPaper>
 
@@ -98,7 +101,7 @@
                     {
                         var uploadTask = ViewModel.GetLatestUploadForFile(file.LocalFilePath);
                         <MudPaper Elevation="1" Class="pa-3">
-                            <div class="d-flex align-center gap-3">
+                            <div class="d-flex align-center gap-3 flex-wrap">
                                 <MudCheckBox T="bool"
                                              Value="@ViewModel.IsSelected(file.LocalFilePath)"
                                              ValueChanged="@(value => ViewModel.ToggleSelection(file.LocalFilePath, value))" />
@@ -133,19 +136,8 @@
                                             </MudChip>
                                         }
                                     </div>
-                                    <MudText Typo="Typo.body2" Color="Color.Secondary">@file.Author</MudText>
-                                    @if (ViewModel.ShouldShowUploadedTag(file) && !string.IsNullOrWhiteSpace(file.UploadedRemotePath))
-                                    {
-                                        <MudText Typo="Typo.caption" Color="Color.Success" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                            @file.UploadedRemotePath
-                                        </MudText>
-                                    }
-                                    @if (uploadTask != null && !string.IsNullOrWhiteSpace(uploadTask.DestinationPath))
-                                    {
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                            AList: @uploadTask.DestinationPath
-                                        </MudText>
-                                    }
+                                   
+        
                                     @if (uploadTask?.Status == DownloadStatus.Downloading)
                                     {
                                         <MudProgressLinear Color="Color.Primary" Value="@(uploadTask.Progress * 100)" Class="mt-2 mb-1" />
@@ -157,9 +149,7 @@
                                             @uploadTask.ErrorMessage
                                         </MudText>
                                     }
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                        @file.LocalFilePath
-                                    </MudText>
+                        
                                 </div>
                             </div>
                         </MudPaper>
@@ -168,7 +158,8 @@
             }
         </MudTabPanel>
 
-        <MudTabPanel Text="Uploaded Files"
+        <MudTabPanel Text="Remote"
+                     Icon="@Icons.Material.Filled.Cloud"
                      BadgeData="@GetUploadedFilesTabBadgeData()"
                      BadgeColor="Color.Info">
             <MudPaper Elevation="2" Class="pa-4 mb-4">
@@ -176,9 +167,9 @@
 
                 <div class="d-flex flex-wrap gap-3 align-center">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!ViewModel.IsConfigured)" OnClick="ViewModel.RefreshRemoteFilesAsync">
-                        Refresh Uploaded Files
+                        Refresh
                     </MudButton>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Directory: @ViewModel.NormalizedRemoteDirectory</MudText>
+
                 </div>
             </MudPaper>
 
@@ -202,7 +193,7 @@
                     @foreach (var file in ViewModel.RemoteFiles)
                     {
                         <MudPaper Elevation="1" Class="pa-3">
-                            <div class="d-flex align-center gap-3">
+                            <div class="d-flex align-center gap-3 flex-wrap">
                                 @if (!string.IsNullOrWhiteSpace(file.ThumbnailUrl))
                                 {
                                     <MudImage Src="@file.ThumbnailUrl" Width="56" Height="56" ObjectFit="ObjectFit.Cover" Class="rounded" />
@@ -211,7 +202,7 @@
                                 {
                                     <MudIcon Icon="@Icons.Material.Filled.MusicNote" Size="Size.Large" Color="Color.Primary" />
                                 }
-                                <div class="d-flex flex-column flex-grow-1" style="overflow: hidden;">
+                                <div class="d-flex flex-column flex-grow-1" style="overflow: hidden; min-width: 0;">
                                     <MediaTitle Text="@file.DisplayName" Typo="Typo.subtitle2" />
                                     @if (!string.IsNullOrWhiteSpace(file.Subtitle))
                                     {
