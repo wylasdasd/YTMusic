@@ -1,67 +1,17 @@
 @page "/upload"
 @using YTMusic.Services
+@using Microsoft.JSInterop
 @implements IDisposable
 
 <MudContainer MaxWidth="MaxWidth.Medium" Class="mt-4 mb-8">
-    <MudExpansionPanels Class="mb-4">
-        <MudExpansionPanel Expanded="@ViewModel.IsSettingsExpanded">
-            <TitleContent>
-                <div class="d-flex align-center justify-space-between flex-grow-1 pr-2">
-                    <div>
-                        <MudText Typo="Typo.h6">Upload Settings</MudText>
-
-                    </div>
-                    <MudChip T="string" Color="@(ViewModel.IsConfigured ? Color.Success : Color.Warning)">
-                        @(ViewModel.IsConfigured ? "Configured" : "Need Settings")
-                    </MudChip>
-                </div>
-            </TitleContent>
-            <ChildContent>
-                <MudTextField @bind-Value="ViewModel.BaseUrl"
-                              Label="AList Server URL"
-                              Placeholder="https://alist.example.com"
-                              Variant="Variant.Outlined"
-                              Immediate="true"
-                              FullWidth="true"
-                              Class="mb-3" />
-
-                <MudTextField @bind-Value="ViewModel.Token"
-                              Label="AList Token"
-                              Placeholder="Paste authorization token"
-                              Variant="Variant.Outlined"
-                              InputType="InputType.Password"
-                              Immediate="true"
-                              FullWidth="true"
-                              Class="mb-3" />
-
-                <MudTextField @bind-Value="ViewModel.RemoteDirectory"
-                              Label="Remote Directory"
-                              Placeholder="/music/uploads"
-                              Variant="Variant.Outlined"
-                              Immediate="true"
-                              FullWidth="true"
-                              Class="mb-4" />
-
-                <div class="d-flex flex-wrap gap-3 align-center">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ViewModel.SaveSettingsAsync">
-                        Save Settings
-                    </MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ViewModel.PickAndUploadFilesAsync">
-                        Choose Files
-                    </MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ViewModel.CreateRemoteDirectoryAsync">
-                        Create Directory
-                    </MudButton>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Current target: @ViewModel.NormalizedRemoteDirectory</MudText>
-                </div>
-            </ChildContent>
-        </MudExpansionPanel>
-    </MudExpansionPanels>
-
-    <MudTabs Elevation="1"
+    <MudTabs id="upload-page-tabs"
+             Class="ytm-tabs-touch-scroll"
+             Elevation="1"
              Rounded="true"
-             MinimumTabWidth="50%"
+             MinimumTabWidth="33%"
              @bind-ActivePanelIndex="ViewModel.SelectedTabIndex">
+     
+
         <MudTabPanel Text="Local"
                      Icon="@Icons.Material.Filled.Upload"
                      BadgeData="@GetUploadLocalTabBadgeData()"
@@ -266,16 +216,86 @@
             }
         </MudTabPanel>
 
+        <MudTabPanel Text="Settings"
+                     Icon="@Icons.Material.Filled.Settings">
+            <MudPaper Elevation="2" Class="pa-4 mb-4">
+                <div class="d-flex align-center justify-space-between flex-wrap gap-2 mb-4">
+                    <MudText Typo="Typo.h6">Upload Settings</MudText>
+                    <MudChip T="string" Color="@(ViewModel.IsConfigured ? Color.Success : Color.Warning)">
+                        @(ViewModel.IsConfigured ? "Configured" : "Need Settings")
+                    </MudChip>
+                </div>
+
+                <MudTextField @bind-Value="ViewModel.BaseUrl"
+                              Label="AList Server URL"
+                              Placeholder="https://alist.example.com"
+                              Variant="Variant.Outlined"
+                              Immediate="true"
+                              FullWidth="true"
+                              Class="mb-3" />
+
+                <MudTextField @bind-Value="ViewModel.Token"
+                              Label="AList Token"
+                              Placeholder="Paste authorization token"
+                              Variant="Variant.Outlined"
+                              InputType="InputType.Password"
+                              Immediate="true"
+                              FullWidth="true"
+                              Class="mb-3" />
+
+                <MudTextField @bind-Value="ViewModel.RemoteDirectory"
+                              Label="Remote Directory"
+                              Placeholder="/music/uploads"
+                              Variant="Variant.Outlined"
+                              Immediate="true"
+                              FullWidth="true"
+                              Class="mb-4" />
+
+                <div class="d-flex flex-wrap gap-3 align-center">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ViewModel.SaveSettingsAsync">
+                        Save Settings
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ViewModel.PickAndUploadFilesAsync">
+                        Choose Files
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ViewModel.CreateRemoteDirectoryAsync">
+                        Create Directory
+                    </MudButton>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Current target: @ViewModel.NormalizedRemoteDirectory</MudText>
+                </div>
+            </MudPaper>
+        </MudTabPanel>
     </MudTabs>
 </MudContainer>
 
 @code {
+    private const string UploadTabsId = "upload-page-tabs";
+
     [Inject] private UploadVM ViewModel { get; set; } = default!;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    private int _lastTabIndex = -1;
 
     protected override async Task OnInitializedAsync()
     {
         ViewModel.StateHasChanged = () => InvokeAsync(StateHasChanged);
         await ViewModel.LoadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JS.InvokeVoidAsync("ytmLayout.initTouchScrollTabs", UploadTabsId);
+            _lastTabIndex = ViewModel.SelectedTabIndex;
+            return;
+        }
+
+        if (_lastTabIndex != ViewModel.SelectedTabIndex)
+        {
+            _lastTabIndex = ViewModel.SelectedTabIndex;
+            await JS.InvokeVoidAsync("ytmLayout.syncTouchScrollTabs", UploadTabsId);
+        }
     }
 
     public void Dispose()

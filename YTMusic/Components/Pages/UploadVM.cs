@@ -56,8 +56,7 @@ namespace YTMusic.Components.Pages
         public string RemoteDirectory { get; set; } = "/";
         public bool IsLoading { get; private set; }
         public bool IsRemoteLoading { get; private set; }
-        public bool IsSettingsExpanded { get; set; }
-        public int SelectedTabIndex { get; set; }
+        public int SelectedTabIndex { get; set; } = 1;
         public List<DownloadedTrack> DownloadedFiles { get; private set; } = new();
         public List<AListBrowserItem> RemoteFiles { get; private set; } = new();
 
@@ -136,7 +135,6 @@ namespace YTMusic.Components.Pages
             BaseUrl = _settingsService.BaseUrl;
             Token = _settingsService.Token;
             RemoteDirectory = _settingsService.RemoteDirectory;
-            IsSettingsExpanded = false;
             await RefreshDownloadedFilesAsync();
             await RefreshRemoteFilesAsync();
             StateHasChanged?.Invoke();

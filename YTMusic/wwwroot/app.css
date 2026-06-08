@@ -181,6 +181,31 @@ h1:focus {
     -webkit-line-clamp: unset;
 }
 
+/* Touch-swipe tab bar (native horizontal scroll, no arrow buttons) */
+.ytm-tabs-touch-scroll .mud-tabs-scroll-button {
+    display: none !important;
+}
+
+.ytm-tabs-touch-scroll .mud-tabs-tabbar-content {
+    overflow-x: auto !important;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    touch-action: pan-x;
+}
+
+.ytm-tabs-touch-scroll .mud-tabs-tabbar-content::-webkit-scrollbar {
+    display: none;
+}
+
+.ytm-tabs-touch-scroll .mud-tabs-tabbar-wrapper {
+    transform: none !important;
+    will-change: auto;
+}
+
 .status-bar-safe-area {
     display: none;
 }
