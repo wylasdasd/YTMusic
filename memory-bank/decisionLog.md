@@ -1,5 +1,47 @@
 # 决策日志 (Decision Log)
 
+## 2026-06-07: 已下载歌曲切歌必须区分 Web 代理与 Android 原生路径
+- **决策**:
+  - Web 代理：`loadSource` 用完整 URL 判断；本地代理 URL 增加 `&f=文件路径`；切歌前 `OnRequestPause`。
+  - Android 原生：`PlaybackForegroundService` 切歌前 `Stop()` + `ClearMediaItems()` 再加载新媒体。
+- **依据**:
+  - 本地文件共用 `LocalFileProxy` 同源地址，`normalizeStreamUrl` 去 query 后会被误判为同一首，导致 UI 更新但音频不切换。
+  - Android 已下载音频走 ExoPlayer，不经过 `audioPlayer.js`；需在服务层显式清理媒体项。
+
+## 2026-06-07: 音视频标题设置改为「两行显示」，不做横向滚动
+- **决策**:
+  - `UiPreferencesService.MediaTitleTwoLines`：开启时 `-webkit-line-clamp: 2` + 省略号；关闭时完整换行。
+  - 统一 `MediaTitle` 组件接入搜索/收藏/下载/历史/传输/上传/播放器/对话框。
+- **依据**:
+  - 用户明确不要 marquee；两行截断比单行滚动更适合列表与播放器标题区。
+
+## 2026-06-07: AList 上传只写 `metadata.json` + 主媒体，不上传封面文件
+- **决策**:
+  - `metadata.json` 使用 `RemoteTrackMetadata.FromDownloadedTrack()`，字段为 `DownloadedTracks` 子集。
+  - 封面仅 `thumbnailUrl` 写入 JSON；远端展示/下载从 URL 读封面，不再上传 `cover.*` 文件。
+- **依据**:
+  - 减少上传失败面（502）与重复存储；与远端 `metadata.json` 读取逻辑一致。
+
+## 2026-06-07: 移除 High Quality Audio，在线播放统一偏好 WebM
+- **决策**:
+  - 删除 `PreferHighQualityAudio` / `UseWebM` 设置；解析与下载逻辑固定 WebM 优先。
+- **依据**:
+  - 设置项对实际链路影响有限，且增加心智负担。
+
+## 2026-06-07: `Directory.Build.props` 不得放在仓库根目录
+- **决策**:
+  - 设计时单 TFM 限制仅放在 `YTMusic/Directory.Build.props`。
+  - `CommonHelp` 保持 `net10.0`，不被设计时 `TargetFrameworks` 污染。
+- **依据**:
+  - VS 重新加载后根目录 `Directory.Build.props` 导致 `CommonHelp` 仅 windows TFM，Android 构建 NU1201。
+
+## 2026-06-07: Android 顶栏三横杠与 Windows 分流
+- **决策**:
+  - 非 Windows：`ytm-theme-toggle-mobile` + `margin-left: auto`；`app.css` 全局兜底。
+  - Windows 仍靠 `ytm-window-drag`（`flex:1`）推开布局。
+- **依据**:
+  - 移动端顶栏无 drag 占位，菜单按钮会贴在品牌旁而非右侧。
+
 ## 2026-03-30: AList 上传目录继续采用 `Remote Directory/<歌名md5>`
 - **决策**:
   - 远端上传子目录保持 `Remote Directory/<歌名md5>` 格式。
@@ -132,7 +174,7 @@
 
 ## 2026-03-25: 轻量 UI 设置统一走 `Preferences`，不单独建设置表
 - **决策**:
-  - 主题索引、`Favorites Image`、`High Quality Audio` 等轻量设置统一收口到 `UiPreferencesService`。
+  - 主题索引、`Favorites Image`、`MediaTitleTwoLines` 等轻量设置统一收口到 `UiPreferencesService`。
   - 不额外建立 SQLite `Settings` 表。
 - **依据**:
   - 当前设置项数量少、类型简单（`bool` / `int`），`Preferences` 的键值模型更轻更稳。

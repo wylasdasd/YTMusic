@@ -10,8 +10,15 @@
 - **JS 互操作**: 广泛使用 `IJSRuntime` 来控制音频元素（播放/暂停、进度跳转、事件监听）。
 - **全局状态管理**: `MusicPlayerService` 作为单例/作用域状态提供者，向整个 UI 提供数据，并通过事件 (`OnChange`) 通知组件更新。
 - **轻量设置持久化**:
-  - `UiPreferencesService` 统一承接主题索引、收藏图显示、音质偏好等轻量设置。
+  - `UiPreferencesService` 统一承接主题索引、`Favorites Image`、`MediaTitleTwoLines` 等轻量设置。
   - 这类设置不落 SQLite，而是走 MAUI `Preferences`。
+- **标题展示**:
+  - `MediaTitle` 组件读取 `UiPreferencesService.MediaTitleTwoLines`，全局统一两行截断或完整换行。
+  - 播放器 `.player-title` 等样式在 `app.css` 中维护部分全局规则。
+- **设计时构建隔离**:
+  - `YTMusic/Directory.Build.props` 仅在设计时将 `YTMusic` 限制为 Windows TFM；不可放在仓库根，否则会污染 `CommonHelp`。
+- **页面级 CSS**:
+  - 项目 `EnableDefaultCssItems=false`；`*.razor.css` 会进 `YTMusic.styles.css`，但不宜假设所有页面样式自动生效，关键布局应优先 `app.css` 或确认 bundle。
 - **导航分层**:
   - 底部导航保留高频核心入口（Home / Favorites / Player / Download / Other）。
   - `Other` 承接低频页面；`Transfers` 等页面内部再做页内二/三级导航。
@@ -30,7 +37,9 @@
   - 顶部工具栏在 Windows 放大窗口时应使用全宽布局，不要给 `.ytm-topbar-inner` 设固定 `max-width + auto margin`，否则左右控件不会真正贴边。
 
 ## 组件结构
-- **GlobalAudioPlayer.razor**: 实现在 `MainLayout` 中，跨页面持久存在的音频组件。
+- **GlobalAudioPlayer.razor**: 实现在 `MainLayout` 中，跨页面持久存在的音频组件；`IsUsingNativePlayback` 时不同步 Web `<audio>`，由 Android/iOS 原生服务负责。
+- **MediaTitle.razor**: 各页音视频标题统一组件，跟随「两行显示」设置。
+- **Upload.razor**: AList 双标签（`Local`/`Remote`），`BadgeData` 显示计数；上传任务状态内嵌列表项。
 - **Player.razor**: 全屏播放器视图，包含详细控制项和元数据展示。
 - **PlayerAudio.razor / PlayerVideo.razor**:
   - 两者现在都依赖各自独立的 scoped CSS。

@@ -122,7 +122,23 @@
   - 可以通过拖拽阈值、恢复时机、窗口定位方式等手段缓解，但通常只能降低出现概率，难以完全根治。
   - 如果后续需求是“最大化拖拽体验必须接近系统原生且几乎无白闪”，通常需要更深地回到原生 Windows 非客户区拖拽/命中测试方案；在现有跨平台自定义窗口方案里，不应轻易承诺彻底解决。
 
-## 6. 构建产物残留导致的“重复定义 / 重复特性”假报错
+## 6. 已下载本地文件切歌时 UI 与音频不同步
+- **难点**:
+  - 多个本地文件共用同一个 `LocalFileProxy` 地址（仅 query 不同）。
+  - `audioPlayer.js` 曾用 `normalizeStreamUrl` 去掉 query 后比较，导致切歌时跳过 `loadSource`。
+  - Android 已下载音频走原生 ExoPlayer，不经过 Web `audioPlayer.js`；需在 `PlaybackForegroundService` 显式替换媒体项。
+- **解决逻辑**:
+  - Web：`loadSource` 比较完整 URL；`BuildLocalProxyStreamUrl` 增加 `&f=文件路径`；切代理前 `OnRequestPause`。
+  - Android：切歌 `Stop()` + `ClearMediaItems()` + `SetMediaItem`。
+- **核心代码位置**:
+  - [audioPlayer.js](c:\a_code\work2\YTMusic\YTMusic\wwwroot\js\audioPlayer.js)
+  - [MusicPlayerService.cs](c:\a_code\work2\YTMusic\YTMusic\Services\MusicPlayerService.cs)（`BuildLocalProxyStreamUrl`、`StopOtherPlaybackPipelineAsync`）
+  - [PlaybackForegroundService.cs](c:\a_code\work2\YTMusic\YTMusic\Platforms\Android\Services\PlaybackForegroundService.cs)
+  - [GlobalAudioPlayer.razor](c:\a_code\work2\YTMusic\YTMusic\Components\Layout\GlobalAudioPlayer.razor)（原生播放时 early return）
+- **注意事项**:
+  - 排查“界面换了声音没换”时，先确认 `IsUsingNativePlayback` 分支，再查 Web 代理 URL 比较逻辑。
+
+## 7. 构建产物残留导致的“重复定义 / 重复特性”假报错
 - **难点**:
   - 之前临时构建产生的 `obj-temp` 残留在项目目录中，会被 SDK 当成正常源码再次编译。
   - 这类问题会表现成 `ValidatableTypeAttribute` 重复定义、程序集特性重复等误导性错误。

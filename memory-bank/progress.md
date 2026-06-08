@@ -1,52 +1,41 @@
 # 项目进度 (Progress)
 
 ## 已完成
+### AList
 - [x] AList 上传设置持久化（`BaseUrl`、`Token`、`RemoteDirectory`）。
-- [x] 上传页设置面板默认收起，并支持 `Create Directory` 创建 AList 目录。
-- [x] `Upload Local` 支持基于本地已下载文件批量上传到 AList。
-- [x] 上传目录约定为 `Remote Directory/<歌名md5>`，上传前自动 `mkdir`。
-- [x] AList 上传支持主音视频 + 封面一起上传。
-- [x] AList 浏览页 `Uploaded Files`：支持目录浏览、返回上级、单文件下载、整目录下载。
-- [x] AList 目录整首下载按本地下载数据库逻辑入库（主媒体 + 封面）。
-- [x] AList 下载封面改存 `data:image/...;base64,...`，修复下载页/播放页封面显示问题。
-- [x] `DownloadedTracks` 新增上传与远端来源追踪字段（`HasUploaded`、`UploadedDate`、`UploadedRemotePath`、`RemoteSourcePath`）。
-- [x] 上传状态直接内嵌到 `Upload Local` 文件列表项中，移除单独的上传任务页签。
-- [x] AList 上传与目录下载允许重复执行；本地同名下载默认覆盖。
-- [x] `Uploaded Files` 目录展示直接读取主音视频文件名作为显示名。
-- [x] 修复不可播放 YouTube 视频导致播放器回退到上一首的状态残留 bug。
-- [x] 基础搜索与播放 (YouTube API 集成)。
-- [x] 用于流媒体的本地音频代理。
-- [x] 收藏夹文件夹及歌曲持久化。
-- [x] 本地音频文件播放支持。
-- [x] 顺序播放、随机播放列表逻辑。
-- [x] 播放模式 UI (图标与切换逻辑)。
-- [x] 优化：无缝单曲循环（避免 Loading 重载）。
-- [x] Android 13+ 通知权限请求链路恢复（`POST_NOTIFICATIONS`）。
-- [x] Android 后台播放通知链路稳定化（恢复前台通知与进度更新）。
-- [x] 清理无效通知权限服务抽象，降低排障复杂度。
-- [x] 实机确认并固化“平台原生 `Notification.MediaStyle + MediaSession.Token`”方案，恢复上一首/下一首显示。
-- [x] Windows 自定义窗口壳层接入（`MainWindow.xaml` + `MauiProgram` 生命周期配置）。
-- [x] Windows 顶栏窗口控制按钮与拖拽热区接入（`WindowChromeService` + `mouseInterop.js`）。
-- [x] 修复 Windows 拖拽导致窗口尺寸变化的问题（改用 `SetWindowPos(...SWP_NOSIZE...)`）。
-- [x] 调整 Windows 顶栏布局：删除搜索胶囊、三横杠移至窗口按钮组左侧、顶栏全宽贴边。
-- [x] 三横杠设置持久化：主题、`Favorites Image`、`High Quality Audio`。
-- [x] “还原默认”重置链路：清表、删下载目录、恢复默认设置、停止播放。
-- [x] 底部导航重构：`Transfers` 收进 `Other`，下载页使用页内二/三级筛选。
-- [x] `Other` 页面新增“历史播放列表”入口。
-- [x] 运行期播放历史列表（`MusicPlayerService.PlaybackHistory`）接入。
-- [x] Android 原生视频退出后恢复状态链路修复（`PlaybackStopped`）。
-- [x] 安卓视频主路径调整为原生全屏；Blazor `/player/video` 在安卓上弱化为兜底。
+- [x] 上传目录 `Remote Directory/<歌名md5>`，先 `mkdir` 再上传。
+- [x] 上传顺序：`metadata.json` → 主音视频；JSON 与 `DownloadedTracks` 字段子集对齐（`RemoteTrackMetadata`）。
+- [x] 不再上传封面文件；`thumbnailUrl` 写入 JSON。
+- [x] 上传进度分阶段加权，完成前封顶 99%。
+- [x] `Upload Local` 基于本地下载列表上传；上传中隐藏 Uploaded 标签。
+- [x] 标签页 `BadgeData`（选中数 / 远端文件数）；`Select All`/`Clear` 合并为 toggle 图标按钮。
+- [x] `Uploaded Files` 简化列表；`MudTabs` 小屏适配（`MinimumTabWidth=50%`、短标签+图标）。
+- [x] AList 远端目录下载、`Transfers` 接入、重复执行允许、同名覆盖。
+- [x] `DownloadedTracks` 上传/来源追踪字段。
+
+### 播放
+- [x] 基础搜索与播放、本地代理、收藏、列表播放模式。
+- [x] 无缝单曲循环（JS `currentTime` 重置）。
+- [x] Android Media3 + ExoPlayer + 手写前台通知；平台 MediaStyle 三键。
+- [x] Android 原生视频主路径；`PlaybackStopped` 状态链。
+- [x] **已下载歌曲切歌**：Web 代理 URL 误判修复 + Android ExoPlayer 切歌清理。
+- [x] 在线播放统一 WebM 偏好（移除 High Quality Audio 设置）。
+- [x] `NetworkErrorService` / VPN 建议弹窗（播放、搜索失败）。
+
+### UI / 平台
+- [x] Windows 自定义窗口壳层、拖拽、顶栏布局。
+- [x] `UiPreferencesService`：主题、`Favorites Image`、**两行显示标题**（`MediaTitleTwoLines`）。
+- [x] `MediaTitle` 组件统一各页音视频标题展示。
+- [x] Android 顶栏三横杠右对齐（`ytm-theme-toggle-mobile`）。
+- [x] `Directory.Build.props` 仅作用于 `YTMusic` 项目（修复 CommonHelp Android 还原错误）。
+- [x] 底部导航 / `Other` / 运行期播放历史 / 还原默认等。
 
 ## 进行中
-- [x] 初始化中文化 Memory Bank。
-- [ ] 评估 YouTube 下载的网络/VPN 失败提示与入队前探测方案。
-- [ ] Player 页面继续向 YouTube Music 风格靠拢（封面、视频区、标题区、平台差异样式）。
-- [ ] Player 视频页在 Windows/Android 的最终居中与视觉重心校准。
-- [ ] 锁屏媒体控件在不同 ROM 的一致性验证与适配。
+- [ ] Android 已下载切歌实机回归（列表 + 通知栏）。
+- [ ] Player 页面继续向 YTube Music 风格靠拢。
+- [ ] 锁屏媒体控件不同 ROM 一致性验证。
 
 ## 未来路线图
-- [ ] 高级均衡器 (Equalizer) 设置。
-- [ ] 离线歌词支持。
-- [ ] 更好的 Android/iOS SDK 适配（针对移动端构建）。
-- [ ] 收藏夹中的批量操作功能。
-- [ ] 播放历史 SQLite 持久化（跨重启保留）。
+- [ ] 播放历史 SQLite 持久化。
+- [ ] YouTube 下载网络/VPN 提示与入队前探测。
+- [ ] 高级均衡器、离线歌词、收藏批量操作等。
