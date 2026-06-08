@@ -13,15 +13,25 @@
         </MudSelect>
     </div>
 
-    <div class="favorites-toolbar__field">
-        <MudSelect T="int" Value="ViewModel.DownloadFilter" ValueChanged="ViewModel.SetFilterAsync" Label="Filter"
-                   Variant="Variant.Outlined" FullWidth="true" Dense="true">
-            <MudSelectItem T="int" Value="0">All Tracks</MudSelectItem>
-            <MudSelectItem T="int" Value="1">Downloaded</MudSelectItem>
-            <MudSelectItem T="int" Value="2">Not Downloaded</MudSelectItem>
-        </MudSelect>
-    </div>
+    @if (!ViewModel.IsDownloadedCatalogSelected)
+    {
+        <div class="favorites-toolbar__field">
+            <MudSelect T="int" Value="ViewModel.DownloadFilter" ValueChanged="ViewModel.SetFilterAsync" Label="Filter"
+                       Variant="Variant.Outlined" FullWidth="true" Dense="true">
+                <MudSelectItem T="int" Value="0">All Tracks</MudSelectItem>
+                <MudSelectItem T="int" Value="1">Downloaded</MudSelectItem>
+                <MudSelectItem T="int" Value="2">Not Downloaded</MudSelectItem>
+            </MudSelect>
+        </div>
+    }
 </div>
+
+@if (ViewModel.IsDownloadedCatalogSelected)
+{
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
+        已下载目录同步自本地下载列表，无法手动添加或取消收藏。
+    </MudAlert>
+}
 
 <div class="favorites-actions">
     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlayArrow"
@@ -42,7 +52,9 @@
 }
 else if (!ViewModel.Tracks.Any())
 {
-    <MudAlert Severity="Severity.Info" Class="mt-4">No favorites found in this folder with the current filter.</MudAlert>
+    <MudAlert Severity="Severity.Info" Class="mt-4">
+        @(ViewModel.IsDownloadedCatalogSelected ? "暂无本地下载文件。" : "No favorites found in this folder with the current filter.")
+    </MudAlert>
 }
 else
 {
@@ -80,11 +92,14 @@ else
                                                aria-label="Play local video" />
                             </div>
                         }
-                        <div @onclick:stopPropagation="true">
-                            <MudIconButton Icon="@Icons.Material.Filled.Favorite" Color="Color.Primary"
-                                           OnClick="@(async (e) => { await ViewModel.ConfirmRemoveFavoriteAsync(track); })"
-                                           aria-label="Remove from favorites" />
-                        </div>
+                        @if (!ViewModel.IsDownloadedCatalogSelected)
+                        {
+                            <div @onclick:stopPropagation="true">
+                                <MudIconButton Icon="@Icons.Material.Filled.Favorite" Color="Color.Primary"
+                                               OnClick="@(async (e) => { await ViewModel.ConfirmRemoveFavoriteAsync(track); })"
+                                               aria-label="Remove from favorites" />
+                            </div>
+                        }
                     </MudCardActions>
                     </MudCard>
                 </MudItem>
@@ -121,11 +136,13 @@ else
                     Title = t.Title,
                     Author = t.Author,
                     ThumbnailUrl = t.ThumbnailUrl,
-                    LocalFilePath = t.IsDownloaded ? t.LocalFilePath : null,
+                    LocalFilePath = t.IsDownloaded || ViewModel.IsDownloadedCatalogSelected ? t.LocalFilePath : null,
                     IsVideo = false
                 }).ToList();
 
-                int startIndex = ViewModel.Tracks.FindIndex(t => t.VideoId == track.VideoId);
+                int startIndex = ViewModel.Tracks.FindIndex(t =>
+                    t.VideoId == track.VideoId &&
+                    string.Equals(t.LocalFilePath, track.LocalFilePath, StringComparison.OrdinalIgnoreCase));
                 if (startIndex == -1) startIndex = 0;
 
                 string folderName = ViewModel.Folders.FirstOrDefault(f => f.Id == ViewModel.SelectedFolderId)?.Name ?? "收藏夹";
@@ -168,7 +185,7 @@ else
                 Title = t.Title,
                 Author = t.Author,
                 ThumbnailUrl = t.ThumbnailUrl,
-                LocalFilePath = t.IsDownloaded ? t.LocalFilePath : null,
+                LocalFilePath = t.IsDownloaded || ViewModel.IsDownloadedCatalogSelected ? t.LocalFilePath : null,
                 IsVideo = false
             }).ToList();
 

@@ -9,11 +9,23 @@ using CommonTool.FileHelps;
 
 namespace YTMusic.Services
 {
+    public static class FavoriteFolderIds
+    {
+        public const int Default = 1;
+        public const int DownloadedCatalog = -1;
+
+        public static bool IsDownloadedCatalog(int folderId) => folderId == DownloadedCatalog;
+
+        public static bool IsProtectedFolder(int folderId)
+            => folderId == Default || folderId == DownloadedCatalog;
+    }
+
     public class FavoriteFolder
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
         public bool IsDefault { get; set; }
+        public bool IsDownloadedCatalog { get; set; }
     }
 
     public class FavoriteTrack
@@ -125,7 +137,21 @@ namespace YTMusic.Services
         public async Task<List<FavoriteFolder>> GetFoldersAsync()
         {
             using var connection = new SqliteConnection(_connectionString);
-            return (await connection.QueryAsync<FavoriteFolder>("SELECT * FROM FavoriteFolders ORDER BY IsDefault DESC, Id ASC;")).ToList();
+            var dbFolders = (await connection.QueryAsync<FavoriteFolder>(
+                "SELECT * FROM FavoriteFolders ORDER BY IsDefault DESC, Id ASC;")).ToList();
+
+            var defaultFolder = dbFolders.FirstOrDefault(f => f.Id == FavoriteFolderIds.Default)
+                ?? new FavoriteFolder { Id = FavoriteFolderIds.Default, Name = "默认收藏夹", IsDefault = true };
+
+            var folders = new List<FavoriteFolder> { defaultFolder };
+            folders.Add(new FavoriteFolder
+            {
+                Id = FavoriteFolderIds.DownloadedCatalog,
+                Name = "已下载",
+                IsDownloadedCatalog = true
+            });
+            folders.AddRange(dbFolders.Where(f => f.Id != FavoriteFolderIds.Default));
+            return folders;
         }
 
         public async Task<FavoriteFolder> CreateFolderAsync(string name)
@@ -138,7 +164,10 @@ namespace YTMusic.Services
 
         public async Task DeleteFolderAsync(int folderId)
         {
-            if (folderId == 1) throw new InvalidOperationException("Cannot delete default folder.");
+            if (FavoriteFolderIds.IsProtectedFolder(folderId))
+            {
+                throw new InvalidOperationException("Cannot delete built-in folder.");
+            }
             using var connection = new SqliteConnection(_connectionString);
             await connection.ExecuteAsync("DELETE FROM FavoriteTracks WHERE FolderId = @FolderId;", new { FolderId = folderId });
             await connection.ExecuteAsync("DELETE FROM FavoriteFolders WHERE Id = @FolderId;", new { FolderId = folderId });
@@ -155,6 +184,11 @@ namespace YTMusic.Services
 
         public async Task<List<FavoriteTrack>> GetTracksAsync(int? folderId = null, bool? isDownloaded = null)
         {
+            if (folderId.HasValue && FavoriteFolderIds.IsDownloadedCatalog(folderId.Value))
+            {
+                return new List<FavoriteTrack>();
+            }
+
             using var connection = new SqliteConnection(_connectionString);
             var query = "SELECT * FROM FavoriteTracks";
             var conditions = new List<string>();
@@ -221,6 +255,11 @@ namespace YTMusic.Services
 
         public async Task AddToFavoritesAsync(string videoId, string title, string author, string? thumbnailUrl, int folderId = 1, string? localFilePath = null)
         {
+            if (FavoriteFolderIds.IsDownloadedCatalog(folderId))
+            {
+                throw new InvalidOperationException("Cannot add favorites to the downloaded catalog folder.");
+            }
+
             using var connection = new SqliteConnection(_connectionString);
             string sql = @"
                 INSERT OR REPLACE INTO FavoriteTracks (VideoId, FolderId, Title, Author, ThumbnailUrl, AddedDate, LocalFilePath) 
@@ -240,6 +279,11 @@ namespace YTMusic.Services
 
         public async Task RemoveFromFavoritesAsync(string videoId, int folderId = 1)
         {
+            if (FavoriteFolderIds.IsDownloadedCatalog(folderId))
+            {
+                throw new InvalidOperationException("Cannot remove items from the downloaded catalog folder.");
+            }
+
             using var connection = new SqliteConnection(_connectionString);
             string sql = "DELETE FROM FavoriteTracks WHERE VideoId = @VideoId AND FolderId = @FolderId;";
             await connection.ExecuteAsync(sql, new { VideoId = videoId, FolderId = folderId });

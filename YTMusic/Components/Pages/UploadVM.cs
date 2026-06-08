@@ -26,6 +26,7 @@ namespace YTMusic.Components.Pages
         private readonly ILocalMusicService _localMusicService;
         private readonly ISnackbar _snackbar;
         private readonly HashSet<string> _selectedFilePaths = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _selectedRemotePaths = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _remoteDownloadedPaths = new(StringComparer.OrdinalIgnoreCase);
 
         public UploadVM(
@@ -63,13 +64,19 @@ namespace YTMusic.Components.Pages
         public IReadOnlyList<DownloadTaskInfo> Uploads => _uploadManager.ActiveUploads;
         public IReadOnlyList<DownloadTaskInfo> RemoteDownloads => _remoteDownloadManager.ActiveRemoteDownloads;
         public IReadOnlyCollection<string> SelectedFilePaths => _selectedFilePaths;
+        public IReadOnlyCollection<string> SelectedRemotePaths => _selectedRemotePaths;
         public bool IsConfigured => _settingsService.IsConfigured;
         public string NormalizedRemoteDirectory => AListUploadSettingsService.NormalizeDirectory(RemoteDirectory);
         public bool HasSelection => _selectedFilePaths.Count > 0;
+        public bool HasRemoteSelection => _selectedRemotePaths.Count > 0;
 
         public bool IsAllSelected =>
             DownloadedFiles.Count > 0 &&
             DownloadedFiles.All(file => _selectedFilePaths.Contains(file.LocalFilePath));
+
+        public bool IsAllRemoteSelected =>
+            RemoteFiles.Count > 0 &&
+            RemoteFiles.All(file => _selectedRemotePaths.Contains(file.Item.Path));
 
         public DownloadTaskInfo? GetLatestUploadForFile(string localFilePath)
         {
@@ -95,6 +102,33 @@ namespace YTMusic.Components.Pages
         public bool ShouldShowUploadedTag(DownloadedTrack file)
         {
             return file.HasUploaded && !IsUploadInProgress(file.LocalFilePath);
+        }
+
+        public DownloadTaskInfo? GetLatestRemoteDownloadForPath(string remotePath)
+        {
+            if (string.IsNullOrWhiteSpace(remotePath))
+            {
+                return null;
+            }
+
+            return RemoteDownloads
+                .Where(task => !string.IsNullOrWhiteSpace(task.SourcePath) &&
+                               string.Equals(task.SourcePath, remotePath, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(task => task.CreatedAtUtc)
+                .FirstOrDefault();
+        }
+
+        public bool IsRemoteDownloadInProgress(string remotePath)
+        {
+            var task = GetLatestRemoteDownloadForPath(remotePath);
+            return task != null &&
+                   task.Status is DownloadStatus.Pending or DownloadStatus.Downloading;
+        }
+
+        public bool ShouldShowDownloadedTag(string remoteDirectoryPath)
+        {
+            return IsRemoteDirectoryDownloaded(remoteDirectoryPath) &&
+                   !IsRemoteDownloadInProgress(remoteDirectoryPath);
         }
 
         public async Task LoadAsync()
@@ -220,10 +254,13 @@ namespace YTMusic.Components.Pages
                 }
 
                 RemoteFiles = browserItems;
+                _selectedRemotePaths.RemoveWhere(path =>
+                    RemoteFiles.All(file => !string.Equals(file.Item.Path, path, StringComparison.OrdinalIgnoreCase)));
             }
             catch (Exception ex)
             {
                 RemoteFiles.Clear();
+                _selectedRemotePaths.Clear();
                 _snackbar.Add($"Failed to load AList directory: {ex.Message}", Severity.Error);
             }
             finally
@@ -251,6 +288,45 @@ namespace YTMusic.Components.Pages
         public bool IsSelected(string localFilePath)
         {
             return _selectedFilePaths.Contains(localFilePath);
+        }
+
+        public bool IsRemoteSelected(string remotePath)
+        {
+            return _selectedRemotePaths.Contains(remotePath);
+        }
+
+        public void ToggleRemoteSelection(string remotePath, bool isSelected)
+        {
+            if (string.IsNullOrWhiteSpace(remotePath))
+            {
+                return;
+            }
+
+            if (isSelected)
+            {
+                _selectedRemotePaths.Add(remotePath);
+            }
+            else
+            {
+                _selectedRemotePaths.Remove(remotePath);
+            }
+
+            StateHasChanged?.Invoke();
+        }
+
+        public void ToggleRemoteSelectAll(bool isSelected)
+        {
+            _selectedRemotePaths.Clear();
+
+            if (isSelected)
+            {
+                foreach (var file in RemoteFiles)
+                {
+                    _selectedRemotePaths.Add(file.Item.Path);
+                }
+            }
+
+            StateHasChanged?.Invoke();
         }
 
         public async Task UploadSelectedAsync()
@@ -312,6 +388,46 @@ namespace YTMusic.Components.Pages
         {
             _remoteDownloadManager.StartRemoteDirectoryDownload(item.Item, item.DisplayName);
             _snackbar.Add($"Added '{item.DisplayName}' to transfers.", Severity.Info);
+        }
+
+        public void DownloadSelectedRemoteAsync()
+        {
+            if (!_settingsService.IsConfigured)
+            {
+                _snackbar.Add("Please complete AList server, token, and remote directory settings first.", Severity.Warning);
+                return;
+            }
+
+            var selectedFiles = RemoteFiles
+                .Where(file => _selectedRemotePaths.Contains(file.Item.Path))
+                .ToList();
+
+            if (selectedFiles.Count == 0)
+            {
+                _snackbar.Add("Please select remote items first.", Severity.Info);
+                return;
+            }
+
+            var addedCount = 0;
+            foreach (var file in selectedFiles)
+            {
+                if (IsRemoteDirectoryDownloaded(file.Item.Path) || IsRemoteDownloadInProgress(file.Item.Path))
+                {
+                    continue;
+                }
+
+                _remoteDownloadManager.StartRemoteDirectoryDownload(file.Item, file.DisplayName);
+                addedCount++;
+            }
+
+            if (addedCount > 0)
+            {
+                _snackbar.Add($"Added {addedCount} remote item(s) to download queue.", Severity.Info);
+            }
+            else
+            {
+                _snackbar.Add("Selected items are already downloaded or in progress.", Severity.Info);
+            }
         }
 
         public async Task PickAndUploadFilesAsync()

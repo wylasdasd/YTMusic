@@ -20,12 +20,14 @@ namespace YTMusic.Components.Pages
         public List<FavoriteFolder> Folders { get; private set; } = new();
         public List<FavoriteTrack> Tracks { get; private set; } = new();
 
-        public int SelectedFolderId { get; set; } = 1;
-        
+        public int SelectedFolderId { get; set; } = FavoriteFolderIds.Default;
+
         // 0 = All, 1 = Downloaded, 2 = Not Downloaded
-        public int DownloadFilter { get; set; } = 0; 
-        
+        public int DownloadFilter { get; set; } = 0;
+
         public bool IsLoading { get; private set; } = false;
+
+        public bool IsDownloadedCatalogSelected => FavoriteFolderIds.IsDownloadedCatalog(SelectedFolderId);
 
         public FavoritesVM(IFavoriteService favoriteService, ILocalMusicService localMusicService, ISnackbar snackbar, IDialogService dialogService)
         {
@@ -58,21 +60,28 @@ namespace YTMusic.Components.Pages
 
             try
             {
-                bool? isDownloaded = DownloadFilter switch
+                if (IsDownloadedCatalogSelected)
                 {
-                    1 => true,
-                    2 => false,
-                    _ => null
-                };
-
-                Tracks = await _favoriteService.GetTracksAsync(SelectedFolderId, isDownloaded);
-
-                foreach (var track in Tracks)
+                    Tracks = await LoadDownloadedCatalogTracksAsync();
+                }
+                else
                 {
-                    var downloadedTrack = await _localMusicService.GetDownloadedTrackByVideoIdAsync(track.VideoId);
-                    if (downloadedTrack?.IsVideo == true)
+                    bool? isDownloaded = DownloadFilter switch
                     {
-                        track.LocalVideoFilePath = downloadedTrack.LocalFilePath;
+                        1 => true,
+                        2 => false,
+                        _ => null
+                    };
+
+                    Tracks = await _favoriteService.GetTracksAsync(SelectedFolderId, isDownloaded);
+
+                    foreach (var track in Tracks)
+                    {
+                        var downloadedTrack = await _localMusicService.GetDownloadedTrackByVideoIdAsync(track.VideoId);
+                        if (downloadedTrack?.IsVideo == true)
+                        {
+                            track.LocalVideoFilePath = downloadedTrack.LocalFilePath;
+                        }
                     }
                 }
             }
@@ -90,7 +99,37 @@ namespace YTMusic.Components.Pages
         public async Task SetFolderAsync(int folderId)
         {
             SelectedFolderId = folderId;
+            if (IsDownloadedCatalogSelected)
+            {
+                DownloadFilter = 0;
+            }
+
             await LoadTracksAsync();
+        }
+
+        private async Task<List<FavoriteTrack>> LoadDownloadedCatalogTracksAsync()
+        {
+            var downloads = await _localMusicService.GetDownloadedTracksAsync();
+            return downloads
+                .Where(track => !string.IsNullOrWhiteSpace(track.LocalFilePath))
+                .OrderByDescending(track => track.DownloadedDate)
+                .Select(MapDownloadedTrackToFavorite)
+                .ToList();
+        }
+
+        private static FavoriteTrack MapDownloadedTrackToFavorite(DownloadedTrack track)
+        {
+            return new FavoriteTrack
+            {
+                VideoId = track.VideoId,
+                FolderId = FavoriteFolderIds.DownloadedCatalog,
+                Title = track.Title,
+                Author = track.Author,
+                ThumbnailUrl = track.ThumbnailUrl,
+                AddedDate = track.DownloadedDate,
+                LocalFilePath = track.LocalFilePath,
+                LocalVideoFilePath = track.IsVideo ? track.LocalFilePath : null
+            };
         }
 
         public async Task SetFilterAsync(int filter)
@@ -101,6 +140,11 @@ namespace YTMusic.Components.Pages
 
         public async Task ConfirmRemoveFavoriteAsync(FavoriteTrack track)
         {
+            if (FavoriteFolderIds.IsDownloadedCatalog(track.FolderId))
+            {
+                return;
+            }
+
             var parameters = new DialogParameters<ConfirmRemoveFavoriteDialog>
             {
                 { x => x.TrackTitle, track.Title },

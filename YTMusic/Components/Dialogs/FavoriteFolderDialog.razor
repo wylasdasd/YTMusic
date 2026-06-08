@@ -85,7 +85,7 @@
         if (string.IsNullOrEmpty(VideoId)) return;
 
         var allFolders = await FavoriteService.GetFoldersAsync();
-        Folders = allFolders;
+        Folders = allFolders.Where(folder => !folder.IsDownloadedCatalog).ToList();
 
         var activeIds = await FavoriteService.GetFavoriteFolderIdsForVideoAsync(VideoId);
         SelectedFolderIds = new HashSet<int>(activeIds);
@@ -93,6 +93,11 @@
 
     private async Task ToggleFolderSelectionAsync(int folderId)
     {
+        if (FavoriteFolderIds.IsDownloadedCatalog(folderId))
+        {
+            return;
+        }
+
         try
         {
             if (SelectedFolderIds.Contains(folderId))

@@ -67,11 +67,11 @@
                      BadgeData="@GetUploadLocalTabBadgeData()"
                      BadgeColor="Color.Error">
             <MudPaper Elevation="2" Class="pa-4 mb-4">
-                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">从本地下载列表里挑选后上传到 AList</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">本地下载列表里挑选后上传</MudText>
 
                 <div class="d-flex flex-wrap gap-3 align-center">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!ViewModel.HasSelection)" OnClick="ViewModel.UploadSelectedAsync">
-                        Upload Selected
+                        Upload
                     </MudButton>
                     <MudToggleIconButton Toggled="@ViewModel.IsAllSelected"
                                          ToggledChanged="@ViewModel.ToggleSelectAll"
@@ -160,16 +160,32 @@
 
         <MudTabPanel Text="Remote"
                      Icon="@Icons.Material.Filled.Cloud"
-                     BadgeData="@GetUploadedFilesTabBadgeData()"
+                     BadgeData="@GetRemoteTabBadgeData()"
                      BadgeColor="Color.Info">
             <MudPaper Elevation="2" Class="pa-4 mb-4">
-                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">根据 Remote Directory 浏览远端目录</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">浏览 Remote Directory，多选后批量下载</MudText>
 
                 <div class="d-flex flex-wrap gap-3 align-center">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!ViewModel.IsConfigured)" OnClick="ViewModel.RefreshRemoteFilesAsync">
-                        Refresh
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               Disabled="@(!ViewModel.IsConfigured || !ViewModel.HasRemoteSelection)"
+                               OnClick="ViewModel.DownloadSelectedRemoteAsync">
+                        Download
                     </MudButton>
-
+                    <MudToggleIconButton Toggled="@ViewModel.IsAllRemoteSelected"
+                                         ToggledChanged="@ViewModel.ToggleRemoteSelectAll"
+                                         Icon="@Icons.Material.Filled.SelectAll"
+                                         ToggledIcon="@Icons.Material.Filled.Deselect"
+                                         Variant="Variant.Text"
+                                         Color="Color.Info"
+                                         Title="@(ViewModel.IsAllRemoteSelected ? "Clear" : "Select All")"
+                                         Disabled="@(!ViewModel.RemoteFiles.Any())" />
+                    @* <MudButton Variant="Variant.Outlined"
+                               Color="Color.Secondary"
+                               Disabled="@(!ViewModel.IsConfigured)"
+                               OnClick="ViewModel.RefreshRemoteFilesAsync">
+                        Refresh
+                    </MudButton> *@
                 </div>
             </MudPaper>
 
@@ -192,8 +208,12 @@
                 <div class="d-flex flex-column gap-3 mb-4">
                     @foreach (var file in ViewModel.RemoteFiles)
                     {
+                        var downloadTask = ViewModel.GetLatestRemoteDownloadForPath(file.Item.Path);
                         <MudPaper Elevation="1" Class="pa-3">
                             <div class="d-flex align-center gap-3 flex-wrap">
+                                <MudCheckBox T="bool"
+                                             Value="@ViewModel.IsRemoteSelected(file.Item.Path)"
+                                             ValueChanged="@(value => ViewModel.ToggleRemoteSelection(file.Item.Path, value))" />
                                 @if (!string.IsNullOrWhiteSpace(file.ThumbnailUrl))
                                 {
                                     <MudImage Src="@file.ThumbnailUrl" Width="56" Height="56" ObjectFit="ObjectFit.Cover" Class="rounded" />
@@ -203,18 +223,42 @@
                                     <MudIcon Icon="@Icons.Material.Filled.MusicNote" Size="Size.Large" Color="Color.Primary" />
                                 }
                                 <div class="d-flex flex-column flex-grow-1" style="overflow: hidden; min-width: 0;">
-                                    <MediaTitle Text="@file.DisplayName" Typo="Typo.subtitle2" />
+                                    <div class="d-flex align-center gap-2 flex-wrap">
+                                        <div style="min-width: 0; flex: 1 1 auto;">
+                                            <MediaTitle Text="@file.DisplayName" Typo="Typo.subtitle2" />
+                                        </div>
+                                        <MudChip T="string"
+                                                 Size="Size.Small"
+                                                 Color="@(ViewModel.ShouldShowDownloadedTag(file.Item.Path) ? Color.Success : Color.Default)"
+                                                 Variant="@(ViewModel.ShouldShowDownloadedTag(file.Item.Path) ? Variant.Filled : Variant.Outlined)">
+                                            @(ViewModel.ShouldShowDownloadedTag(file.Item.Path) ? "Downloaded" : "Not Downloaded")
+                                        </MudChip>
+                                        @if (downloadTask != null)
+                                        {
+                                            <MudChip T="string"
+                                                     Size="Size.Small"
+                                                     Color="@GetStatusColor(downloadTask.Status)"
+                                                     Variant="Variant.Outlined">
+                                                Download - @downloadTask.Status
+                                            </MudChip>
+                                        }
+                                    </div>
                                     @if (!string.IsNullOrWhiteSpace(file.Subtitle))
                                     {
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">@file.Subtitle</MudText>
                                     }
+                                    @if (downloadTask?.Status == DownloadStatus.Downloading)
+                                    {
+                                        <MudProgressLinear Color="Color.Primary" Value="@(downloadTask.Progress * 100)" Class="mt-2 mb-1" />
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@((downloadTask.Progress * 100).ToString("F1"))%</MudText>
+                                    }
+                                    else if (downloadTask?.Status == DownloadStatus.Failed && !string.IsNullOrWhiteSpace(downloadTask.ErrorMessage))
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Error" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                            @downloadTask.ErrorMessage
+                                        </MudText>
+                                    }
                                 </div>
-                                <MudButton Variant="Variant.Filled"
-                                           Color="Color.Primary"
-                                           Disabled="@ViewModel.IsRemoteDirectoryDownloaded(file.Item.Path)"
-                                           OnClick="@(() => ViewModel.DownloadRemoteDirectory(file))">
-                                    Download
-                                </MudButton>
                             </div>
                         </MudPaper>
                     }
@@ -242,8 +286,8 @@
     private string? GetUploadLocalTabBadgeData()
         => ViewModel.HasSelection ? $"{ViewModel.SelectedFilePaths.Count}" : null;
 
-    private string? GetUploadedFilesTabBadgeData()
-        => ViewModel.RemoteFiles.Count > 0 ? $"{ViewModel.RemoteFiles.Count}" : null;
+    private string? GetRemoteTabBadgeData()
+        => ViewModel.HasRemoteSelection ? $"{ViewModel.SelectedRemotePaths.Count}" : null;
 
     private static Color GetStatusColor(DownloadStatus status) => status switch
     {
