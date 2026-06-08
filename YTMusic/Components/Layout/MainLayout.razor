@@ -20,13 +20,6 @@
 
 <div style="@CurrentThemeCssVars">
     <MudLayout Class="ytm-shell">
-        <MudOverlay Visible="GlobalState.IsLoading" DarkBackground="true" Absolute="false" ZIndex="9999">
-            <div class="d-flex flex-column align-center justify-center">
-                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
-                <MudText Typo="Typo.h6" Color="Color.Primary" Class="mt-4">Loading...</MudText>
-            </div>
-        </MudOverlay>
-
         <MudAppBar Elevation="0" Fixed="true" Color="Color.Transparent" Class="ytm-topbar">
             <div class="ytm-topbar-inner">
                 <button class="ytm-brand" @onclick='() => NavigateToTab("")'>
@@ -78,6 +71,17 @@
         </MudAppBar>
 
         <MudMainContent Class="ytm-main" Style="padding-bottom: 98px;">
+            <MudOverlay Visible="GlobalState.IsLoading"
+                        DarkBackground="true"
+                        Absolute="true"
+                        LockScroll="false"
+                        ZIndex="100"
+                        Class="ytm-content-loading-overlay">
+                <div class="d-flex flex-column align-center justify-center">
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                    <MudText Typo="Typo.h6" Color="Color.Primary" Class="mt-4">Loading...</MudText>
+                </div>
+            </MudOverlay>
             <MudContainer MaxWidth="MaxWidth.False" Class="ytm-content">
                 @Body
             </MudContainer>

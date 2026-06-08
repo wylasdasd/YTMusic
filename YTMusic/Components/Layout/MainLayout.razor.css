@@ -218,8 +218,13 @@
 }
 
 .ytm-main {
+    position: relative;
     padding-top: 78px;
     padding-bottom: 96px;
+}
+
+.ytm-content-loading-overlay {
+    inset: 0;
 }
 
 .ytm-content {
