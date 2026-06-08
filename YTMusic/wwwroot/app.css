@@ -129,6 +129,24 @@ h1:focus {
     text-align: start;
 }
 
+.ytm-topbar .mud-toolbar-appbar {
+    width: 100%;
+    max-width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.ytm-topbar-inner {
+    width: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.ytm-theme-toggle-mobile {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
 .ytm-media-title-clamp {
     display: -webkit-box;
     -webkit-box-orient: vertical;
