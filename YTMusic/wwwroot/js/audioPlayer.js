@@ -152,11 +152,7 @@ window.audioPlayer = {
         if (!url) return;
 
         const nextIsVideo = !!isVideo;
-        const nextKey = this.normalizeStreamUrl(url) + "|" + nextIsVideo;
         const currentSrc = this.activePlayer && (this.activePlayer.currentSrc || this.activePlayer.src);
-        const currentKey = currentSrc
-            ? this.normalizeStreamUrl(currentSrc) + "|" + this.isVideoActive
-            : "";
 
         this.pendingUrl = url;
         this.pendingIsWebM = !!isWebM;
@@ -168,7 +164,8 @@ window.audioPlayer = {
             return;
         }
 
-        if (nextKey === currentKey && currentSrc) {
+        // Use full URL: local file proxy shares one origin and only changes query/path hints.
+        if (currentSrc && url === currentSrc && this.isVideoActive === nextIsVideo) {
             return;
         }
 

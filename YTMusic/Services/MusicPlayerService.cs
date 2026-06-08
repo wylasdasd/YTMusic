@@ -513,7 +513,7 @@ namespace YTMusic.Services
                     await EnsureFileProxyCreatedAsync();
                     _fileProxy!.ContentType = GetFileContentType(filePath, IsCurrentStreamVideo);
                     _fileProxy.CurrentFilePath = filePath;
-                    CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
+                    CurrentStreamUrl = BuildLocalProxyStreamUrl(filePath);
                     CurrentVideo = item;
                     IsPlaying = true;
                     AddToPlaybackHistory(CurrentVideo, IsCurrentStreamVideo);
@@ -899,7 +899,7 @@ namespace YTMusic.Services
                         await EnsureFileProxyCreatedAsync();
                         _fileProxy!.ContentType = GetFileContentType(video.LocalFilePath, IsCurrentStreamVideo);
                         _fileProxy.CurrentFilePath = video.LocalFilePath;
-                        CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
+                        CurrentStreamUrl = BuildLocalProxyStreamUrl(video.LocalFilePath);
                         CurrentVideo = video;
                         IsPlaying = true;
                         AddToPlaybackHistory(video, IsCurrentStreamVideo);
@@ -946,7 +946,7 @@ namespace YTMusic.Services
                         await EnsureFileProxyCreatedAsync();
                         _fileProxy!.ContentType = GetFileContentType(video.LocalFilePath, IsCurrentStreamVideo);
                         _fileProxy.CurrentFilePath = video.LocalFilePath;
-                        CurrentStreamUrl = $"{_fileProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
+                        CurrentStreamUrl = BuildLocalProxyStreamUrl(video.LocalFilePath);
                         AddToPlaybackHistory(video, IsCurrentStreamVideo);
                     }
 
@@ -1286,6 +1286,7 @@ namespace YTMusic.Services
                 return;
             }
 
+            OnRequestPause?.Invoke();
             if (_nativeAudio.IsSupported)
             {
                 await _nativeAudio.StopAsync();
@@ -1294,6 +1295,12 @@ namespace YTMusic.Services
             {
                 await _nativeVideo.StopAsync();
             }
+        }
+
+        private string BuildLocalProxyStreamUrl(string localFilePath)
+        {
+            var fileKey = Uri.EscapeDataString(localFilePath);
+            return $"{_fileProxy!.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}&f={fileKey}";
         }
 
         private void NotifyStateChanged() => OnChange?.Invoke();
