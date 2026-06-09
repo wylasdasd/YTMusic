@@ -2,6 +2,8 @@
 @using YTMusic.Services
 @implements IDisposable
 
+<PageListScroll PageKey="favorites" ScrollId="favorites-page-scroll">
+    <Header>
 <div class="favorites-toolbar">
     <div class="favorites-toolbar__field">
         <MudSelect T="int" Value="ViewModel.SelectedFolderId" ValueChanged="ViewModel.SetFolderAsync" Label="Folder"
@@ -43,7 +45,8 @@
         随机播放
     </MudButton>
 </div>
-
+    </Header>
+    <ChildContent>
 @if (ViewModel.IsLoading)
 {
     <div class="d-flex justify-center mt-8">
@@ -106,6 +109,8 @@ else
             }
         </MudGrid>
     }
+    </ChildContent>
+</PageListScroll>
 
 @code {
     [Inject] private FavoritesVM ViewModel { get; set; } = default!;

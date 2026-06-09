@@ -3,69 +3,74 @@
 @using YTMusic.Services
 @implements IDisposable
 
-<div class="d-flex align-center gap-2 mt-4 mb-4" style="overflow-x: auto;">
-    <MudChip T="string"
-             Color="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.All ? Color.Primary : Color.Default)"
-             Variant="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.All ? Variant.Filled : Variant.Outlined)"
-             OnClick="@(() => ViewModel.SetFilter(TransfersVM.TransferFilter.All))">
-        All
-    </MudChip>
-    <MudChip T="string"
-             Color="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Active ? Color.Primary : Color.Default)"
-             Variant="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Active ? Variant.Filled : Variant.Outlined)"
-             OnClick="@(() => ViewModel.SetFilter(TransfersVM.TransferFilter.Active))">
-        Active
-    </MudChip>
-    <MudChip T="string"
-             Color="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Completed ? Color.Success : Color.Default)"
-             Variant="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Completed ? Variant.Filled : Variant.Outlined)"
-             OnClick="@(() => ViewModel.SetFilter(TransfersVM.TransferFilter.Completed))">
-        Completed
-    </MudChip>
-    <MudChip T="string"
-             Color="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Failed ? Color.Error : Color.Default)"
-             Variant="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Failed ? Variant.Filled : Variant.Outlined)"
-             OnClick="@(() => ViewModel.SetFilter(TransfersVM.TransferFilter.Failed))">
-        Failed
-    </MudChip>
-</div>
-
-@if (!ViewModel.FilteredTransfers.Any())
-{
-    <MudAlert Severity="Severity.Info" Class="mt-4">@GetEmptyMessage()</MudAlert>
-}
-else
-{
-    <div class="d-flex flex-column gap-4 mt-4">
-        @foreach (var task in ViewModel.FilteredTransfers.Reverse())
+<PageListScroll PageKey="transfers" ScrollId="transfers-page-scroll">
+    <Header>
+        <div class="d-flex align-center gap-2 mb-2" style="overflow-x: auto;">
+            <MudChip T="string"
+                     Color="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.All ? Color.Primary : Color.Default)"
+                     Variant="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.All ? Variant.Filled : Variant.Outlined)"
+                     OnClick="@(() => ViewModel.SetFilter(TransfersVM.TransferFilter.All))">
+                All
+            </MudChip>
+            <MudChip T="string"
+                     Color="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Active ? Color.Primary : Color.Default)"
+                     Variant="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Active ? Variant.Filled : Variant.Outlined)"
+                     OnClick="@(() => ViewModel.SetFilter(TransfersVM.TransferFilter.Active))">
+                Active
+            </MudChip>
+            <MudChip T="string"
+                     Color="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Completed ? Color.Success : Color.Default)"
+                     Variant="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Completed ? Variant.Filled : Variant.Outlined)"
+                     OnClick="@(() => ViewModel.SetFilter(TransfersVM.TransferFilter.Completed))">
+                Completed
+            </MudChip>
+            <MudChip T="string"
+                     Color="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Failed ? Color.Error : Color.Default)"
+                     Variant="@(ViewModel.CurrentFilter == TransfersVM.TransferFilter.Failed ? Variant.Filled : Variant.Outlined)"
+                     OnClick="@(() => ViewModel.SetFilter(TransfersVM.TransferFilter.Failed))">
+                Failed
+            </MudChip>
+        </div>
+    </Header>
+    <ChildContent>
+        @if (!ViewModel.FilteredTransfers.Any())
         {
-            <MudPaper Elevation="2" Class="pa-4">
-                <div class="d-flex justify-space-between align-center mb-2">
-                    <MediaTitle Text="@task.Title"
-                                Typo="Typo.subtitle1"
-                                WrapperStyle="max-width: 70%; flex: 1; min-width: 0;" />
-                    <MudChip Size="Size.Small" Color="GetStatusColor(task.Status)" T="string">
-                        @GetTaskLabel(task)
-                    </MudChip>
-                </div>
-                
-                @if (task.Status == DownloadStatus.Downloading)
-                {
-                    <MudProgressLinear Color="Color.Primary" Value="@(task.Progress * 100)" Class="my-2" />
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">@((task.Progress * 100).ToString("F1"))%</MudText>
-                }
-                else if (task.Status == DownloadStatus.Failed)
-                {
-                    <MudText Typo="Typo.caption" Color="Color.Error">@task.ErrorMessage</MudText>
-                }
-                else if (task.Kind == TransferKind.Upload && !string.IsNullOrWhiteSpace(task.DestinationPath))
-                {
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">AList: @task.DestinationPath</MudText>
-                }
-            </MudPaper>
+            <MudAlert Severity="Severity.Info" Class="mt-2">@GetEmptyMessage()</MudAlert>
         }
-    </div>
-}
+        else
+        {
+            <div class="d-flex flex-column gap-4 mt-2">
+                @foreach (var task in ViewModel.FilteredTransfers.Reverse())
+                {
+                    <MudPaper Elevation="2" Class="pa-4">
+                        <div class="d-flex justify-space-between align-center mb-2">
+                            <MediaTitle Text="@task.Title"
+                                        Typo="Typo.subtitle1"
+                                        WrapperStyle="max-width: 70%; flex: 1; min-width: 0;" />
+                            <MudChip Size="Size.Small" Color="GetStatusColor(task.Status)" T="string">
+                                @GetTaskLabel(task)
+                            </MudChip>
+                        </div>
+
+                        @if (task.Status == DownloadStatus.Downloading)
+                        {
+                            <MudProgressLinear Color="Color.Primary" Value="@(task.Progress * 100)" Class="my-2" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@((task.Progress * 100).ToString("F1"))%</MudText>
+                        }
+                        else if (task.Status == DownloadStatus.Failed)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Error">@task.ErrorMessage</MudText>
+                        }
+                        else if (task.Kind == TransferKind.Upload && !string.IsNullOrWhiteSpace(task.DestinationPath))
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">AList: @task.DestinationPath</MudText>
+                        }
+                    </MudPaper>
+                }
+            </div>
+        }
+    </ChildContent>
+</PageListScroll>
 
 @code {
     [Inject] private TransfersVM ViewModel { get; set; } = default!;

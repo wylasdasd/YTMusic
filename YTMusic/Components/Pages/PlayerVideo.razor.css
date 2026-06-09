@@ -1,6 +1,8 @@
 .player-screen {
     position: relative;
-    min-height: calc(100dvh - 188px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    flex: 1;
+    min-height: 0;
+    height: 100%;
     padding: 18px 0 12px;
     overflow: hidden;
     display: flex;

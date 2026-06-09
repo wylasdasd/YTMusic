@@ -11,6 +11,8 @@
 @inject IJSRuntime JSRuntime
 @implements IDisposable
 
+<PageListScroll PageKey="player-video" Class="player-page-scroll">
+    <ChildContent>
 <MudContainer MaxWidth="MaxWidth.False" Class="player-screen player-screen--video">
     @{
         var currentVideo = PlayerService.CurrentVideo;
@@ -73,6 +75,8 @@
         </div>
     }
 </MudContainer>
+    </ChildContent>
+</PageListScroll>
 
 @code {
     private bool IsFavorite = false;

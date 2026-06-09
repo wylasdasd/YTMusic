@@ -3,7 +3,7 @@
 @using Microsoft.JSInterop
 @implements IDisposable
 
-<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-4 mb-8">
+<div class="ytm-page ytm-page--tabs">
     <MudTabs id="upload-page-tabs"
              Class="ytm-tabs-touch-scroll"
              Elevation="1"
@@ -266,7 +266,7 @@
             </MudPaper>
         </MudTabPanel>
     </MudTabs>
-</MudContainer>
+</div>
 
 @code {
     private const string UploadTabsId = "upload-page-tabs";

@@ -1,5 +1,10 @@
 .ytm-shell {
-    min-height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
     background:
         radial-gradient(1200px 500px at 20% -10%, var(--ytm-bg-radial-1), transparent 55%),
         radial-gradient(900px 420px at 85% -15%, var(--ytm-bg-radial-2), transparent 52%),
@@ -219,8 +224,14 @@
 
 .ytm-main {
     position: relative;
-    padding-top: 78px;
-    padding-bottom: 96px;
+    box-sizing: border-box;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding-top: calc(78px + env(safe-area-inset-top));
+    padding-bottom: calc(98px + env(safe-area-inset-bottom));
 }
 
 .ytm-content-loading-overlay {
@@ -228,9 +239,16 @@
 }
 
 .ytm-content {
-    width: min(1260px, 100%);
-    margin: 0 auto;
-    padding: 20px 24px 30px;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.ytm-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .ytm-bottom-nav {

@@ -10,6 +10,8 @@
 @inject NavigationManager NavigationManager
 @implements IDisposable
 
+<PageListScroll PageKey="player-audio" Class="player-page-scroll">
+    <ChildContent>
 <MudContainer MaxWidth="MaxWidth.False" Class="player-screen player-screen--audio">
     @if (PlayerService.CurrentVideo != null)
     {
@@ -129,6 +131,8 @@
         </div>
     }
 </MudContainer>
+    </ChildContent>
+</PageListScroll>
 
 @code {
     private bool IsFavorite = false;

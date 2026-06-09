@@ -1,0 +1,19 @@
+<div class="ytm-page @Class">
+    @if (Header != null)
+    {
+        <div class="ytm-page__header">
+            @Header
+        </div>
+    }
+    <div class="ytm-page__scroll" id="@ScrollId" data-page="@PageKey">
+        @ChildContent
+    </div>
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? Header { get; set; }
+    [Parameter] public string? ScrollId { get; set; }
+    [Parameter] public string? PageKey { get; set; }
+    [Parameter] public string? Class { get; set; }
+}

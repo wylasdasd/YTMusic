@@ -2,86 +2,90 @@
 @page "/search"
 @using YTMusic.Services
 
-<section class="search-toolbar">
-    <MudTextField @bind-Value="ViewModel.Query"
-                  Label="Search songs, artists, albums"
-                  Placeholder="Try:teto,miku"
-                  Variant="Variant.Outlined"
-                  Immediate="true"
-                  FullWidth="true"
-                  Adornment="Adornment.Start"
-                  AdornmentIcon="@Icons.Material.Filled.Search"
-                  OnAdornmentClick="ViewModel.SearchAsync"
-                  OnKeyUp="@(async e => { if (e.Key == "Enter") await ViewModel.SearchAsync(); })" />
-
-</section>
-
-@if (ViewModel.Videos.Any())
-{
-    <MudGrid Class="search-grid">
-        @foreach (var video in ViewModel.Videos)
+<PageListScroll PageKey="search" ScrollId="search-page-scroll">
+    <Header>
+        <section class="search-toolbar">
+            <MudTextField @bind-Value="ViewModel.Query"
+                          Label="Search songs, artists, albums"
+                          Placeholder="Try:teto,miku"
+                          Variant="Variant.Outlined"
+                          Immediate="true"
+                          FullWidth="true"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          OnAdornmentClick="ViewModel.SearchAsync"
+                          OnKeyUp="@(async e => { if (e.Key == "Enter") await ViewModel.SearchAsync(); })" />
+        </section>
+    </Header>
+    <ChildContent>
+        @if (ViewModel.Videos.Any())
         {
-            <MudItem xs="12" sm="6" md="4" lg="3">
-                <MudCard Elevation="0" Class="ytm-card" @onclick="@(() => PlayAndNavigate(video))">
-                    <div class="ytm-card__media-wrap">
-                        <MudCardMedia Image="@video.Thumbnails.FirstOrDefault()?.Url" Height="176" />
-                        <div class="ytm-card__media-mask"></div>
-                        <span class="ytm-card__duration">@video.Duration</span>
-                    </div>
+            <MudGrid Class="search-grid">
+                @foreach (var video in ViewModel.Videos)
+                {
+                    <MudItem xs="12" sm="6" md="4" lg="3">
+                        <MudCard Elevation="0" Class="ytm-card" @onclick="@(() => PlayAndNavigate(video))">
+                            <div class="ytm-card__media-wrap">
+                                <MudCardMedia Image="@video.Thumbnails.FirstOrDefault()?.Url" Height="176" />
+                                <div class="ytm-card__media-mask"></div>
+                                <span class="ytm-card__duration">@video.Duration</span>
+                            </div>
 
-                    <MudCardContent Class="ytm-card__content">
-                        <MediaTitle Text="@video.Title" Typo="Typo.subtitle1" Class="ytm-card__title" />
-                        <MudText Typo="Typo.body2" Class="ytm-card__artist">@video.Author.ChannelTitle</MudText>
-                    </MudCardContent>
+                            <MudCardContent Class="ytm-card__content">
+                                <MediaTitle Text="@video.Title" Typo="Typo.subtitle1" Class="ytm-card__title" />
+                                <MudText Typo="Typo.body2" Class="ytm-card__artist">@video.Author.ChannelTitle</MudText>
+                            </MudCardContent>
 
-                    <MudCardActions Class="ytm-card__actions">
-                        <MudIconButton Icon="@Icons.Material.Filled.PlayCircle" Color="Color.Primary" aria-label="Play" />
-                        <MudSpacer />
-                        <MudIconButton
-                            Icon="@(ViewModel.FavoriteVideoIds.Contains(video.Id.Value) ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
-                            Color="@(ViewModel.FavoriteVideoIds.Contains(video.Id.Value) ? Color.Error : Color.Default)"
-                            OnClick="@(async (e) => await ViewModel.OpenFavoriteDialogAsync(video))"
-                            aria-label="Toggle Favorite" />
-                        <div @onclick:stopPropagation="true">
-                            <MudMenu Icon="@Icons.Material.Filled.Download" Color="Color.Default"
-                                     AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" aria-label="Download">
-                                <MudMenuItem OnClick="@(() => ViewModel.Download(video, false))">Download Audio</MudMenuItem>
-                                <MudMenuItem OnClick="@(() => ViewModel.Download(video, true))">Download Video</MudMenuItem>
-                            </MudMenu>
-                        </div>
-                    </MudCardActions>
-                </MudCard>
-            </MudItem>
+                            <MudCardActions Class="ytm-card__actions">
+                                <MudIconButton Icon="@Icons.Material.Filled.PlayCircle" Color="Color.Primary" aria-label="Play" />
+                                <MudSpacer />
+                                <MudIconButton
+                                    Icon="@(ViewModel.FavoriteVideoIds.Contains(video.Id.Value) ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                                    Color="@(ViewModel.FavoriteVideoIds.Contains(video.Id.Value) ? Color.Error : Color.Default)"
+                                    OnClick="@(async (e) => await ViewModel.OpenFavoriteDialogAsync(video))"
+                                    aria-label="Toggle Favorite" />
+                                <div @onclick:stopPropagation="true">
+                                    <MudMenu Icon="@Icons.Material.Filled.Download" Color="Color.Default"
+                                             AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" aria-label="Download">
+                                        <MudMenuItem OnClick="@(() => ViewModel.Download(video, false))">Download Audio</MudMenuItem>
+                                        <MudMenuItem OnClick="@(() => ViewModel.Download(video, true))">Download Video</MudMenuItem>
+                                    </MudMenu>
+                                </div>
+                            </MudCardActions>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+
+            @if (ViewModel.HasMore)
+            {
+                <div class="d-flex justify-center mt-6 mb-4">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ViewModel.LoadNextPageAsync"
+                               Disabled="ViewModel.IsSearching" Class="search-load-more">
+                        @if (ViewModel.IsSearching)
+                        {
+                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                            <MudText Class="ms-2">Loading...</MudText>
+                        }
+                        else
+                        {
+                            <MudText>Load More</MudText>
+                        }
+                    </MudButton>
+                </div>
+            }
         }
-    </MudGrid>
-
-    @if (ViewModel.HasMore)
-    {
-        <div class="d-flex justify-center mt-6 mb-6">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ViewModel.LoadNextPageAsync"
-                       Disabled="ViewModel.IsSearching" Class="search-load-more">
-                @if (ViewModel.IsSearching)
-                {
-                    <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
-                    <MudText Class="ms-2">Loading...</MudText>
-                }
-                else
-                {
-                    <MudText>Load More</MudText>
-                }
-            </MudButton>
-        </div>
-    }
-}
-else if (ViewModel.IsSearching)
-{
-    <div class="d-flex justify-center mt-8">
-        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
-    </div>
-}
-else if (!string.IsNullOrWhiteSpace(ViewModel.Query))
-{
-    <MudPaper Elevation="0" Class="search-empty">
-        <MudText Typo="Typo.h6">No results found</MudText>
-    </MudPaper>
-}
+        else if (ViewModel.IsSearching)
+        {
+            <div class="d-flex justify-center mt-8">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(ViewModel.Query))
+        {
+            <MudPaper Elevation="0" Class="search-empty">
+                <MudText Typo="Typo.h6">No results found</MudText>
+            </MudPaper>
+        }
+    </ChildContent>
+</PageListScroll>
