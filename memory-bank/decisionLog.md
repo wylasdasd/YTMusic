@@ -1,5 +1,16 @@
 # 决策日志 (Decision Log)
 
+## 2026-06-07: 页面滚动在列表容器内，位置用 JS 内存缓存（非 C#、非控件自带）
+- **决策**:
+  - 禁止 `html/body` 与 `ytm-main` 整页滚动；列表在 `.ytm-page__scroll`（`PageListScroll`）或 Upload 的 `MudTabPanel[data-page]` 内滚动。
+  - Blazor 路由仍会销毁页面 DOM，滚动位置记在 `window.ytmLayout._pageScrolls`（`pageKey` → `scrollTop`），不落库、不写 C# Service。
+  - `MainLayout`：`initPageScrollPersistence`（首屏）、`restorePageScrolls`（`LocationChanged` 后）、`saveAllPageScrolls`（底栏 `NavigateToTab` 前）。
+  - 页面通过 `data-page` 标识：`search`、`favorites`、`upload-local` 等（见 `PageListScroll.razor` / `Upload.razor`）。
+- **依据**:
+  - 底栏 Tab 应用模型与默认 `RouteView` 销毁 DOM 不一致；恢复 scrollTop 必须操作 DOM，C# 无法纯托管读写元素滚动。
+  - 未采用底栏 Keep-Alive（DOM 常驻可天然保留滚动）；当前以最小改动 + JS 缓存过渡。
+- **相关文件**: `wwwroot/js/ytmLayout.js`、`wwwroot/app.css`、`Components/Layout/PageListScroll.razor`、`MainLayout.razor`。
+
 ## 2026-06-07: 已下载歌曲切歌必须区分 Web 代理与 Android 原生路径
 - **决策**:
   - Web 代理：`loadSource` 用完整 URL 判断；本地代理 URL 增加 `&f=文件路径`；切歌前 `OnRequestPause`。

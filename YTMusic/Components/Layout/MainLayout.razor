@@ -173,6 +173,7 @@
 @code {
     [Inject] private NavigationManager NavigationManager { get; set; } = default!;
     private EventHandler<LocationChangedEventArgs>? _locationChangedHandler;
+    private bool _shouldRestorePageScroll;
     private bool _isThemePanelOpen;
     private int _themeIndex;
     private bool _isWindowDragging;
@@ -200,22 +201,36 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
+        if (firstRender)
         {
+            if (IsWindowsDesktop)
+            {
+                _windowDragRef = DotNetObjectReference.Create(this);
+            }
+
+            await JSRuntime.InvokeVoidAsync("ytmLayout.initBottomNav", "ytm-bottom-nav");
+            await JSRuntime.InvokeVoidAsync("ytmLayout.initPageScrollPersistence");
             return;
         }
 
-        if (IsWindowsDesktop)
+        if (_shouldRestorePageScroll)
         {
-            _windowDragRef = DotNetObjectReference.Create(this);
+            _shouldRestorePageScroll = false;
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("ytmLayout.restorePageScrolls");
+            }
+            catch
+            {
+                // WebView may not be ready during shutdown.
+            }
         }
-
-        await JSRuntime.InvokeVoidAsync("ytmLayout.initBottomNav", "ytm-bottom-nav");
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         UpdateSelectedNavValue();
+        _shouldRestorePageScroll = true;
         _ = InvokeAsync(StateHasChanged);
     }
 
@@ -231,6 +246,20 @@
 
     private void NavigateToTab(string route)
     {
+        _ = NavigateToTabAsync(route);
+    }
+
+    private async Task NavigateToTabAsync(string route)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("ytmLayout.saveAllPageScrolls");
+        }
+        catch
+        {
+            // WebView may not be ready during shutdown.
+        }
+
         NavigationManager.NavigateTo(route);
     }
 

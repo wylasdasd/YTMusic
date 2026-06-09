@@ -1,11 +1,18 @@
 # 活动上下文 (Active Context)
 
 ## 当前焦点
+- **布局与滚动**：整页不滚；各页列表在 `PageListScroll` / Upload Tab 内滚。切换路由后滚动位置由 `ytmLayout._pageScrolls`（JS 内存）恢复，非 C#、非控件自带。
 - **AList 上传/下载**：上传流程已改为 `metadata.json` 优先、仅 `coverUrl`（`thumbnailUrl`）入 JSON，不再上传封面文件；上传进度在任务完成前封顶 99%。
 - **播放体验**：已下载歌曲切歌时 UI 与音频不同步的问题已修复（Web 代理 URL 去重误判 + Android ExoPlayer 切歌清理）。
 - **设置与 UI**：三横杠抽屉新增「两行显示」标题偏好；上传页标签用 `BadgeData`；Android 顶栏菜单按钮右对齐。
 
 ## 最近的变更
+### 布局与滚动
+- `MainLayout`：`ytm-content` / `ytm-body` 替代 `MudContainer` 作 flex 高度链；`ytm-main` 不滚动。
+- `PageListScroll.razor` + `app.css` 中 `.ytm-page__scroll`；各页 `PageKey`（如 `search`、`favorites`）。
+- `ytmLayout.js`：`initPageScrollPersistence`、`saveAllPageScrolls`、`restorePageScrolls`；缓存 `window.ytmLayout._pageScrolls`。
+- Upload：`ytm-page--tabs` + `data-page` 三 Tab；`initTouchScrollTabs` 横向触摸滑动。
+
 ### AList 上传/下载
 - 上传顺序：`mkdir` → `metadata.json` → 主音视频文件；`metadata.json` 字段与 `DownloadedTracks` 子集对齐（`RemoteTrackMetadata`）。
 - 不再上传封面文件；JSON 中只保留 `thumbnailUrl`（兼容反序列化 `coverUrl`）。

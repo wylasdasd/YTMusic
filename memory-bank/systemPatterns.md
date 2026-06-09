@@ -8,6 +8,17 @@
 ## 关键技术模式
 - **音频代理**: `LocalAudioProxy` 和 `LocalFileProxy` 使用 `HttpListener` 为 HTML5 `<audio>` 标签提供流服务，从而绕过 CORS 限制或直接文件访问限制。
 - **JS 互操作**: 广泛使用 `IJSRuntime` 来控制音频元素（播放/暂停、进度跳转、事件监听）。
+- **页面内滚动（非整页）**:
+  - `app.css`：`html/body/#app` 与 `ytm-main` 固定视口、`overflow: hidden`；列表在 `.ytm-page__scroll` 内 `overflow-y: auto`。
+  - `PageListScroll.razor`：Header 固定 + `ChildContent` 进可滚动区；`PageKey` 写入 `data-page`。
+  - Upload：`ytm-page--tabs`，各 `MudTabPanel` 带 `data-page`（`upload-local` / `upload-remote` / `upload-settings`）。
+- **滚动位置缓存（`ytmLayout.js`）**:
+  - 存储：`window.ytmLayout._pageScrolls`（内存字典，刷新丢失）。
+  - 写入：滚动监听 + `saveAllPageScrolls`；读取：`restorePageScrolls`（最多 10 次重试，应对异步列表高度）。
+  - 初始化：`initPageScrollPersistence` 监听 `.ytm-body` DOM 变化以绑定新页面滚动区。
+  - C# 仅调度，不保存数值：`MainLayout.OnAfterRenderAsync` / `NavigateToTabAsync`。
+- **Upload MudTabs 触摸横向滑动**:
+  - `ytm-tabs-touch-scroll` + `initTouchScrollTabs`：隐藏 Mud 箭头，用 `.mud-tabs-tabbar-content` 原生横向滚动。
 - **全局状态管理**: `MusicPlayerService` 作为单例/作用域状态提供者，向整个 UI 提供数据，并通过事件 (`OnChange`) 通知组件更新。
 - **轻量设置持久化**:
   - `UiPreferencesService` 统一承接主题索引、`Favorites Image`、`MediaTitleTwoLines` 等轻量设置。

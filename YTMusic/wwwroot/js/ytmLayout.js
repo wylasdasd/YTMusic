@@ -57,6 +57,91 @@ window.ytmLayout.syncTouchScrollTabs = function (rootId) {
     window.ytmLayout._scrollActiveTabIntoView(root);
 };
 
+window.ytmLayout._pageScrolls = window.ytmLayout._pageScrolls || {};
+
+window.ytmLayout._bindPageScrollRegion = function (element) {
+    if (!element || element.dataset.ytmScrollBound === "1") {
+        return;
+    }
+
+    const pageKey = element.dataset.page;
+    if (!pageKey) {
+        return;
+    }
+
+    element.dataset.ytmScrollBound = "1";
+    element.addEventListener(
+        "scroll",
+        () => {
+            window.ytmLayout._pageScrolls[pageKey] = element.scrollTop;
+        },
+        { passive: true }
+    );
+};
+
+window.ytmLayout._scanPageScrollRegions = function () {
+    document.querySelectorAll(".ytm-page__scroll[data-page]").forEach((element) => {
+        window.ytmLayout._bindPageScrollRegion(element);
+    });
+
+    document.querySelectorAll(".ytm-page--tabs .mud-tab-panel[data-page]").forEach((element) => {
+        window.ytmLayout._bindPageScrollRegion(element);
+    });
+};
+
+window.ytmLayout.saveAllPageScrolls = function () {
+    window.ytmLayout._scanPageScrollRegions();
+    document.querySelectorAll(".ytm-page__scroll[data-page], .ytm-page--tabs .mud-tab-panel[data-page]").forEach((element) => {
+        const pageKey = element.dataset.page;
+        if (pageKey) {
+            window.ytmLayout._pageScrolls[pageKey] = element.scrollTop;
+        }
+    });
+};
+
+window.ytmLayout.restorePageScrolls = function (retries) {
+    const maxRetries = typeof retries === "number" ? retries : 10;
+    if (maxRetries <= 0) {
+        return;
+    }
+
+    window.ytmLayout._scanPageScrollRegions();
+
+    let needsRetry = false;
+    document.querySelectorAll(".ytm-page__scroll[data-page], .ytm-page--tabs .mud-tab-panel[data-page]").forEach((element) => {
+        const pageKey = element.dataset.page;
+        if (!pageKey) {
+            return;
+        }
+
+        const target = window.ytmLayout._pageScrolls[pageKey] ?? 0;
+        element.scrollTop = target;
+        if (Math.abs(element.scrollTop - target) > 2) {
+            needsRetry = true;
+        }
+    });
+
+    if (needsRetry) {
+        setTimeout(() => window.ytmLayout.restorePageScrolls(maxRetries - 1), 60);
+    }
+};
+
+window.ytmLayout.initPageScrollPersistence = function () {
+    const body = document.querySelector(".ytm-body");
+    if (!body || body.dataset.ytmPageScrollInit === "1") {
+        window.ytmLayout._scanPageScrollRegions();
+        return;
+    }
+
+    body.dataset.ytmPageScrollInit = "1";
+    window.ytmLayout._scanPageScrollRegions();
+
+    const observer = new MutationObserver(() => {
+        window.ytmLayout._scanPageScrollRegions();
+    });
+    observer.observe(body, { childList: true, subtree: true });
+};
+
 window.ytmLayout.initBottomNav = function (navId) {
     const nav = document.getElementById(navId);
     if (!nav) {

@@ -15,7 +15,8 @@
         <MudTabPanel Text="Local"
                      Icon="@Icons.Material.Filled.Upload"
                      BadgeData="@GetUploadLocalTabBadgeData()"
-                     BadgeColor="Color.Error">
+                     BadgeColor="Color.Error"
+                     data-page="upload-local">
             <MudPaper Elevation="2" Class="pa-4 mb-4">
                 <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">本地下载列表里挑选后上传</MudText>
 
@@ -111,7 +112,8 @@
         <MudTabPanel Text="Remote"
                      Icon="@Icons.Material.Filled.Cloud"
                      BadgeData="@GetRemoteTabBadgeData()"
-                     BadgeColor="Color.Info">
+                     BadgeColor="Color.Info"
+                     data-page="upload-remote">
             <MudPaper Elevation="2" Class="pa-4 mb-4">
                 <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">浏览 Remote Directory，多选后批量下载</MudText>
 
@@ -217,7 +219,8 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Settings"
-                     Icon="@Icons.Material.Filled.Settings">
+                     Icon="@Icons.Material.Filled.Settings"
+                     data-page="upload-settings">
             <MudPaper Elevation="2" Class="pa-4 mb-4">
                 <div class="d-flex align-center justify-space-between flex-wrap gap-2 mb-4">
                     <MudText Typo="Typo.h6">Upload Settings</MudText>

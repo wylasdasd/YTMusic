@@ -94,7 +94,8 @@ body {
     flex-direction: column;
 }
 
-.ytm-page--tabs .mud-tabs-panels > .mud-tab-panel {
+.ytm-page--tabs .mud-tabs-panels > .mud-tab-panel,
+.ytm-page--tabs .mud-tab-panel[data-page] {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
