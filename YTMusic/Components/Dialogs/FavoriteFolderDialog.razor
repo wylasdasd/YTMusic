@@ -26,7 +26,7 @@
             }
             else if (Folders.Count == 0)
             {
-                <MudText Color="Color.Secondary" Class="my-2">No folders available.</MudText>
+                <MudText Color="Color.Secondary" Class="my-2">暂无可用收藏夹。</MudText>
             }
             else
             {
@@ -49,16 +49,16 @@
             <MudDivider Class="my-2" />
 
             <div class="d-flex align-center mt-4">
-                <MudTextField @bind-Value="NewFolderName" Label="New Folder Name" Variant="Variant.Outlined"
+                <MudTextField @bind-Value="NewFolderName" Label="新建收藏夹" Variant="Variant.Outlined"
                               Margin="Margin.Dense" Class="flex-grow-1" />
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="ml-2" OnClick="CreateNewFolderAsync"
                            Disabled="@string.IsNullOrWhiteSpace(NewFolderName)">
-                    Create
+                    创建
                 </MudButton>
             </div>
         </DialogContent>
         <DialogActions>
-            <MudButton OnClick="CloseDialog" Color="Color.Primary">Close</MudButton>
+            <MudButton OnClick="CloseDialog" Color="Color.Primary">完成</MudButton>
         </DialogActions>
     </MudDialog>
 

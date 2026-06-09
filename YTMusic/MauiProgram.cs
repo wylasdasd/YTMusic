@@ -84,6 +84,7 @@ namespace YTMusic
             builder.Services.AddTransient<YTMusic.Components.Pages.DownloadsVM>();
             builder.Services.AddTransient<YTMusic.Components.Pages.TransfersVM>();
             builder.Services.AddTransient<YTMusic.Components.Pages.FavoritesVM>();
+            builder.Services.AddTransient<YTMusic.Components.Pages.FavoritesFolderVM>();
             builder.Services.AddTransient<YTMusic.Components.Pages.UploadVM>();
             builder.Services.AddMudServices();
 

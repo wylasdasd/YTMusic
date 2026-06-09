@@ -8,36 +8,19 @@ using YTMusic.Services;
 
 namespace YTMusic.Components.Pages
 {
-    public enum FavoriteTrackSortMode
-    {
-        Time = 0,
-        Name = 1,
-        Downloaded = 2,
-        NotDownloaded = 3
-    }
-
     public class FavoritesVM
     {
         private readonly IFavoriteService _favoriteService;
         private readonly ILocalMusicService _localMusicService;
         private readonly ISnackbar _snackbar;
         private readonly IDialogService _dialogService;
-        private List<FavoriteTrack> _rawTracks = new();
 
         public Action? StateHasChanged { get; set; }
 
         public List<FavoriteFolder> Folders { get; private set; } = new();
-        public List<FavoriteTrack> Tracks { get; private set; } = new();
         public Dictionary<int, int> FolderTrackCounts { get; private set; } = new();
         public Dictionary<int, string?> FolderCoverUrls { get; private set; } = new();
         public Dictionary<int, string?> FolderFirstTrackAuthors { get; private set; } = new();
-
-        public int SelectedFolderId { get; set; } = FavoriteFolderIds.Default;
-        public FavoriteTrackSortMode SortMode { get; set; } = FavoriteTrackSortMode.Time;
-        public bool IsFolderListView { get; private set; } = true;
-        public bool IsLoading { get; private set; } = false;
-
-        public bool IsDownloadedCatalogSelected => FavoriteFolderIds.IsDownloadedCatalog(SelectedFolderId);
 
         public FavoritesVM(IFavoriteService favoriteService, ILocalMusicService localMusicService, ISnackbar snackbar, IDialogService dialogService)
         {
@@ -49,8 +32,35 @@ namespace YTMusic.Components.Pages
 
         public async Task InitializeAsync()
         {
-            IsFolderListView = true;
             await LoadFoldersAsync();
+        }
+
+        public async Task OpenCreateFolderDialogAsync()
+        {
+            var options = new DialogOptions
+            {
+                CloseOnEscapeKey = true,
+                MaxWidth = MaxWidth.Small,
+                FullWidth = true
+            };
+
+            var dialog = await _dialogService.ShowAsync<CreateFavoriteFolderDialog>("新建收藏夹", options);
+            var result = await dialog.Result;
+            if (result == null || result.Canceled || result.Data is not string name || string.IsNullOrWhiteSpace(name))
+            {
+                return;
+            }
+
+            try
+            {
+                await _favoriteService.CreateFolderAsync(name.Trim());
+                _snackbar.Add($"已创建收藏夹「{name.Trim()}」", Severity.Success);
+                await LoadFoldersAsync();
+            }
+            catch (Exception ex)
+            {
+                _snackbar.Add($"创建收藏夹失败: {ex.Message}", Severity.Error);
+            }
         }
 
         public async Task LoadFoldersAsync()
@@ -85,97 +95,6 @@ namespace YTMusic.Components.Pages
             }
 
             StateHasChanged?.Invoke();
-        }
-
-        public async Task OpenFolderAsync(int folderId)
-        {
-            IsFolderListView = false;
-            SelectedFolderId = folderId;
-            SortMode = FavoriteTrackSortMode.Time;
-            await LoadTracksAsync();
-        }
-
-        public void BackToFolderList()
-        {
-            IsFolderListView = true;
-            _rawTracks.Clear();
-            Tracks.Clear();
-            StateHasChanged?.Invoke();
-        }
-
-        public string? GetSelectedFolderName()
-        {
-            return Folders.FirstOrDefault(f => f.Id == SelectedFolderId)?.Name;
-        }
-
-        public async Task LoadTracksAsync()
-        {
-            IsLoading = true;
-            StateHasChanged?.Invoke();
-
-            try
-            {
-                if (IsDownloadedCatalogSelected)
-                {
-                    _rawTracks = await LoadDownloadedCatalogTracksAsync();
-                }
-                else
-                {
-                    _rawTracks = await _favoriteService.GetTracksAsync(SelectedFolderId, null);
-
-                    foreach (var track in _rawTracks)
-                    {
-                        var downloadedTrack = await _localMusicService.GetDownloadedTrackByVideoIdAsync(track.VideoId);
-                        if (downloadedTrack?.IsVideo == true)
-                        {
-                            track.LocalVideoFilePath = downloadedTrack.LocalFilePath;
-                        }
-                    }
-                }
-
-                ApplyTrackOrdering();
-            }
-            catch (Exception ex)
-            {
-                _snackbar.Add($"Failed to load favorites: {ex.Message}", Severity.Error);
-            }
-            finally
-            {
-                IsLoading = false;
-                StateHasChanged?.Invoke();
-            }
-        }
-
-        public async Task SetSortModeAsync(FavoriteTrackSortMode sortMode)
-        {
-            SortMode = sortMode;
-            ApplyTrackOrdering();
-            StateHasChanged?.Invoke();
-        }
-
-        private void ApplyTrackOrdering()
-        {
-            IEnumerable<FavoriteTrack> query = _rawTracks;
-
-            switch (SortMode)
-            {
-                case FavoriteTrackSortMode.Downloaded:
-                    query = query.Where(track => track.IsDownloaded)
-                        .OrderByDescending(track => track.AddedDate);
-                    break;
-                case FavoriteTrackSortMode.NotDownloaded:
-                    query = query.Where(track => !track.IsDownloaded)
-                        .OrderByDescending(track => track.AddedDate);
-                    break;
-                case FavoriteTrackSortMode.Name:
-                    query = query.OrderBy(track => track.Title, StringComparer.CurrentCultureIgnoreCase);
-                    break;
-                default:
-                    query = query.OrderByDescending(track => track.AddedDate);
-                    break;
-            }
-
-            Tracks = query.ToList();
         }
 
         public async Task<List<FavoriteTrack>> LoadTracksForFolderAsync(int folderId)
@@ -223,6 +142,53 @@ namespace YTMusic.Components.Pages
             };
         }
 
+        public async Task ConfirmClearLocalDownloadsAsync()
+        {
+            var downloads = await _localMusicService.GetDownloadedTracksAsync();
+            if (!downloads.Any())
+            {
+                return;
+            }
+
+            var parameters = new DialogParameters<ConfirmDeleteLocalFilesDialog>
+            {
+                { x => x.Count, downloads.Count }
+            };
+            var options = new DialogOptions
+            {
+                CloseOnEscapeKey = true,
+                MaxWidth = MaxWidth.ExtraSmall,
+                FullWidth = true
+            };
+
+            var dialog = await _dialogService.ShowAsync<ConfirmDeleteLocalFilesDialog>("删除本地文件", parameters, options);
+            var result = await dialog.Result;
+            if (result == null || result.Canceled)
+            {
+                return;
+            }
+
+            try
+            {
+                foreach (var file in downloads)
+                {
+                    if (!string.IsNullOrWhiteSpace(file.LocalFilePath))
+                    {
+                        await _favoriteService.RemoveTrackByFilePathAsync(file.LocalFilePath);
+                    }
+
+                    await _localMusicService.RemoveDownloadedTrackAsync(file.VideoId, file.LocalFilePath);
+                }
+
+                _snackbar.Add($"已删除 {downloads.Count} 个本地文件", Severity.Success);
+                await LoadFoldersAsync();
+            }
+            catch (Exception ex)
+            {
+                _snackbar.Add($"删除本地文件失败: {ex.Message}", Severity.Error);
+            }
+        }
+
         public async Task ConfirmDeleteFolderAsync(FavoriteFolder folder)
         {
             if (FavoriteFolderIds.IsProtectedFolder(folder.Id))
@@ -257,76 +223,6 @@ namespace YTMusic.Components.Pages
             catch (Exception ex)
             {
                 _snackbar.Add($"删除收藏夹失败: {ex.Message}", Severity.Error);
-            }
-        }
-
-        public async Task ConfirmRemoveFavoriteAsync(FavoriteTrack track)
-        {
-            if (FavoriteFolderIds.IsDownloadedCatalog(track.FolderId))
-            {
-                return;
-            }
-
-            var parameters = new DialogParameters<ConfirmRemoveFavoriteDialog>
-            {
-                { x => x.TrackTitle, track.Title },
-                { x => x.IsDownloaded, track.IsDownloaded }
-            };
-
-            var options = new DialogOptions
-            {
-                CloseOnEscapeKey = true,
-                MaxWidth = MaxWidth.ExtraSmall,
-                FullWidth = true
-            };
-
-            var dialog = await _dialogService.ShowAsync<ConfirmRemoveFavoriteDialog>("取消收藏", parameters, options);
-            var result = await dialog.Result;
-            if (result == null || result.Canceled || result.Data is not string choice)
-            {
-                return;
-            }
-
-            await RemoveFavoriteAsync(track, deleteLocalFile: choice == "delete");
-        }
-
-        private async Task RemoveFavoriteAsync(FavoriteTrack track, bool deleteLocalFile)
-        {
-            try
-            {
-                if (deleteLocalFile && track.IsDownloaded)
-                {
-                    var filePath = track.LocalFilePath;
-                    if (!string.IsNullOrWhiteSpace(filePath))
-                    {
-                        await _localMusicService.RemoveDownloadedTrackAsync(track.VideoId, filePath);
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(track.LocalVideoFilePath)
-                        && !string.Equals(track.LocalVideoFilePath, filePath, StringComparison.OrdinalIgnoreCase))
-                    {
-                        CommonTool.FileHelps.FileHelp.DeleteIfExists(track.LocalVideoFilePath);
-                    }
-                }
-
-                await _favoriteService.RemoveFromFavoritesAsync(track.VideoId, track.FolderId);
-                _rawTracks.Remove(track);
-                ApplyTrackOrdering();
-
-                if (FolderTrackCounts.TryGetValue(track.FolderId, out var count) && count > 0)
-                {
-                    FolderTrackCounts[track.FolderId] = count - 1;
-                }
-
-                var message = deleteLocalFile && track.IsDownloaded
-                    ? $"已取消收藏并删除「{track.Title}」"
-                    : $"已取消收藏「{track.Title}」";
-                _snackbar.Add(message, Severity.Success);
-                StateHasChanged?.Invoke();
-            }
-            catch (Exception ex)
-            {
-                _snackbar.Add($"Error removing favorite: {ex.Message}", Severity.Error);
             }
         }
     }

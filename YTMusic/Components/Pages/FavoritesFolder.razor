@@ -1,0 +1,225 @@
+@page "/favorites/folder/{FolderId:int}"
+@using YTMusic.Services
+@implements IDisposable
+
+<PageListScroll PageKey="@($"favorites-folder-{FolderId}")" ScrollId="favorites-folder-scroll">
+    <Header>
+        <div class="favorites-track-toolbar">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
+                           Color="Color.Default"
+                           OnClick="BackToFolderList"
+                           aria-label="返回收藏夹列表" />
+            <MudText Typo="Typo.h6" Class="favorites-track-toolbar__title">
+                @(ViewModel.FolderName ?? "收藏夹")
+            </MudText>
+        </div>
+        <div class="favorites-sort-field">
+            <MudSelect T="FavoriteTrackSortMode"
+                       Value="ViewModel.SortMode"
+                       ValueChanged="ViewModel.SetSortModeAsync"
+                       Label="排序方式"
+                       Variant="Variant.Outlined"
+                       FullWidth="true"
+                       Dense="true">
+                <MudSelectItem T="FavoriteTrackSortMode" Value="FavoriteTrackSortMode.Time">时间</MudSelectItem>
+                <MudSelectItem T="FavoriteTrackSortMode" Value="FavoriteTrackSortMode.Name">名称</MudSelectItem>
+                @if (!ViewModel.IsDownloadedCatalog)
+                {
+                    <MudSelectItem T="FavoriteTrackSortMode" Value="FavoriteTrackSortMode.Downloaded">已下载</MudSelectItem>
+                    <MudSelectItem T="FavoriteTrackSortMode" Value="FavoriteTrackSortMode.NotDownloaded">未下载</MudSelectItem>
+                }
+            </MudSelect>
+        </div>
+        @if (ViewModel.IsDownloadedCatalog)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
+                已下载目录同步自本地下载列表；可通过爱心按钮收藏到其他收藏夹。
+            </MudAlert>
+        }
+    </Header>
+    <ChildContent>
+        @if (ViewModel.IsLoading)
+        {
+            <div class="d-flex justify-center mt-8">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+            </div>
+        }
+        else if (!ViewModel.Tracks.Any())
+        {
+            <MudAlert Severity="Severity.Info" Class="mt-4">
+                @(ViewModel.IsDownloadedCatalog ? "暂无本地下载文件。" : "当前收藏夹没有符合条件的歌曲。")
+            </MudAlert>
+        }
+        else
+        {
+            <MudGrid Class="mt-2 justify-center">
+                @foreach (var track in ViewModel.Tracks)
+                {
+                    <MudItem xs="12" sm="6" md="4" lg="3">
+                        <MudCard Elevation="2" Style="height: 100%; display: flex; flex-direction: column; cursor: pointer;"
+                                 @onclick="@(() => PlayTrack(track))">
+                            @if (UiPreferences.ShowFavoriteCardImages)
+                            {
+                                <MudCardMedia Image="@track.ThumbnailUrl" Height="160" />
+                            }
+                            <MudCardContent Style="flex-grow: 1;">
+                                <MediaTitle Text="@track.Title" Typo="Typo.subtitle1" />
+                            </MudCardContent>
+                            <MudCardActions Class="favorites-card__footer">
+                                @if (track.IsDownloaded)
+                                {
+                                    <MudChip T="string"
+                                             Size="Size.Small"
+                                             Color="Color.Success"
+                                             Variant="Variant.Outlined"
+                                             Icon="@Icons.Material.Filled.CheckCircle">
+                                        Downloaded
+                                    </MudChip>
+                                }
+                                <MudSpacer />
+                                @if (track.HasDownloadedVideo)
+                                {
+                                    <div @onclick:stopPropagation="true">
+                                        <MudIconButton Icon="@Icons.Material.Filled.OndemandVideo"
+                                                       Color="Color.Secondary"
+                                                       OnClick="@(async (e) => await PlayLocalVideoAsync(track))"
+                                                       aria-label="Play local video" />
+                                    </div>
+                                }
+                                <div @onclick:stopPropagation="true">
+                                    <MudIconButton
+                                        Icon="@(ViewModel.IsTrackFavoritedAnywhere(track) ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                                        Color="@(ViewModel.IsTrackFavoritedAnywhere(track) ? Color.Error : Color.Default)"
+                                        OnClick="@(async (e) => await ViewModel.OpenFavoriteFolderDialogAsync(track))"
+                                        aria-label="管理收藏夹" />
+                                </div>
+                                @if (ViewModel.IsDownloadedCatalog)
+                                {
+                                    <div @onclick:stopPropagation="true">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                       Color="Color.Error"
+                                                       OnClick="@(async (e) => await ViewModel.DeleteLocalFileAsync(track))"
+                                                       aria-label="删除本地文件" />
+                                    </div>
+                                }
+                            </MudCardActions>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </ChildContent>
+</PageListScroll>
+
+@code {
+    [Parameter] public int FolderId { get; set; }
+
+    [Inject] private FavoritesFolderVM ViewModel { get; set; } = default!;
+    [Inject] private NavigationManager NavigationManager { get; set; } = default!;
+    [Inject] private MusicPlayerService PlayerService { get; set; } = default!;
+    [Inject] private GlobalStateService GlobalState { get; set; } = default!;
+    [Inject] private UiPreferencesService UiPreferences { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ViewModel.StateHasChanged = StateHasChanged;
+        UiPreferences.OnChange += OnUiPreferencesChanged;
+        await ViewModel.InitializeAsync(FolderId);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (FolderId != ViewModel.FolderId && FolderId != 0)
+        {
+            await ViewModel.InitializeAsync(FolderId);
+        }
+    }
+
+    private void BackToFolderList()
+    {
+        NavigationManager.NavigateTo("/favorites");
+    }
+
+    private async Task PlayTrack(FavoriteTrack track)
+    {
+        try
+        {
+            GlobalState.ShowLoading();
+            StateHasChanged();
+
+            if (ViewModel.Tracks.Any())
+            {
+                var playlist = BuildPlaylist(ViewModel.Tracks);
+                int startIndex = ViewModel.Tracks.FindIndex(t =>
+                    t.VideoId == track.VideoId &&
+                    string.Equals(t.LocalFilePath, track.LocalFilePath, StringComparison.OrdinalIgnoreCase));
+                if (startIndex == -1) startIndex = 0;
+
+                string folderName = ViewModel.FolderName ?? "收藏夹";
+
+                if (await PlayerService.PlayPlaylistAsync(playlist, startIndex, folderName, MusicPlayerService.PlaybackMode.Sequential))
+                {
+                    NavigationManager.NavigateTo("/player");
+                }
+            }
+        }
+        finally
+        {
+            GlobalState.HideLoading();
+            StateHasChanged();
+        }
+    }
+
+    private List<PlayingItem> BuildPlaylist(IEnumerable<FavoriteTrack> tracks)
+    {
+        return tracks.Select(t => new PlayingItem
+        {
+            VideoId = t.VideoId,
+            Title = t.Title,
+            Author = t.Author,
+            ThumbnailUrl = t.ThumbnailUrl,
+            LocalFilePath = t.IsDownloaded || ViewModel.IsDownloadedCatalog ? t.LocalFilePath : null,
+            IsVideo = false
+        }).ToList();
+    }
+
+    private async Task PlayLocalVideoAsync(FavoriteTrack track)
+    {
+        if (!track.HasDownloadedVideo || string.IsNullOrWhiteSpace(track.LocalVideoFilePath))
+        {
+            return;
+        }
+
+        try
+        {
+            GlobalState.ShowLoading();
+            StateHasChanged();
+
+            if (await PlayerService.PlayLocalFileAsync(
+                track.LocalVideoFilePath,
+                track.Title,
+                true,
+                track.Author,
+                track.ThumbnailUrl))
+            {
+                NavigationManager.NavigateTo("/player");
+            }
+        }
+        finally
+        {
+            GlobalState.HideLoading();
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        ViewModel.StateHasChanged = null;
+        UiPreferences.OnChange -= OnUiPreferencesChanged;
+    }
+
+    private void OnUiPreferencesChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+}
