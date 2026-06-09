@@ -8,6 +8,7 @@
 @inject IDownloadManagerService DownloadManager
 @inject ISnackbar Snackbar
 @inject NavigationManager NavigationManager
+@inject GlobalStateService GlobalState
 @implements IDisposable
 
 <PageListScroll PageKey="player-audio" Class="player-page-scroll">
@@ -250,11 +251,70 @@
             return;
         }
 
-        var switched = await PlayerService.PlayCurrentAsVideoAsync();
-        if (switched && !(OperatingSystem.IsAndroid() && PlayerService.UseNativeVideoPlayback))
+        var currentVideo = PlayerService.CurrentVideo;
+        if (currentVideo == null)
+        {
+            return;
+        }
+
+        if (await PlayerService.CanPlayLocalVideoForCurrentAsync())
+        {
+            await NavigateToVideoIfSwitchedAsync(await PlayerService.PlayCurrentAsVideoAsync());
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(currentVideo.VideoId) || currentVideo.VideoId == "local")
+        {
+            Snackbar.Add("当前曲目没有可用的视频 ID，无法在线播放视频。", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            GlobalState.ShowLoading();
+            StateHasChanged();
+
+            var remoteAvailable = await PlayerService.CheckRemoteVideoAvailableAsync(currentVideo.VideoId);
+            if (!remoteAvailable)
+            {
+                Snackbar.Add("无法获取在线视频流，视频可能不可用或网络异常。", Severity.Warning);
+                return;
+            }
+
+            var parameters = new DialogParameters { { "TrackTitle", currentVideo.Title } };
+            var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+            var dialog = await DialogService.ShowAsync<RemoteVideoConfirmDialog>("播放视频", parameters, options);
+            var result = await dialog.Result;
+            if (result == null || result.Canceled)
+            {
+                return;
+            }
+
+            if (!await NavigateToVideoIfSwitchedAsync(await PlayerService.PlayRemoteVideoForCurrentAsync()))
+            {
+                Snackbar.Add("在线视频播放失败。", Severity.Error);
+            }
+        }
+        finally
+        {
+            GlobalState.HideLoading();
+            StateHasChanged();
+        }
+    }
+
+    private async Task<bool> NavigateToVideoIfSwitchedAsync(bool switched)
+    {
+        if (!switched)
+        {
+            return false;
+        }
+
+        if (!(OperatingSystem.IsAndroid() && PlayerService.UseNativeVideoPlayback))
         {
             NavigationManager.NavigateTo("/player/video");
         }
+
+        return true;
     }
 
     private async Task PlayAudioAsync()

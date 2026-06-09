@@ -563,10 +563,37 @@ namespace YTMusic.Services
                 return false;
             }
 
+            if (await CanPlayLocalVideoForCurrentAsync())
+            {
+                return true;
+            }
+
+            if (string.IsNullOrWhiteSpace(current.VideoId) || current.VideoId == "local")
+            {
+                return false;
+            }
+
+            // 有 VideoId 时按钮可点；本地仅音频则需弹窗确认后拉远端流。
+            return true;
+        }
+
+        public async Task<bool> CanPlayLocalVideoForCurrentAsync()
+        {
+            var current = CurrentVideo;
+            if (current == null)
+            {
+                return false;
+            }
+
             if (!string.IsNullOrWhiteSpace(current.LocalFilePath))
             {
                 var localTrack = await _localMusicService.GetDownloadedTrackByFilePathAsync(current.LocalFilePath);
                 if (localTrack?.IsVideo == true)
+                {
+                    return true;
+                }
+
+                if (current.IsVideo == true )
                 {
                     return true;
                 }
@@ -578,13 +605,27 @@ namespace YTMusic.Services
             }
 
             var downloaded = await _localMusicService.GetDownloadedTrackByVideoIdAsync(current.VideoId);
-            if (downloaded?.IsVideo == true)
+            return downloaded?.IsVideo == true;
+        }
+
+        public async Task<bool> CheckRemoteVideoAvailableAsync(string videoId)
+        {
+            if (string.IsNullOrWhiteSpace(videoId) || videoId == "local")
             {
-                return true;
+                return false;
             }
 
-            // 在线 YouTube 曲目：按钮立即显示，是否在播视频由点击时拉流决定。
-            return true;
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                var streamInfo = await GetPreferredMuxedVideoStreamInfoAsync(videoId, cts.Token);
+                return streamInfo != null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[MusicPlayer] remote video check failed: {ex.Message}");
+                return false;
+            }
         }
 
         public async Task<bool> PlayCurrentAsVideoAsync()
@@ -613,6 +654,17 @@ namespace YTMusic.Services
             if (downloaded?.IsVideo == true && !string.IsNullOrWhiteSpace(downloaded.LocalFilePath))
             {
                 return await PlayLocalFileAsync(downloaded.LocalFilePath, current.Title, true, current.Author, current.ThumbnailUrl);
+            }
+
+            return false;
+        }
+
+        public async Task<bool> PlayRemoteVideoForCurrentAsync()
+        {
+            var current = CurrentVideo;
+            if (current == null || string.IsNullOrWhiteSpace(current.VideoId) || current.VideoId == "local")
+            {
+                return false;
             }
 
             return await PlayInternalAsync(new PlayingItem
@@ -909,7 +961,8 @@ namespace YTMusic.Services
 
                 // Prefer downloaded local files when we have a record for this video id.
                 var downloaded = await _localMusicService.GetDownloadedTrackByVideoIdAsync(video.VideoId);
-                if (downloaded != null && !string.IsNullOrWhiteSpace(downloaded.LocalFilePath))
+                var skipLocalBecauseAudioOnly = video.IsVideo == true && downloaded != null && !downloaded.IsVideo;
+                if (!skipLocalBecauseAudioOnly && downloaded != null && !string.IsNullOrWhiteSpace(downloaded.LocalFilePath))
                 {
                     video.LocalFilePath = downloaded.LocalFilePath;
                     video.IsVideo = downloaded.IsVideo;

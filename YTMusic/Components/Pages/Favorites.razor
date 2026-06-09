@@ -28,12 +28,7 @@
     }
 </div>
 
-@if (ViewModel.IsDownloadedCatalogSelected)
-{
-    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
-        已下载目录同步自本地下载列表，无法手动添加或取消收藏。
-    </MudAlert>
-}
+
 
 <div class="favorites-actions">
     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlayArrow"
