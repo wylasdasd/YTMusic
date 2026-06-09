@@ -9,6 +9,20 @@
         <MudPaper Elevation="2"
                   Class="pa-4 d-flex align-center justify-space-between"
                   Style="cursor: pointer;"
+                  @onclick='() => NavigationManager.NavigateTo("downloads")'>
+            <div class="d-flex align-center gap-3">
+                <MudIcon Icon="@Icons.Material.Filled.LibraryMusic" Color="Color.Primary" />
+                <div class="d-flex flex-column">
+                    <MudText Typo="Typo.subtitle1">本地资源</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">浏览、播放与删除本地下载的音频和视频</MudText>
+                </div>
+            </div>
+            <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Color="Color.Default" />
+        </MudPaper>
+
+        <MudPaper Elevation="2"
+                  Class="pa-4 d-flex align-center justify-space-between mt-3"
+                  Style="cursor: pointer;"
                   @onclick='() => NavigationManager.NavigateTo("transfers")'>
             <div class="d-flex align-center gap-3">
                 <MudIcon Icon="@Icons.Material.Filled.CloudDownload" Color="Color.Primary" />

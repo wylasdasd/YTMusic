@@ -1,27 +1,76 @@
-.favorites-toolbar {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 10px;
-    width: 100%;
-    margin-bottom: 16px;
+.favorites-page-title {
+    margin-bottom: 4px;
 }
 
-.favorites-toolbar__field {
+.favorites-folder-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+.favorites-folder-row {
+    cursor: pointer;
+    border: 1px solid var(--ytm-border);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.03));
+    transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.favorites-folder-row:hover {
+    border-color: color-mix(in srgb, var(--ytm-accent) 45%, var(--ytm-border));
+    transform: translateY(-1px);
+}
+
+.favorites-folder-row__thumb {
+    flex-shrink: 0;
+    width: 60px;
+    height: 60px;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.favorites-folder-row__thumb--empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+    border: 1px solid var(--ytm-border);
+}
+
+.favorites-folder-row__meta {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.favorites-folder-row__title {
+    line-height: 1.35;
+}
+
+.favorites-folder-row__subtitle {
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.favorites-track-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     min-width: 0;
 }
 
-.favorites-actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 10px;
-    margin-bottom: 16px;
-}
-
-.favorites-actions ::deep .mud-button {
+.favorites-track-toolbar__title {
     flex: 1 1 auto;
     min-width: 0;
-    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.favorites-sort-field {
+    margin-top: 10px;
 }
 
 .favorites-card__footer {
@@ -32,21 +81,4 @@
 
 .favorites-card__footer ::deep .mud-chip {
     margin: 0;
-}
-
-@media (min-width: 600px) {
-    .favorites-toolbar {
-        gap: 16px;
-        max-width: 480px;
-        margin-left: auto;
-        margin-right: auto;
-    }
-
-    .favorites-actions {
-        gap: 16px;
-    }
-
-    .favorites-actions ::deep .mud-button {
-        flex: 0 1 auto;
-    }
 }

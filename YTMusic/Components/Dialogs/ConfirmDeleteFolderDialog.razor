@@ -1,0 +1,29 @@
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body1">
+            确定删除收藏夹「@FolderName」吗？其中的收藏歌曲将一并移除。
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Color="Color.Default">取消</MudButton>
+        <MudButton OnClick="Confirm" Color="Color.Error" Variant="Variant.Filled">删除</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string FolderName { get; set; } = string.Empty;
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private void Confirm()
+    {
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+}
