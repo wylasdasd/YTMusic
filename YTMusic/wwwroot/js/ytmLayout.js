@@ -1,4 +1,10 @@
+// YTMusic 布局相关 JS（由 index.html 引入，Blazor 通过 IJSRuntime 调用）。
 window.ytmLayout = window.ytmLayout || {};
+
+// ---------------------------------------------------------------------------
+// Upload 页 MudTabs：横向触摸滑动（隐藏 MudBlazor 左右箭头，用原生 overflow 滚动）
+// 配合 app.css 中 .ytm-tabs-touch-scroll；Upload.razor 调用 initTouchScrollTabs / syncTouchScrollTabs
+// ---------------------------------------------------------------------------
 
 window.ytmLayout._scrollActiveTabIntoView = function (root) {
     if (!root) {
@@ -57,8 +63,18 @@ window.ytmLayout.syncTouchScrollTabs = function (rootId) {
     window.ytmLayout._scrollActiveTabIntoView(root);
 };
 
+// ---------------------------------------------------------------------------
+// 各页面列表滚动位置缓存（Blazor 路由会销毁 DOM，无法“自带”保留 scrollTop）
+//
+// 存储：window.ytmLayout._pageScrolls[pageKey] = scrollTop（仅内存，刷新应用即丢失）
+// 目标元素：带 data-page 的 .ytm-page__scroll（PageListScroll）或 Upload 的 MudTabPanel
+// C# 调用点：MainLayout OnAfterRender → initPageScrollPersistence / restorePageScrolls
+//           底栏 NavigateToTabAsync → saveAllPageScrolls（跳转前再扫一遍 DOM）
+// ---------------------------------------------------------------------------
+
 window.ytmLayout._pageScrolls = window.ytmLayout._pageScrolls || {};
 
+/** 给单个滚动容器绑定 scroll 监听，滚动时写入 _pageScrolls[pageKey] */
 window.ytmLayout._bindPageScrollRegion = function (element) {
     if (!element || element.dataset.ytmScrollBound === "1") {
         return;
@@ -79,6 +95,7 @@ window.ytmLayout._bindPageScrollRegion = function (element) {
     );
 };
 
+/** 扫描当前 DOM 中所有带 data-page 的列表滚动区并绑定监听 */
 window.ytmLayout._scanPageScrollRegions = function () {
     document.querySelectorAll(".ytm-page__scroll[data-page]").forEach((element) => {
         window.ytmLayout._bindPageScrollRegion(element);
@@ -89,6 +106,7 @@ window.ytmLayout._scanPageScrollRegions = function () {
     });
 };
 
+/** 跳转前显式保存（底栏切换时由 MainLayout 调用） */
 window.ytmLayout.saveAllPageScrolls = function () {
     window.ytmLayout._scanPageScrollRegions();
     document.querySelectorAll(".ytm-page__scroll[data-page], .ytm-page--tabs .mud-tab-panel[data-page]").forEach((element) => {
@@ -99,6 +117,7 @@ window.ytmLayout.saveAllPageScrolls = function () {
     });
 };
 
+/** 路由切换后恢复滚动；异步列表可能尚未撑满高度，故带有限次重试 */
 window.ytmLayout.restorePageScrolls = function (retries) {
     const maxRetries = typeof retries === "number" ? retries : 10;
     if (maxRetries <= 0) {
@@ -126,6 +145,7 @@ window.ytmLayout.restorePageScrolls = function (retries) {
     }
 };
 
+/** 应用启动时绑定；MutationObserver 在 .ytm-body 子树变化时重新扫描（新页面挂载后） */
 window.ytmLayout.initPageScrollPersistence = function () {
     const body = document.querySelector(".ytm-body");
     if (!body || body.dataset.ytmPageScrollInit === "1") {
@@ -141,6 +161,10 @@ window.ytmLayout.initPageScrollPersistence = function () {
     });
     observer.observe(body, { childList: true, subtree: true });
 };
+
+// ---------------------------------------------------------------------------
+// 底部导航：键盘弹出时抬高 bottom，避免被输入法挡住（visualViewport）
+// ---------------------------------------------------------------------------
 
 window.ytmLayout.initBottomNav = function (navId) {
     const nav = document.getElementById(navId);
