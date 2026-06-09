@@ -59,6 +59,8 @@ body {
 
 .ytm-page__header {
     flex-shrink: 0;
+    /* Outlined 标签会略高出输入框，需留白避免被 .ytm-page overflow:hidden 裁切 */
+    padding-top: 10px;
 }
 
 .ytm-page__scroll {

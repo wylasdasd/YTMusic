@@ -2,10 +2,6 @@
     margin-bottom: 14px;
 }
 
-.search-toolbar ::deep .mud-input-control {
-    margin-top: 0;
-}
-
 .search-toolbar ::deep .mud-input-outlined-border {
     border-color: var(--ytm-search-border);
 }

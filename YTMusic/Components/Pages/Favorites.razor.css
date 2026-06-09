@@ -10,10 +10,6 @@
     min-width: 0;
 }
 
-.favorites-toolbar ::deep .mud-input-control {
-    margin-top: 0;
-}
-
 .favorites-actions {
     display: flex;
     flex-wrap: wrap;
