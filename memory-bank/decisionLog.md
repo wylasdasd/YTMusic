@@ -1,5 +1,21 @@
 # 决策日志 (Decision Log)
 
+## 2026-06-07: 播放器进度条改由 JS 托管（`ytm-player-progress`），不再用 MudSlider 绑 Blazor 状态
+- **决策**:
+  - `audioPlayer.js` 提供 `mountProgressBar` / `setProgress` / `seekProgressTo`；`PlayerAudio` / `PlayerVideo` 仅提供空容器 `@ref`，进度与时间由 DOM 直接更新。
+  - Web 路径：播放中用 `requestAnimationFrame` + `timeupdate` 读 `activePlayer.currentTime` 更新滑块；拖动时本地更新，约 120ms 节流 seek，松手精确定位；`OnTimeUpdate` 回 .NET 节流为约 500ms（仅更新 `MusicPlayerService` 状态，不触发播放器页 `StateHasChanged`）。
+  - 原生播放（Android/iOS ExoPlayer 等）：`setNativeProgressMode(true)`，进度由 `GlobalAudioPlayer` 在 `OnTimeChanged` 时调 `setProgress`；拖动 seek 走 `OnProgressSeek` → `SeekAsync`。
+  - webm **音频**统一走隐藏 `<audio>`（`audio/webm` 代理），不再默认切 OGV；视频页 `<video>` 去掉 `controls`，与音频页共用 JS 进度条。
+  - 本地文件仅 `.mp4` 且在下载记录/调用方标记 `IsVideo` 时才 `IsCurrentStreamVideo`（`ShouldPlayLocalAsVideo`），避免 webm 音频被扩展名误判为视频。
+- **原因（此前 Mud 进度条卡顿、不跟手）**:
+  1. **架构**：`MudSlider.Value` 绑 `MusicPlayerService.CurrentTime`，每次 `timeupdate`（约 4Hz）经 JS 互调 → `UpdateTime` → `OnTimeChanged` → `StateHasChanged` 整页重绘，WebView2 + Blazor 下延迟大。
+  2. **拖动**：`Immediate="false"` 导致松手才 `ValueChanged`；拖动期间服务端时间仍会回写，拇指与手指打架。
+  3. **防抖过重**：拖后 1.5s 内屏蔽 `OnTimeChanged`、0.25s 变化阈值，松手后进度显示迟滞。
+  4. **webm + OGV**：音频 webm 曾走 `ogvPlayer`，seek/`timeupdate` 不如原生 `<audio>` 稳定。
+  5. **对比**：视频页曾用 `<video controls>` 原生条，控件直接绑媒体元素，故体感更跟手——根因是 UI 分层而非 `<audio>` 不能 seek。
+- **样式**：`app.css` 中 `.ytm-player-progress__slider` 轨道 4px、拇指 14px，`margin-top: -5px`（WebKit）使拇指垂直居中于轨道。
+- **相关文件**: `wwwroot/js/audioPlayer.js`、`wwwroot/app.css`、`Components/Layout/GlobalAudioPlayer.razor`、`Components/Pages/PlayerAudio.razor`、`Components/Pages/PlayerVideo.razor`、`Services/MusicPlayerService.cs`（`ShouldPlayLocalAsVideo`）。
+
 ## 2026-06-07: 页面滚动在列表容器内，位置用 JS 内存缓存（非 C#、非控件自带）
 - **决策**:
   - 禁止 `html/body` 与 `ytm-main` 整页滚动；列表在 `.ytm-page__scroll`（`PageListScroll`）或 Upload 的 `MudTabPanel[data-page]` 内滚动。

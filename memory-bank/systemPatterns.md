@@ -8,6 +8,12 @@
 ## 关键技术模式
 - **音频代理**: `LocalAudioProxy` 和 `LocalFileProxy` 使用 `HttpListener` 为 HTML5 `<audio>` 标签提供流服务，从而绕过 CORS 限制或直接文件访问限制。
 - **JS 互操作**: 广泛使用 `IJSRuntime` 来控制音频元素（播放/暂停、进度跳转、事件监听）。
+- **播放器进度条（高频 UI 不进 Blazor）**:
+  - `audioPlayer.js` 在 `PlayerAudio` / `PlayerVideo` 容器内 `mountProgressBar`，类名 `ytm-player-progress`。
+  - 播放进度由 JS 读 `activePlayer.currentTime`（rAF + `timeupdate`）直接改 `<input type="range">` 与时间文本；**禁止**用 MudSlider 绑 `CurrentTime` 驱动重绘（此前卡顿/不跟手根因）。
+  - Seek：Web 侧 `seekProgressTo` → `setCurrentTime`；原生侧 `OnProgressSeek` → `MusicPlayerService.SeekAsync`；`setNativeProgressMode` 切换数据源。
+  - `.NET` 侧 `OnTimeUpdate` 仍节流回写 `MusicPlayerService`（约 500ms），供逻辑/历史用，不用于刷新进度条 UI。
+  - webm 音频走 `<audio>` + 文件代理 `audio/webm`；视频画面用 `<video controls=false>`，进度条与音频页共用 JS 组件。
 - **页面内滚动（非整页）**:
   - `app.css`：`html/body/#app` 与 `ytm-main` 固定视口、`overflow: hidden`；列表在 `.ytm-page__scroll` 内 `overflow-y: auto`。
   - `PageListScroll.razor`：Header 固定 + `ChildContent` 进可滚动区；`PageKey` 写入 `data-page`。
@@ -48,7 +54,7 @@
   - 顶部工具栏在 Windows 放大窗口时应使用全宽布局，不要给 `.ytm-topbar-inner` 设固定 `max-width + auto margin`，否则左右控件不会真正贴边。
 
 ## 组件结构
-- **GlobalAudioPlayer.razor**: 实现在 `MainLayout` 中，跨页面持久存在的音频组件；`IsUsingNativePlayback` 时不同步 Web `<audio>`，由 Android/iOS 原生服务负责。
+- **GlobalAudioPlayer.razor**: 实现在 `MainLayout` 中，跨页面持久存在的 `<audio>` / `<video>`；`OnProgressSeek` / 节流 `OnTimeUpdate`；原生播放时 `OnTimeChanged` → `audioPlayer.setProgress`。
 - **MediaTitle.razor**: 各页音视频标题统一组件，跟随「两行显示」设置。
 - **Upload.razor**: AList 双标签（`Local`/`Remote`），`BadgeData` 显示计数；上传任务状态内嵌列表项。
 - **Player.razor**: 全屏播放器视图，包含详细控制项和元数据展示。

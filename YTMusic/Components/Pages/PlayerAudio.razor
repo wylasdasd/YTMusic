@@ -9,6 +9,7 @@
 @inject ISnackbar Snackbar
 @inject NavigationManager NavigationManager
 @inject GlobalStateService GlobalState
+@inject IJSRuntime JSRuntime
 @implements IDisposable
 
 <PageListScroll PageKey="player-audio" Class="player-page-scroll">
@@ -44,14 +45,7 @@
                     </MudText>
                 </div>
 
-                <div class="player-progress">
-                    <MudSlider T="double" Value="@PlayerService.CurrentTime" Max="@PlayerService.Duration"
-                               ValueChanged="OnSliderValueChanged" Immediate="false" Color="Color.Primary" />
-                    <div class="player-times">
-                        <MudText Typo="Typo.caption" Class="player-time">@FormatTime(PlayerService.CurrentTime)</MudText>
-                        <MudText Typo="Typo.caption" Class="player-time">@FormatTime(PlayerService.Duration)</MudText>
-                    </div>
-                </div>
+                <div class="player-progress" @ref="_progressHost"></div>
 
                 <div class="player-actions-row">
                     <div class="player-actions-left">
@@ -138,13 +132,23 @@
 @code {
     private bool IsFavorite = false;
     private string? _currentCheckedVideoId;
-    private DateTime _lastSliderInteraction = DateTime.MinValue;
-    private double _lastReportedTime = 0;
+    private ElementReference _progressHost;
+    private bool _progressMounted;
+    private string? _progressTrackKey;
+    private bool _lastNativeProgressMode;
+
     protected override void OnInitialized()
     {
         PlayerService.OnChange += OnStateChanged;
-        PlayerService.OnTimeChanged += OnTimeChanged;
         _ = CheckFavoriteStatusAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (PlayerService.CurrentVideo != null)
+        {
+            await MountProgressBarAsync();
+        }
     }
 
     private void OnStateChanged()
@@ -159,19 +163,69 @@
         }
 
         _ = CheckFavoriteStatusAsync();
+        _ = SyncPlayerChromeAsync();
         InvokeAsync(StateHasChanged);
     }
 
-    private void OnTimeChanged()
+    private string? GetProgressTrackKey()
     {
-        if (DateTime.UtcNow - _lastSliderInteraction < TimeSpan.FromSeconds(1.5))
-            return;
+        var current = PlayerService.CurrentVideo;
+        if (current == null)
+        {
+            return null;
+        }
 
-        if (Math.Abs(PlayerService.CurrentTime - _lastReportedTime) < 0.25)
-            return;
+        return !string.IsNullOrEmpty(current.LocalFilePath) ? current.LocalFilePath : current.VideoId;
+    }
 
-        _lastReportedTime = PlayerService.CurrentTime;
-        InvokeAsync(StateHasChanged);
+    private async Task SyncPlayerChromeAsync()
+    {
+        var trackKey = GetProgressTrackKey();
+        var native = PlayerService.IsUsingNativePlayback || PlayerService.IsUsingNativeVideoPlayback;
+        if (!_progressMounted || trackKey != _progressTrackKey)
+        {
+            _progressTrackKey = trackKey;
+            await MountProgressBarAsync();
+        }
+        else if (native != _lastNativeProgressMode)
+        {
+            await SyncProgressModeAsync();
+        }
+        else if (PlayerService.IsSwitchingTrack)
+        {
+            await JSRuntime.InvokeVoidAsync(
+                "audioPlayer.setProgress",
+                PlayerService.CurrentTime,
+                PlayerService.Duration,
+                true);
+        }
+
+        _lastNativeProgressMode = native;
+    }
+
+    private async Task MountProgressBarAsync()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("audioPlayer.mountProgressBar", _progressHost);
+            await SyncProgressModeAsync();
+            await JSRuntime.InvokeVoidAsync(
+                "audioPlayer.setProgress",
+                PlayerService.CurrentTime,
+                PlayerService.Duration,
+                true);
+            _progressMounted = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[PlayerAudio] mount progress failed: {ex.Message}");
+        }
+    }
+
+    private async Task SyncProgressModeAsync()
+    {
+        var native = PlayerService.IsUsingNativePlayback || PlayerService.IsUsingNativeVideoPlayback;
+        await JSRuntime.InvokeVoidAsync("audioPlayer.setNativeProgressMode", native);
     }
 
     private async Task CheckFavoriteStatusAsync()
@@ -328,6 +382,10 @@
         {
             NavigationManager.NavigateTo("/player/audio", replace: true);
         }
+        else
+        {
+            Snackbar.Add("无法切换到音频播放。", Severity.Warning);
+        }
     }
 
     private async Task PlayNextTrack()
@@ -357,21 +415,6 @@
         };
     }
 
-    private async Task OnSliderValueChanged(double value)
-    {
-        _lastSliderInteraction = DateTime.UtcNow;
-        _lastReportedTime = value;
-        await PlayerService.SeekAsync(value);
-        StateHasChanged();
-    }
-
-    private string FormatTime(double seconds)
-    {
-        if (double.IsNaN(seconds) || double.IsInfinity(seconds)) return "00:00";
-        var ts = TimeSpan.FromSeconds(seconds);
-        return ts.ToString(@"mm\:ss");
-    }
-
     private void Download(bool isVideo)
     {
         var currentVideo = PlayerService.CurrentVideo;
@@ -390,6 +433,9 @@
     public void Dispose()
     {
         PlayerService.OnChange -= OnStateChanged;
-        PlayerService.OnTimeChanged -= OnTimeChanged;
+        if (_progressMounted)
+        {
+            _ = JSRuntime.InvokeVoidAsync("audioPlayer.unmountProgressBar");
+        }
     }
 }

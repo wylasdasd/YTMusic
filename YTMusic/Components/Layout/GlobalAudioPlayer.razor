@@ -6,7 +6,7 @@
 <!-- Persistent media elements across navigation -->
 <audio @ref="_audioElement" autoplay style="display:none;" />
 <div @ref="_videoHost" class="ytm-global-video-host" aria-hidden="true">
-    <video @ref="_videoElement" playsinline preload="metadata" controls class="ytm-global-video" />
+    <video @ref="_videoElement" playsinline preload="metadata" class="ytm-global-video" />
 </div>
 
 @code {
@@ -24,6 +24,30 @@
         PlayerService.OnRequestPause += OnRequestPause;
         PlayerService.OnRequestPlay += OnRequestPlay;
         PlayerService.OnRequestSeek += OnRequestSeek;
+        PlayerService.OnTimeChanged += OnPlayerTimeChanged;
+    }
+
+    private void OnPlayerTimeChanged()
+    {
+        if (!PlayerService.IsUsingNativePlayback && !PlayerService.IsUsingNativeVideoPlayback)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync(
+                    "audioPlayer.setProgress",
+                    PlayerService.CurrentTime,
+                    PlayerService.Duration);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AudioProgressSyncError] {ex.Message}");
+            }
+        });
     }
 
     private void OnRequestReplay()
@@ -32,8 +56,22 @@
         {
             try
             {
-                await JSRuntime.InvokeVoidAsync("audioPlayer.setCurrentTime", 0);
-                await JSRuntime.InvokeVoidAsync("audioPlayer.play");
+                if (!PlayerService.IsUsingNativePlayback
+                    && !PlayerService.IsUsingNativeVideoPlayback
+                    && PlayerService.CurrentStreamUrl != null
+                    && PlayerService.CurrentVideo?.LocalFilePath != null)
+                {
+                    await JSRuntime.InvokeVoidAsync(
+                        "audioPlayer.replayFromStart",
+                        PlayerService.CurrentStreamUrl,
+                        PlayerService.IsCurrentStreamWebM,
+                        PlayerService.IsCurrentStreamVideo);
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("audioPlayer.setCurrentTime", 0);
+                    await JSRuntime.InvokeVoidAsync("audioPlayer.play");
+                }
             }
             catch (Exception ex)
             {
@@ -155,6 +193,12 @@
     }
 
     [JSInvokable]
+    public async Task OnProgressSeek(double positionSeconds)
+    {
+        await PlayerService.SeekAsync(positionSeconds);
+    }
+
+    [JSInvokable]
     public void OnLoadedMetadata(double duration)
     {
         PlayerService.UpdateDuration(duration);
@@ -185,6 +229,7 @@
         PlayerService.OnRequestPause -= OnRequestPause;
         PlayerService.OnRequestPlay -= OnRequestPlay;
         PlayerService.OnRequestSeek -= OnRequestSeek;
+        PlayerService.OnTimeChanged -= OnPlayerTimeChanged;
         if (_objRef != null)
         {
             _objRef.Dispose();

@@ -44,10 +44,18 @@
                     <MudText Typo="Typo.body1" Class="player-author">
                         @currentVideo.Author
                     </MudText>
-                    <MudText Typo="Typo.caption" Class="player-video-note">
-                        @(PlayerService.UseNativeVideoPlayback ? "Android 原生 ExoPlayer 播放中" : "视频播放使用下方视频组件自带控件")
-                    </MudText>
+                    @if (PlayerService.UseNativeVideoPlayback)
+                    {
+                        <MudText Typo="Typo.caption" Class="player-video-note">
+                            Android 原生 ExoPlayer 播放中
+                        </MudText>
+                    }
                 </div>
+
+                @if (!PlayerService.UseNativeVideoPlayback)
+                {
+                    <div class="player-progress player-progress--video" @ref="_progressHost"></div>
+                }
 
                 <div class="player-actions-row">
                     <div class="player-actions-left">
@@ -70,7 +78,45 @@
                             <MudMenuItem OnClick="@(() => Download(true))">Download Video</MudMenuItem>
                         </MudMenu>
                     </div>
+
+                    <MudIconButton Icon="@GetPlaybackModeIcon(PlayerService.CurrentMode)"
+                                   Color="Color.Default"
+                                   Size="Size.Medium"
+                                   OnClick="TogglePlaybackMode"
+                                   aria-label="Toggle Playback Mode"
+                                   Disabled="@(PlayerService.Playlist.Count == 0)" />
                 </div>
+
+                @if (!PlayerService.UseNativeVideoPlayback)
+                {
+                    <div class="player-controls">
+                        <MudIconButton Icon="@Icons.Material.Filled.SkipPrevious"
+                                       Size="Size.Large"
+                                       Variant="Variant.Text"
+                                       OnClick="PlayPreviousTrack"
+                                       Disabled="@(PlayerService.Playlist.Count == 0 || PlayerService.IsSwitchingTrack)" />
+
+                        @if (PlayerService.IsLoading)
+                        {
+                            <MudProgressCircular Size="Size.Large" Indeterminate="true" Class="mx-2" />
+                        }
+                        else
+                        {
+                            <MudIconButton Icon="@(PlayerService.IsPlaying ? Icons.Material.Filled.PauseCircle : Icons.Material.Filled.PlayCircle)"
+                                           Size="Size.Large"
+                                           Color="Color.Primary"
+                                           OnClick="TogglePlay"
+                                           Disabled="@PlayerService.IsSwitchingTrack"
+                                           Class="player-main-button" />
+                        }
+
+                        <MudIconButton Icon="@Icons.Material.Filled.SkipNext"
+                                       Size="Size.Large"
+                                       Variant="Variant.Text"
+                                       OnClick="PlayNextTrack"
+                                       Disabled="@(PlayerService.Playlist.Count == 0 || PlayerService.IsSwitchingTrack)" />
+                    </div>
+                }
             </div>
         </div>
     }
@@ -85,6 +131,10 @@
     private ElementReference _videoFrame;
     private bool _videoAttached;
     private bool CanPlayVideo;
+    private ElementReference _progressHost;
+    private bool _progressMounted;
+    private string? _progressTrackKey;
+    private bool _lastNativeProgressMode;
 
     protected override void OnInitialized()
     {
@@ -116,6 +166,11 @@
             await JSRuntime.InvokeVoidAsync("audioPlayer.attachVideoTo", _videoFrame);
             _videoAttached = true;
         }
+
+        if (PlayerService.CurrentVideo != null && !PlayerService.UseNativeVideoPlayback)
+        {
+            await MountProgressBarAsync();
+        }
     }
 
     private void OnStateChanged()
@@ -140,7 +195,79 @@
         _ = CheckFavoriteStatusAsync();
         _ = CheckVideoAvailabilityAsync();
         _ = AttachVideoIfNeededAsync();
+        _ = SyncPlayerChromeAsync();
         InvokeAsync(StateHasChanged);
+    }
+
+    private string? GetProgressTrackKey()
+    {
+        var current = PlayerService.CurrentVideo;
+        if (current == null)
+        {
+            return null;
+        }
+
+        return !string.IsNullOrEmpty(current.LocalFilePath) ? current.LocalFilePath : current.VideoId;
+    }
+
+    private async Task SyncPlayerChromeAsync()
+    {
+        if (PlayerService.UseNativeVideoPlayback || PlayerService.CurrentVideo == null)
+        {
+            return;
+        }
+
+        var trackKey = GetProgressTrackKey();
+        var native = PlayerService.IsUsingNativePlayback || PlayerService.IsUsingNativeVideoPlayback;
+        if (!_progressMounted || trackKey != _progressTrackKey)
+        {
+            _progressTrackKey = trackKey;
+            await MountProgressBarAsync();
+        }
+        else if (native != _lastNativeProgressMode)
+        {
+            await SyncProgressModeAsync();
+        }
+        else if (PlayerService.IsSwitchingTrack)
+        {
+            await JSRuntime.InvokeVoidAsync(
+                "audioPlayer.setProgress",
+                PlayerService.CurrentTime,
+                PlayerService.Duration,
+                true);
+        }
+
+        _lastNativeProgressMode = native;
+    }
+
+    private async Task MountProgressBarAsync()
+    {
+        if (PlayerService.UseNativeVideoPlayback || PlayerService.CurrentVideo == null)
+        {
+            return;
+        }
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("audioPlayer.mountProgressBar", _progressHost);
+            await SyncProgressModeAsync();
+            await JSRuntime.InvokeVoidAsync(
+                "audioPlayer.setProgress",
+                PlayerService.CurrentTime,
+                PlayerService.Duration,
+                true);
+            _progressMounted = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[PlayerVideo] mount progress failed: {ex.Message}");
+        }
+    }
+
+    private async Task SyncProgressModeAsync()
+    {
+        var native = PlayerService.IsUsingNativePlayback || PlayerService.IsUsingNativeVideoPlayback;
+        await JSRuntime.InvokeVoidAsync("audioPlayer.setNativeProgressMode", native);
     }
 
     private async Task AttachVideoIfNeededAsync()
@@ -261,6 +388,45 @@
         await CheckFavoriteStatusAsync();
     }
 
+    private async Task TogglePlay()
+    {
+        if (PlayerService.IsPlaying)
+        {
+            await PlayerService.PauseAsync();
+        }
+        else
+        {
+            await PlayerService.ResumeAsync();
+        }
+    }
+
+    private async Task PlayNextTrack()
+    {
+        await PlayerService.PlayNextAsync();
+    }
+
+    private async Task PlayPreviousTrack()
+    {
+        await PlayerService.PlayPreviousAsync();
+    }
+
+    private void TogglePlaybackMode()
+    {
+        PlayerService.TogglePlaybackMode();
+        StateHasChanged();
+    }
+
+    private string GetPlaybackModeIcon(MusicPlayerService.PlaybackMode mode)
+    {
+        return mode switch
+        {
+            MusicPlayerService.PlaybackMode.Sequential => Icons.Material.Filled.Repeat,
+            MusicPlayerService.PlaybackMode.Random => Icons.Material.Filled.Shuffle,
+            MusicPlayerService.PlaybackMode.SingleLoop => Icons.Material.Filled.RepeatOne,
+            _ => Icons.Material.Filled.Repeat
+        };
+    }
+
     private async Task PlayAudioAsync()
     {
         if (PlayerService.IsSwitchingTrack)
@@ -299,6 +465,10 @@
     public void Dispose()
     {
         PlayerService.OnChange -= OnStateChanged;
+        if (_progressMounted)
+        {
+            _ = JSRuntime.InvokeVoidAsync("audioPlayer.unmountProgressBar");
+        }
         if (!PlayerService.UseNativeVideoPlayback && PlayerService.IsCurrentStreamVideo)
         {
             _ = JSRuntime.InvokeVoidAsync("audioPlayer.detachVideo");

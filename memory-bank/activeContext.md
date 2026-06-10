@@ -1,12 +1,20 @@
 # 活动上下文 (Active Context)
 
 ## 当前焦点
+- **播放器进度条**：已改为 `audioPlayer.js` 托管（`ytm-player-progress`），音频/视频页共用；解决 MudSlider + Blazor 重绘导致的不跟手。本地非 `.mp4` 或未定 `IsVideo` 的文件不按视频播。
 - **布局与滚动**：整页不滚；各页列表在 `PageListScroll` / Upload Tab 内滚。切换路由后滚动位置由 `ytmLayout._pageScrolls`（JS 内存）恢复，非 C#、非控件自带。
 - **AList 上传/下载**：上传流程已改为 `metadata.json` 优先、仅 `coverUrl`（`thumbnailUrl`）入 JSON，不再上传封面文件；上传进度在任务完成前封顶 99%。
 - **播放体验**：已下载歌曲切歌时 UI 与音频不同步的问题已修复（Web 代理 URL 去重误判 + Android ExoPlayer 切歌清理）。
 - **设置与 UI**：三横杠抽屉新增「两行显示」标题偏好；上传页标签用 `BadgeData`；Android 顶栏菜单按钮右对齐。
 
 ## 最近的变更
+### 播放器进度条（JS 托管）
+- `audioPlayer.js`：`mountProgressBar`、`setProgress`、`seekProgressTo`、`setNativeProgressMode`；播放 rAF 更新 UI；webm 音频走 `<audio>` 非 OGV。
+- `PlayerAudio` / `PlayerVideo`：移除 MudSlider，挂载 JS 进度条；视频页去掉原生 `controls`，补播放/切歌区。
+- `GlobalAudioPlayer`：`OnProgressSeek`；原生 `OnTimeChanged` → `setProgress`。
+- `MusicPlayerService.ShouldPlayLocalAsVideo`：仅 `.mp4` + 显式视频标记才本地视频流。
+- 不跟手根因（已写入 `decisionLog.md`）：Blazor 绑 `CurrentTime` 高频 `StateHasChanged`、Mud `Immediate=false`、拖后防抖、曾用 OGV 播 webm。
+
 ### 布局与滚动
 - `MainLayout`：`ytm-content` / `ytm-body` 替代 `MudContainer` 作 flex 高度链；`ytm-main` 不滚动。
 - `PageListScroll.razor` + `app.css` 中 `.ytm-page__scroll`；各页 `PageKey`（如 `search`、`favorites`）。

@@ -451,11 +451,17 @@ namespace YTMusic.Services
             return true;
         }
 
-        public async Task<bool> PlayLocalFileAsync(string filePath, string title, bool? isVideo = null, string? author = null, string? thumbnailUrl = null)
+        public async Task<bool> PlayLocalFileAsync(
+            string filePath,
+            string title,
+            bool? isVideo = null,
+            string? author = null,
+            string? thumbnailUrl = null,
+            string? videoId = null)
         {
             var item = new PlayingItem
             {
-                VideoId = "local",
+                VideoId = !string.IsNullOrWhiteSpace(videoId) ? videoId : "local",
                 Title = title,
                 Author = string.IsNullOrWhiteSpace(author) ? "Local File" : author,
                 ThumbnailUrl = thumbnailUrl,
@@ -477,7 +483,7 @@ namespace YTMusic.Services
                 }
 
                 IsCurrentStreamWebM = filePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
-                IsCurrentStreamVideo = isVideo ?? IsLikelyVideoFile(filePath);
+                IsCurrentStreamVideo = ShouldPlayLocalAsVideo(filePath, isVideo == true);
                 if (IsCurrentStreamVideo && UseNativeVideoPlayback)
                 {
                     await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: true);
@@ -588,12 +594,12 @@ namespace YTMusic.Services
             if (!string.IsNullOrWhiteSpace(current.LocalFilePath))
             {
                 var localTrack = await _localMusicService.GetDownloadedTrackByFilePathAsync(current.LocalFilePath);
-                if (localTrack?.IsVideo == true)
+                if (localTrack != null && ShouldPlayLocalAsVideo(localTrack.LocalFilePath, localTrack.IsVideo))
                 {
                     return true;
                 }
 
-                if (current.IsVideo == true )
+                if (ShouldPlayLocalAsVideo(current.LocalFilePath, current.IsVideo == true))
                 {
                     return true;
                 }
@@ -605,7 +611,8 @@ namespace YTMusic.Services
             }
 
             var downloaded = await _localMusicService.GetDownloadedTrackByVideoIdAsync(current.VideoId);
-            return downloaded?.IsVideo == true;
+            return downloaded != null
+                && ShouldPlayLocalAsVideo(downloaded.LocalFilePath, downloaded.IsVideo);
         }
 
         public async Task<bool> CheckRemoteVideoAvailableAsync(string videoId)
@@ -639,7 +646,9 @@ namespace YTMusic.Services
             if (!string.IsNullOrWhiteSpace(current.LocalFilePath))
             {
                 var localTrack = await _localMusicService.GetDownloadedTrackByFilePathAsync(current.LocalFilePath);
-                if (localTrack?.IsVideo == true && !string.IsNullOrWhiteSpace(localTrack.LocalFilePath))
+                if (localTrack != null
+                    && !string.IsNullOrWhiteSpace(localTrack.LocalFilePath)
+                    && ShouldPlayLocalAsVideo(localTrack.LocalFilePath, localTrack.IsVideo))
                 {
                     return await PlayLocalFileAsync(localTrack.LocalFilePath, current.Title, true, current.Author, current.ThumbnailUrl);
                 }
@@ -651,7 +660,9 @@ namespace YTMusic.Services
             }
 
             var downloaded = await _localMusicService.GetDownloadedTrackByVideoIdAsync(current.VideoId);
-            if (downloaded?.IsVideo == true && !string.IsNullOrWhiteSpace(downloaded.LocalFilePath))
+            if (downloaded != null
+                && !string.IsNullOrWhiteSpace(downloaded.LocalFilePath)
+                && ShouldPlayLocalAsVideo(downloaded.LocalFilePath, downloaded.IsVideo))
             {
                 return await PlayLocalFileAsync(downloaded.LocalFilePath, current.Title, true, current.Author, current.ThumbnailUrl);
             }
@@ -703,6 +714,18 @@ namespace YTMusic.Services
                 {
                     item.LocalFilePath = downloaded.LocalFilePath;
                 }
+            }
+
+            // 本地视频（VideoId=local 或仅视频下载）切音频：沿用当前文件走 audio 流，或上面已选中的纯音频下载
+            if (string.IsNullOrWhiteSpace(item.LocalFilePath) && !string.IsNullOrWhiteSpace(current.LocalFilePath))
+            {
+                item.LocalFilePath = current.LocalFilePath;
+            }
+
+            if (string.IsNullOrWhiteSpace(item.LocalFilePath)
+                && (string.IsNullOrWhiteSpace(item.VideoId) || item.VideoId == "local"))
+            {
+                return false;
             }
 
             return await PlayInternalAsync(item);
@@ -770,12 +793,73 @@ namespace YTMusic.Services
             }
         }
 
+        private async Task<bool> TryRestartCurrentLocalWebAsync()
+        {
+            var current = CurrentVideo;
+            if (current == null
+                || string.IsNullOrWhiteSpace(current.LocalFilePath)
+                || IsUsingNativePlayback
+                || IsUsingNativeVideoPlayback
+                || CurrentStreamUrl == null)
+            {
+                return false;
+            }
+
+            if (!File.Exists(current.LocalFilePath))
+            {
+                return false;
+            }
+
+            await EnsureFileProxyCreatedAsync();
+            _fileProxy!.ContentType = GetFileContentType(current.LocalFilePath, IsCurrentStreamVideo);
+            _fileProxy.CurrentFilePath = current.LocalFilePath;
+            CurrentStreamUrl = BuildLocalProxyStreamUrl(current.LocalFilePath);
+            CurrentTime = 0;
+            IsPlaying = true;
+            NotifyStateChanged();
+            return true;
+        }
+
         public async Task PlayPreviousAsync()
         {
-            if (Playlist.Count == 0 || IsSwitchingTrack) return;
+            if (IsSwitchingTrack)
+            {
+                return;
+            }
+
+            // 与「下一首」不同：已播放超过阈值则从头播放当前曲，否则切上一首（常见播放器行为）
+            const double restartThresholdSeconds = 3;
+            if (CurrentTime > restartThresholdSeconds)
+            {
+                if (await TryRestartCurrentLocalWebAsync())
+                {
+                    return;
+                }
+
+                await SeekAsync(0);
+                if (!IsPlaying)
+                {
+                    await ResumeAsync();
+                }
+
+                return;
+            }
+
+            if (Playlist.Count == 0)
+            {
+                if (CurrentVideo != null)
+                {
+                    await SeekAsync(0);
+                }
+
+                return;
+            }
 
             int previousIndex = GetPreviousIndex();
-            if (previousIndex == -1) return;
+            if (previousIndex == -1)
+            {
+                return;
+            }
 
             int currentIndex = CurrentPlaylistIndex;
             CurrentPlaylistIndex = previousIndex;
@@ -915,7 +999,7 @@ namespace YTMusic.Services
                     }
 
                     IsCurrentStreamWebM = video.LocalFilePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
-                    IsCurrentStreamVideo = video.IsVideo ?? IsLikelyVideoFile(video.LocalFilePath);
+                    IsCurrentStreamVideo = ShouldPlayLocalAsVideo(video.LocalFilePath, video.IsVideo == true);
 
                     if (IsCurrentStreamVideo && UseNativeVideoPlayback)
                     {
@@ -967,7 +1051,7 @@ namespace YTMusic.Services
                     video.LocalFilePath = downloaded.LocalFilePath;
                     video.IsVideo = downloaded.IsVideo;
                     IsCurrentStreamWebM = video.LocalFilePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
-                    IsCurrentStreamVideo = downloaded.IsVideo;
+                    IsCurrentStreamVideo = ShouldPlayLocalAsVideo(video.LocalFilePath, downloaded.IsVideo);
 
                     if (_nativeAudio.IsSupported && !IsCurrentStreamVideo)
                     {
@@ -1185,13 +1269,17 @@ namespace YTMusic.Services
 
         public async Task SeekAsync(double positionSeconds)
         {
+            CurrentTime = positionSeconds;
+
             if (IsUsingNativePlayback)
             {
                 await _nativeAudio.SeekAsync(positionSeconds);
+                OnTimeChanged?.Invoke();
             }
             else if (IsUsingNativeVideoPlayback)
             {
                 await _nativeVideo.SeekAsync(positionSeconds);
+                OnTimeChanged?.Invoke();
             }
             else
             {
@@ -1283,10 +1371,17 @@ namespace YTMusic.Services
             return manifest.GetMuxedStreams().GetWithHighestVideoQuality();
         }
 
-        private static bool IsLikelyVideoFile(string filePath)
+        /// <summary>
+        /// 本地文件仅 .mp4 且在下载记录或调用方中标记为视频时才走视频流；webm 等一律当音频。
+        /// </summary>
+        private static bool ShouldPlayLocalAsVideo(string filePath, bool markedAsVideo)
         {
-            var extension = Path.GetExtension(filePath).ToLowerInvariant();
-            return extension == ".mp4" || extension == ".webm" || extension == ".mkv" || extension == ".mov" || extension == ".m4v" || extension == ".avi";
+            if (!markedAsVideo)
+            {
+                return false;
+            }
+
+            return Path.GetExtension(filePath).Equals(".mp4", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string GetFileContentType(string filePath, bool isVideo)

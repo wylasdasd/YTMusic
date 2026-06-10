@@ -19,6 +19,7 @@
 - [x] Android Media3 + ExoPlayer + 手写前台通知；平台 MediaStyle 三键。
 - [x] Android 原生视频主路径；`PlaybackStopped` 状态链。
 - [x] **已下载歌曲切歌**：Web 代理 URL 误判修复 + Android ExoPlayer 切歌清理。
+- [x] **播放器进度条 JS 托管**（`ytm-player-progress`）：替代 MudSlider+Blazor 重绘，解决不跟手；音频/视频页共用；本地仅 `.mp4`+`IsVideo` 走视频流。
 - [x] 在线播放统一 WebM 偏好（移除 High Quality Audio 设置）。
 - [x] `NetworkErrorService` / VPN 建议弹窗（播放、搜索失败）。
 
