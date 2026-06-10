@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json.Serialization;
+using CommonTool.FileHelps;
 
 namespace YTMusic.Services
 {
@@ -21,6 +24,11 @@ namespace YTMusic.Services
         public bool IsVideo { get; set; }
 
         public DateTime DownloadedDate { get; set; }
+
+        /// <summary>
+        /// 歌曲所在收藏夹名称（跨设备同步用名称而非 Id）；下载时用于恢复收藏夹并可选落盘子目录。
+        /// </summary>
+        public List<string> FavoriteFolderNames { get; set; } = new();
 
         /// <summary>旧版 metadata 的 coverUrl，仅反序列化兼容。</summary>
         [JsonPropertyName("coverUrl")]
@@ -66,6 +74,28 @@ namespace YTMusic.Services
                 UploadedRemotePath = null,
                 RemoteSourcePath = remoteMediaPath
             };
+        }
+
+        public string? GetPrimaryFolderName()
+        {
+            return FavoriteFolderNames
+                .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name))?
+                .Trim();
+        }
+
+        public static string ResolveLocalDownloadDirectory(IReadOnlyList<string>? folderNames)
+        {
+            var primary = folderNames?
+                .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name))?
+                .Trim();
+
+            var baseDir = StoragePaths.GetDownloadedMusicDirectory();
+            if (string.IsNullOrWhiteSpace(primary))
+            {
+                return baseDir;
+            }
+
+            return Path.Combine(baseDir, FileHelp.SafeFileName(primary));
         }
     }
 }

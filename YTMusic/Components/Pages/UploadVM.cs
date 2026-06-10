@@ -56,7 +56,11 @@ namespace YTMusic.Components.Pages
         public string RemoteDirectory { get; set; } = "/";
         public bool IsLoading { get; private set; }
         public bool IsRemoteLoading { get; private set; }
-        public int SelectedTabIndex { get; set; } = 1;
+        public const int LocalTabIndex = 0;
+        public const int RemoteTabIndex = 1;
+        public const int SettingsTabIndex = 2;
+
+        public int SelectedTabIndex { get; set; } = RemoteTabIndex;
         public List<DownloadedTrack> DownloadedFiles { get; private set; } = new();
         public List<AListBrowserItem> RemoteFiles { get; private set; } = new();
 
@@ -224,6 +228,34 @@ namespace YTMusic.Components.Pages
             }
 
             StateHasChanged?.Invoke();
+        }
+
+        public async Task OnRemoteTabActivatedAsync()
+        {
+            await SyncDownloadedTracksForRemoteBadgesAsync();
+            await RefreshRemoteFilesAsync();
+        }
+
+        private async Task SyncDownloadedTracksForRemoteBadgesAsync()
+        {
+            try
+            {
+                DownloadedFiles = (await _localMusicService.GetDownloadedTracksAsync())
+                    .OrderByDescending(file => file.DownloadedDate)
+                    .ToList();
+
+                _remoteDownloadedPaths.Clear();
+                foreach (var path in DownloadedFiles
+                    .Where(file => !string.IsNullOrWhiteSpace(file.RemoteSourcePath))
+                    .Select(file => file.RemoteSourcePath!))
+                {
+                    _remoteDownloadedPaths.Add(path);
+                }
+            }
+            catch
+            {
+                // 静默同步，避免切 tab 时打断列表刷新。
+            }
         }
 
         public async Task RefreshRemoteFilesAsync()

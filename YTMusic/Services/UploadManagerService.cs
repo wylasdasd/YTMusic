@@ -16,14 +16,20 @@ namespace YTMusic.Services
         private readonly AListUploadService _aListUploadService;
         private readonly AListUploadSettingsService _settingsService;
         private readonly ILocalMusicService _localMusicService;
+        private readonly IFavoriteService _favoriteService;
         private readonly object _syncRoot = new();
         private readonly List<DownloadTaskInfo> _activeUploads = new();
 
-        public UploadManagerService(AListUploadService aListUploadService, AListUploadSettingsService settingsService, ILocalMusicService localMusicService)
+        public UploadManagerService(
+            AListUploadService aListUploadService,
+            AListUploadSettingsService settingsService,
+            ILocalMusicService localMusicService,
+            IFavoriteService favoriteService)
         {
             _aListUploadService = aListUploadService;
             _settingsService = settingsService;
             _localMusicService = localMusicService;
+            _favoriteService = favoriteService;
         }
 
         public IReadOnlyList<DownloadTaskInfo> ActiveUploads
@@ -112,6 +118,7 @@ namespace YTMusic.Services
                 var remoteMediaPath = AListUploadService.BuildRemotePath(remoteDirectory, mediaFileName);
                 // metadata.json = DownloadedTracks 子集（见 RemoteTrackMetadata）；先传 metadata，再传音视频。
                 var metadata = RemoteTrackMetadata.FromDownloadedTrack(track);
+                metadata.FavoriteFolderNames = await _favoriteService.GetFavoriteFolderNamesForVideoAsync(track.VideoId);
                 var remoteMetadataPath = AListUploadService.BuildRemotePath(remoteDirectory, RemoteTrackMetadata.FileName);
                 var metadataProgress = new Progress<double>(p =>
                 {

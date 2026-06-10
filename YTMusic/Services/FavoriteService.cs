@@ -58,6 +58,9 @@ namespace YTMusic.Services
         Task<bool> IsFavoriteAsync(string videoId, int folderId = 1);
         Task<bool> IsFavoriteInAnyFolderAsync(string videoId);
         Task<List<int>> GetFavoriteFolderIdsForVideoAsync(string videoId);
+        Task<List<string>> GetFavoriteFolderNamesForVideoAsync(string videoId);
+        Task<int> GetOrCreateFolderByNameAsync(string folderName);
+        Task RestoreFavoriteFoldersForTrackAsync(string videoId, string title, string author, string? thumbnailUrl, string? localFilePath, IReadOnlyList<string>? folderNames);
         Task DeleteDownloadedFileAndRecordAsync(string videoId, int folderId = 1);
         Task<FavoriteTrack?> GetTrackByFilePathAsync(string filePath);
         Task RemoveTrackByFilePathAsync(string filePath);
@@ -318,6 +321,84 @@ namespace YTMusic.Services
             string sql = "SELECT FolderId FROM FavoriteTracks WHERE VideoId = @VideoId;";
             var ids = await connection.QueryAsync<int>(sql, new { VideoId = videoId });
             return ids.ToList();
+        }
+
+        public async Task<List<string>> GetFavoriteFolderNamesForVideoAsync(string videoId)
+        {
+            if (string.IsNullOrWhiteSpace(videoId))
+            {
+                return new List<string>();
+            }
+
+            var folderIds = await GetFavoriteFolderIdsForVideoAsync(videoId);
+            if (folderIds.Count == 0)
+            {
+                return new List<string>();
+            }
+
+            var folders = await GetFoldersAsync();
+            var names = new List<string>();
+            foreach (var folderId in folderIds)
+            {
+                if (FavoriteFolderIds.IsDownloadedCatalog(folderId))
+                {
+                    continue;
+                }
+
+                var folder = folders.FirstOrDefault(f => f.Id == folderId);
+                if (folder != null && !string.IsNullOrWhiteSpace(folder.Name))
+                {
+                    names.Add(folder.Name);
+                }
+            }
+
+            return names.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        public async Task<int> GetOrCreateFolderByNameAsync(string folderName)
+        {
+            if (string.IsNullOrWhiteSpace(folderName))
+            {
+                return FavoriteFolderIds.Default;
+            }
+
+            var trimmed = folderName.Trim();
+            var folders = await GetFoldersAsync();
+            var existing = folders.FirstOrDefault(folder =>
+                !folder.IsDownloadedCatalog
+                && folder.Name.Equals(trimmed, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
+            {
+                return existing.Id;
+            }
+
+            var created = await CreateFolderAsync(trimmed);
+            return created.Id;
+        }
+
+        public async Task RestoreFavoriteFoldersForTrackAsync(
+            string videoId,
+            string title,
+            string author,
+            string? thumbnailUrl,
+            string? localFilePath,
+            IReadOnlyList<string>? folderNames)
+        {
+            if (string.IsNullOrWhiteSpace(videoId) || folderNames == null || folderNames.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var folderName in folderNames)
+            {
+                if (string.IsNullOrWhiteSpace(folderName))
+                {
+                    continue;
+                }
+
+                var folderId = await GetOrCreateFolderByNameAsync(folderName);
+                await AddToFavoritesAsync(videoId, title, author, thumbnailUrl, folderId, localFilePath);
+            }
         }
 
         public async Task DeleteDownloadedFileAndRecordAsync(string videoId, int folderId = 1)

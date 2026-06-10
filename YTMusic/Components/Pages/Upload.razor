@@ -9,7 +9,8 @@
              Elevation="1"
              Rounded="true"
              MinimumTabWidth="33%"
-             @bind-ActivePanelIndex="ViewModel.SelectedTabIndex">
+             ActivePanelIndex="ViewModel.SelectedTabIndex"
+             ActivePanelIndexChanged="OnTabIndexChangedAsync">
      
 
         <MudTabPanel Text="Local"
@@ -291,14 +292,21 @@
         {
             await JS.InvokeVoidAsync("ytmLayout.initTouchScrollTabs", UploadTabsId);
             _lastTabIndex = ViewModel.SelectedTabIndex;
-            return;
+        }
+    }
+
+    private async Task OnTabIndexChangedAsync(int index)
+    {
+        ViewModel.SelectedTabIndex = index;
+        _lastTabIndex = index;
+
+        if (index == UploadVM.RemoteTabIndex)
+        {
+            await ViewModel.OnRemoteTabActivatedAsync();
         }
 
-        if (_lastTabIndex != ViewModel.SelectedTabIndex)
-        {
-            _lastTabIndex = ViewModel.SelectedTabIndex;
-            await JS.InvokeVoidAsync("ytmLayout.syncTouchScrollTabs", UploadTabsId);
-        }
+        await JS.InvokeVoidAsync("ytmLayout.syncTouchScrollTabs", UploadTabsId);
+        await InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()

@@ -12,13 +12,18 @@ namespace YTMusic.Services
         private const int MaxRetainedTasks = 100;
         private readonly AListUploadService _aListUploadService;
         private readonly ILocalMusicService _localMusicService;
+        private readonly IFavoriteService _favoriteService;
         private readonly object _syncRoot = new();
         private readonly List<DownloadTaskInfo> _activeRemoteDownloads = new();
 
-        public AListRemoteDownloadManagerService(AListUploadService aListUploadService, ILocalMusicService localMusicService)
+        public AListRemoteDownloadManagerService(
+            AListUploadService aListUploadService,
+            ILocalMusicService localMusicService,
+            IFavoriteService favoriteService)
         {
             _aListUploadService = aListUploadService;
             _localMusicService = localMusicService;
+            _favoriteService = favoriteService;
         }
 
         public IReadOnlyList<DownloadTaskInfo> ActiveRemoteDownloads
@@ -176,7 +181,7 @@ namespace YTMusic.Services
                     throw new InvalidOperationException("No audio or video file was found in this AList directory.");
                 }
 
-                var localDirectory = StoragePaths.GetDownloadedMusicDirectory();
+                var localDirectory = RemoteTrackMetadata.ResolveLocalDownloadDirectory(metadata?.FavoriteFolderNames);
                 FileHelp.EnsureDirectoryExists(localDirectory);
 
                 var resolvedTitleFromMetadata = metadata?.Title;
@@ -223,6 +228,13 @@ namespace YTMusic.Services
                 }
 
                 await _localMusicService.AddDownloadedTrackAsync(downloadedTrack);
+                await _favoriteService.RestoreFavoriteFoldersForTrackAsync(
+                    downloadedTrack.VideoId,
+                    downloadedTrack.Title,
+                    downloadedTrack.Author,
+                    downloadedTrack.ThumbnailUrl,
+                    downloadedTrack.LocalFilePath,
+                    metadata?.FavoriteFolderNames);
 
                 lock (_syncRoot)
                 {
