@@ -1,45 +1,120 @@
 # 意图
-不想给youtube music 充钱，所以才开发了这个。使用自己挂vpn（当前版本可安卓后台播放。）
-已适配安卓 和 win 。ios mac 没适配（我不用苹果也没检查过，不做任何保证）
+
+不想给 YouTube Music 充钱，所以才开发了这个。需自行挂 VPN 访问 YouTube。当前版本已支持 **Android 后台播放**。
+
+**已适配：** Windows、Android  
+**未适配：** iOS、macOS（本人不用苹果，未做验证，不做任何保证）
+
 # YTMusic
 
-YTMusic 是一款基于 **.NET MAUI** 和 **Blazor Hybrid** 构建的跨平台音乐流媒体与下载应用。它利用庞大的 YouTube 曲库，让您可以直接在设备上搜索、播放和下载音乐与视频。
+YTMusic 是一款基于 **.NET MAUI** 和 **Blazor Hybrid** 构建的跨平台音乐流媒体与下载应用。它利用 YouTube 曲库，让您在设备上搜索、播放和下载音乐与视频，并管理收藏夹与本地库。
 
 ## 功能特性
 
-- 🔍 **YouTube 搜索:** 使用 YouTube 搜索引擎快速查找歌曲、艺术家或视频。
-- 🎵 **音乐流媒体:** 直接从 YouTube 播放高品质音频。包含一个高级播放器，能够在所有平台上处理 WebM/Opus 格式。
-- ⬇️ **媒体下载:** 下载音频或视频文件以便离线播放。
-- 📂 **本地库管理:** 无缝查看、播放和删除您下载的媒体文件。
-- 💻 **跨平台:** 原生运行在 Windows、Android、iOS 和 MacCatalyst 上。
+### 搜索与播放
+- **YouTube 搜索：** 关键词搜索歌曲、艺术家或视频，分页加载结果。
+- **在线流媒体：** 默认播放纯音频流；可在播放器内切换为视频模式。
+- **播放模式：** 顺序、随机、单曲循环；支持上一首 / 下一首（播放超过 3 秒时上一首从头播放当前曲）。
+- **播放历史：** 记录最近播放，可快速重新播放。
+
+### 收藏与本地
+- **收藏夹：** 按文件夹管理收藏，支持文件夹内顺序 / 随机播放。
+- **本地下载：** 下载音频或视频供离线播放；浏览、播放与删除本地文件。
+- **本地文件：** 支持播放设备上的本地音频 / 视频（含从下载页、收藏夹直接播放）。
+
+### 播放器
+- **双页面：** `/player/audio` 与 `/player/video` 分离展示；根据内容自动路由。
+- **全局播放器：** `GlobalAudioPlayer` 持久挂载 `<audio>` / `<video>`，跨页面连续播放。
+- **进度条：** 由 `audioPlayer.js` 接管（非 Blazor 组件），降低拖动卡顿。
+- **格式支持：** WebM/Opus 等格式通过 HTML5 + `ogv.js`（WebAssembly）或平台原生解码。
+- **CORS 代理：** 在线流经本地 HTTP 代理转发，绕过 WebView 跨域限制。
+
+### 平台能力
+- **Android：** ExoPlayer 原生播放、前台服务与 MediaSession，支持后台播放与系统通知栏控制。
+- **Windows：** 自定义窗口拖拽 / 最大化；WebView2 播放与本地文件代理。
+
+### 其他
+- **主题：** 内置 5 套主题（含 2 套亮色），通过顶栏菜单打开主题侧边栏切换。
+- **底部导航：** 搜索、收藏、播放器、其他；全端固定底栏，兼容输入法弹出（`ytmLayout.js` + `visualViewport`）。
+- **网络提示：** 连接失败时提示检查网络 / VPN。
+- **AList 集成：** 配置 AList 远程存储，上传本地文件；从 AList 目录拉取远程曲目下载。
+- **传输任务：** 统一下载 / 上传任务进度页。
 
 ## 技术栈
 
-- **框架:** .NET 10 MAUI & Blazor Webview
-- **UI 组件:** MudBlazor (Material Design 风格)
-- **YouTube API:** YoutubeExplode (用于搜索和提取流媒体 URL，无需官方 API 密钥)
-- **音频播放:** HTML5 Audio API & `ogv.js` (WebAssembly 解码器，提供广泛的格式支持)
-- **架构:** MVVM (Model-View-ViewModel 模型-视图-视图模型)
+| 类别 | 技术 |
+|------|------|
+| 框架 | .NET 10 MAUI、Blazor WebView |
+| UI | MudBlazor |
+| YouTube | YoutubeExplode（搜索与流 URL 提取，无需官方 API Key） |
+| 数据 | SQLite + Dapper（收藏、历史等） |
+| Web 播放 | `audioPlayer.js`、`ogv.js`、`ytmLayout.js` |
+| Android 原生播放 | AndroidX Media3 / ExoPlayer |
+| 架构 | MVVM（页面 + `*VM.cs`）、依赖注入 |
 
 ## 开始使用
 
 ### 环境要求
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- 带有 .NET MAUI 工作负载的 Visual Studio 2022，或安装了 C# Dev Kit 和 MAUI 扩展的 Visual Studio Code。
+- 带有 .NET MAUI 工作负载的 Visual Studio 2022，或 VS Code + C# Dev Kit + MAUI 扩展
 
 ### 编译与运行
 
 1. 克隆此仓库。
-2. 在您的 IDE 中打开 `YTMusic.slnx`。
-3. 选择您的目标框架（例如，`net10.0-windows10.0.19041.0` 或 `net10.0-android`）。
-4. 编译并运行应用程序。
+2. 打开 `YTMusic.slnx`。
+3. 选择目标框架（例如 `net10.0-windows10.0.19041.0` 或 `net10.0-android`）。
+4. 编译并运行。
+
+**命令行（Windows）：**
+
+```bash
+dotnet build YTMusic/YTMusic.csproj -c Debug -f net10.0-windows10.0.19041.0
+```
+
+若可执行文件被占用（例如 VS 正在调试），可用临时输出目录：
+
+```bash
+dotnet build YTMusic/YTMusic.csproj -c Debug -f net10.0-windows10.0.19041.0 -o YTMusic/bin/Debug/net10.0-windows10.0.19041.0/win-x64-temp
+```
 
 ## 项目结构
 
-- `YTMusic/`: 主要的 MAUI Blazor 应用程序。
-  - `Components/`: Blazor UI 组件和页面（`Search`、`Player`、`Downloads`）。
-  - `Services/`: 核心业务逻辑（`YouTubeService`、`MusicPlayerService` 等）。
-  - `wwwroot/`: 静态 Web 资源，包括自定义的 `audioPlayer.js`。
-- `CommonHelp/`: 包含实用工具和辅助函数的共享库。
-- `YTMusic.Tests/`: 应用程序的单元测试。
+```
+YTMusic/                 # 主 MAUI Blazor 应用
+  Components/
+    Layout/              # MainLayout、GlobalAudioPlayer、底部导航与主题
+    Pages/               # 页面与对应 VM（*VM.cs 同目录）
+    Dialogs/             # 弹窗组件
+  Services/              # 播放器、YouTube、下载、收藏、AList 等
+  Platforms/             # Android / Windows / iOS / MacCatalyst 平台代码
+  wwwroot/
+    js/                  # audioPlayer.js、ytmLayout.js 等
+CommonHelp/              # 共享工具库（文件、时间、JSON 等）
+YTMusic.Tests/           # 单元测试
+memory-bank/             # 项目决策与进度记录
+```
+
+## 主要页面
+
+| 路由 | 说明 |
+|------|------|
+| `/`、`/search` | 搜索与 Home |
+| `/favorites` | 收藏夹文件夹列表 |
+| `/favorites/folder/{id}` | 文件夹内曲目 |
+| `/player`、`/player/audio`、`/player/video` | 播放器（自动路由到音频 / 视频页） |
+| `/other` | 其他菜单入口 |
+| `/downloads` | 本地资源 |
+| `/transfers` | 下载 / 上传任务 |
+| `/upload` | AList 远程存储配置与上传 |
+| `/history` | 播放历史 |
+
+## 延伸阅读
+
+- [`YTMusic/ARCHITECTURE.md`](YTMusic/ARCHITECTURE.md) — 架构与设计思路
+- [`YTMusic/CORE_LOGIC.md`](YTMusic/CORE_LOGIC.md) — 跨平台播放与流提取等核心难点
+- [`AGENTS.md`](AGENTS.md) — 开发约定与 UI 约束（供协作者 / Agent 参考）
+
+## 免责声明
+
+本项目仅供学习与个人使用。请遵守 YouTube 及相关服务的使用条款与当地法律法规。开发者不对因使用本软件产生的任何问题负责。
