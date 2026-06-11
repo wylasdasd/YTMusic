@@ -32,6 +32,8 @@ namespace YTMusic.Platforms.Android.Services
         private const string ExtraIsLocalFile = "isLocalFile";
         private const string ExtraSeekMs = "seekMs";
         private const string ExtraDurationMs = "durationMs";
+        private const string ExtraCompanionAudioSource = "companionAudioSource";
+        private const string ExtraAutoPlay = "autoPlay";
         private const string CustomSettingsButtonIdName = "exo_custom_settings";
 
         private static WeakReference<VideoPlayerActivity>? _currentInstance;
@@ -156,11 +158,25 @@ namespace YTMusic.Platforms.Android.Services
             }
         }
 
-        public static Task PlayAsync(Context context, string source, bool isLocalFile, string? title, string? artist, double? durationSeconds)
+        public static Task PlayAsync(
+            Context context,
+            string source,
+            bool isLocalFile,
+            string? title,
+            string? artist,
+            double? durationSeconds,
+            string? companionAudioUrl = null,
+            bool autoPlay = true)
         {
             var intent = CreateIntent(context, ActionPlaySource);
             intent.PutExtra(ExtraSource, source);
             intent.PutExtra(ExtraIsLocalFile, isLocalFile);
+            intent.PutExtra(ExtraAutoPlay, autoPlay);
+            if (!string.IsNullOrWhiteSpace(companionAudioUrl))
+            {
+                intent.PutExtra(ExtraCompanionAudioSource, companionAudioUrl);
+            }
+
             if (durationSeconds.HasValue && durationSeconds.Value > 0)
             {
                 intent.PutExtra(ExtraDurationMs, (long)(durationSeconds.Value * 1000));
@@ -248,17 +264,17 @@ namespace YTMusic.Platforms.Android.Services
                         }
 
                         var isLocalFile = intent.GetBooleanExtra(ExtraIsLocalFile, false);
+                        var companionAudio = intent.GetStringExtra(ExtraCompanionAudioSource);
                         _expectedDurationMs = System.Math.Max(0, intent.GetLongExtra(ExtraDurationMs, 0));
 
-                        var mediaItem = new MediaItem.Builder()
-                            .SetUri(ResolveUri(source, isLocalFile))
-                            .Build();
-
-                        _player.Stop();
-                        _player.ClearMediaItems();
-                        _player.SetMediaItem(mediaItem);
-                        _player.Prepare();
-                        _player.Play();
+                        var autoPlay = intent.GetBooleanExtra(ExtraAutoPlay, true);
+                        ExoPlayerStreamSourceFactory.SetPlayerSource(
+                            _player,
+                            this,
+                            source,
+                            isLocalFile,
+                            companionAudio,
+                            autoPlay);
                         StartPositionUpdates();
                         break;
                     }

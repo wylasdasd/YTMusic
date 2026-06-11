@@ -24,12 +24,20 @@ namespace YTMusic.Platforms.Android.Services
             VideoPlayerActivity.PlaybackStopped += OnPlaybackStopped;
         }
 
-        public async Task PlayAsync(string source, bool isLocalFile, string? title, string? artist, double? durationSeconds = null)
+        public async Task PlayAsync(
+            string source,
+            bool isLocalFile,
+            string? title,
+            string? artist,
+            double? durationSeconds = null,
+            string? companionAudioUrl = null,
+            bool autoPlay = true)
         {
             await MainThread.InvokeOnMainThreadAsync(() =>
             {
                 var context = Platform.CurrentActivity ?? _context;
-                VideoPlayerActivity.PlayAsync(context, source, isLocalFile, title, artist, durationSeconds);
+                VideoPlayerActivity.PlayAsync(
+                    context, source, isLocalFile, title, artist, durationSeconds, companionAudioUrl, autoPlay);
             }).ConfigureAwait(false);
         }
 

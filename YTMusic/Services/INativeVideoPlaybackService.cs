@@ -11,7 +11,14 @@ namespace YTMusic.Services
         event Action? PlaybackEnded;
         event Action? PlaybackStopped;
 
-        Task PlayAsync(string source, bool isLocalFile, string? title, string? artist, double? durationSeconds = null);
+        Task PlayAsync(
+            string source,
+            bool isLocalFile,
+            string? title,
+            string? artist,
+            double? durationSeconds = null,
+            string? companionAudioUrl = null,
+            bool autoPlay = true);
         Task PauseAsync();
         Task ResumeAsync();
         Task SeekAsync(double positionSeconds);

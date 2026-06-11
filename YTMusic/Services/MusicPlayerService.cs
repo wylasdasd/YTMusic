@@ -343,7 +343,7 @@ namespace YTMusic.Services
         public bool IsLoading { get; private set; }
         public bool IsSwitchingTrack { get; private set; }
         public bool UseNativePlayback => _nativeAudio.IsSupported;
-        /// <summary>当前是否为 Android 全屏原生 ExoPlayer 视频（仅本地 .mp4）。在线视频仍为 WebView。</summary>
+        /// <summary>当前是否为 Android 全屏原生 ExoPlayer 视频（本地 .mp4 或在线合并流）。</summary>
         public bool UseNativeVideoPlayback => IsUsingNativeVideoPlayback;
         public IPlaybackInstance? ActivePlayback => _playbackSwitcher.Active;
         public PlaybackKind ActivePlaybackKind => _playbackSwitcher.ActiveKind;
@@ -986,7 +986,8 @@ namespace YTMusic.Services
         private async Task<bool> PlayInternalAsync(PlayingItem video)
         {
             var isTrackSwitch = CurrentVideo != null;
-            var shouldAutoPlay = isTrackSwitch ? IsPlaying : true;
+            // 显式播视频时始终自动起播；音频切歌则沿用当前播放状态。
+            var shouldAutoPlay = video.IsVideo == true || !isTrackSwitch || IsPlaying;
             try
             {
                 if (isTrackSwitch)
@@ -1116,10 +1117,50 @@ namespace YTMusic.Services
                         var videoStreamInfo = webVideo.VideoStream;
                         var companionAudio = webVideo.CompanionAudioStream;
                         var isWebM = videoStreamInfo.Container == Container.WebM;
-                        var webUrl = await BuildWebVideoStreamUrlAsync(videoStreamInfo).ConfigureAwait(false);
 
-                        if (companionAudio != null)
+                        if (ShouldUseNativeOnlineVideo())
                         {
+                            if (companionAudio != null)
+                            {
+                                PlaybackDiagnostics.Log(
+                                    $"PlayRemoteVideo native-merge video={videoStreamInfo.Container} audio={companionAudio.Container}");
+                                await ActivatePlaybackAsync(
+                                    PlaybackKind.NativeVideo,
+                                    new PlaybackSource
+                                    {
+                                        StreamUrl = videoStreamInfo.Url,
+                                        CompanionAudioUrl = companionAudio.Url,
+                                        IsLocalFile = false,
+                                        IsWebM = isWebM,
+                                        IsVideo = true,
+                                        Title = video.Title,
+                                        Artist = video.Author,
+                                        DurationSeconds = video.DurationSeconds
+                                    },
+                                    options);
+                            }
+                            else
+                            {
+                                PlaybackDiagnostics.Log(
+                                    $"PlayRemoteVideo native-muxed container={videoStreamInfo.Container}");
+                                await ActivatePlaybackAsync(
+                                    PlaybackKind.NativeVideo,
+                                    new PlaybackSource
+                                    {
+                                        StreamUrl = videoStreamInfo.Url,
+                                        IsLocalFile = false,
+                                        IsWebM = isWebM,
+                                        IsVideo = true,
+                                        Title = video.Title,
+                                        Artist = video.Author,
+                                        DurationSeconds = video.DurationSeconds
+                                    },
+                                    options);
+                            }
+                        }
+                        else if (companionAudio != null)
+                        {
+                            var webUrl = await BuildWebVideoStreamUrlAsync(videoStreamInfo).ConfigureAwait(false);
                             PlaybackDiagnostics.Log(
                                 $"PlayRemoteVideo hybrid video={videoStreamInfo.Container} audio={companionAudio.Container} webUrl={PlaybackDiagnostics.DescribeUrl(webUrl)}");
                             await ActivatePlaybackAsync(
@@ -1135,10 +1176,10 @@ namespace YTMusic.Services
                                     DurationSeconds = video.DurationSeconds
                                 },
                                 options);
-                            PlaybackDiagnostics.Log($"PlayRemoteVideo native audio started url={PlaybackDiagnostics.DescribeUrl(companionAudio.Url)}");
                         }
                         else
                         {
+                            var webUrl = await BuildWebVideoStreamUrlAsync(videoStreamInfo).ConfigureAwait(false);
                             PlaybackDiagnostics.Log(
                                 $"PlayRemoteVideo muxed/web-only video={videoStreamInfo.Container} webUrl={PlaybackDiagnostics.DescribeUrl(webUrl)}");
                             await ActivatePlaybackAsync(
@@ -1476,11 +1517,15 @@ namespace YTMusic.Services
             return Path.GetExtension(filePath).Equals(".mp4", StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>Android 本地 .mp4 走 VideoPlayerActivity ExoPlayer；在线视频仍走 WebView。</summary>
+        /// <summary>Android 本地 .mp4 走 VideoPlayerActivity ExoPlayer。</summary>
         private bool ShouldUseNativeLocalVideo(string filePath, bool markedAsVideo) =>
             OperatingSystem.IsAndroid()
             && _nativeVideo.IsSupported
             && ShouldPlayLocalAsVideo(filePath, markedAsVideo);
+
+        /// <summary>Android 在线视频走 VideoPlayerActivity（muxed 单流或 MergingMediaSource 合并分离流）。</summary>
+        private bool ShouldUseNativeOnlineVideo() =>
+            OperatingSystem.IsAndroid() && _nativeVideo.IsSupported;
 
         private static string GetFileContentType(string filePath, bool isVideo)
         {

@@ -64,12 +64,9 @@ namespace YTMusic.Services.Playback
                 source.IsLocalFile,
                 source.Title,
                 source.Artist,
-                source.DurationSeconds);
-
-            if (!options.AutoPlay)
-            {
-                await host.NativeVideo.PauseAsync();
-            }
+                source.DurationSeconds,
+                source.CompanionAudioUrl,
+                options.AutoPlay);
         }
 
         public async Task DetachAsync(bool preserveNativeAudioBackend)
