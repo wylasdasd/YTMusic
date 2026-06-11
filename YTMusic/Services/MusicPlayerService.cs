@@ -82,9 +82,13 @@ namespace YTMusic.Services
                 var streamInfo = CurrentStreamInfo;
                 if (streamInfo == null)
                 {
+                    PlaybackDiagnostics.LogError($"Proxy {ContentType} request with no CurrentStreamInfo");
                     response.StatusCode = 404;
                     return;
                 }
+
+                PlaybackDiagnostics.Log(
+                    $"Proxy {ContentType} {request.HttpMethod} range={request.Headers["Range"] ?? "none"} upstream={PlaybackDiagnostics.DescribeUrl(streamInfo.Url)}");
 
                 response.ContentType = ContentType;
                 response.AddHeader("Accept-Ranges", "bytes");
@@ -315,12 +319,14 @@ namespace YTMusic.Services
         private readonly NetworkErrorService _networkErrorService;
         private LocalAudioProxy? _proxy;
         private LocalFileProxy? _fileProxy;
-        private readonly SemaphoreSlim _fileProxyInitLock = new SemaphoreSlim(1, 1);
+        private readonly SemaphoreSlim _fileProxyInitLock = new(1, 1);
+        private readonly SemaphoreSlim _audioProxyInitLock = new(1, 1);
         
         public event Action? OnChange;
         public event Action? OnTimeChanged;
         public event Action? OnRequestReplay;
         public event Action? OnRequestPause;
+        public event Action? OnRequestStopWebPlayback;
         public event Action? OnRequestPlay;
         public event Action<double>? OnRequestSeek;
         public PlayingItem? CurrentVideo { get; private set; }
@@ -330,8 +336,10 @@ namespace YTMusic.Services
         public bool IsSwitchingTrack { get; private set; }
         public bool UseNativePlayback => _nativeAudio.IsSupported;
         public bool IsUsingNativePlayback { get; private set; }
-        public bool UseNativeVideoPlayback => _nativeVideo.IsSupported && OperatingSystem.IsAndroid();
+        // Android 视频与 Windows 一致：走 WebView + CurrentStreamUrl / LocalFileProxy，不用全屏原生 Activity。
+        public bool UseNativeVideoPlayback => false;
         public bool IsUsingNativeVideoPlayback { get; private set; }
+        public bool IsUsingHybridWebVideo => IsUsingNativePlayback && IsCurrentStreamVideo && CurrentStreamUrl != null;
         public bool IsCurrentStreamWebM { get; private set; }
         public bool IsCurrentStreamVideo { get; private set; }
         public double CurrentTime { get; private set; } = 0;
@@ -625,12 +633,13 @@ namespace YTMusic.Services
             try
             {
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-                var streamInfo = await GetPreferredMuxedVideoStreamInfoAsync(videoId, cts.Token);
-                return streamInfo != null;
+                var streams = await ResolveRemoteWebVideoStreamsAsync(videoId, cts.Token).ConfigureAwait(false);
+                PlaybackDiagnostics.Log($"CheckRemoteVideo videoId={videoId} available={streams != null}");
+                return streams != null;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[MusicPlayer] remote video check failed: {ex.Message}");
+                PlaybackDiagnostics.LogError($"CheckRemoteVideo failed videoId={videoId}", ex);
                 return false;
             }
         }
@@ -710,7 +719,9 @@ namespace YTMusic.Services
             if (!string.IsNullOrWhiteSpace(current.VideoId) && current.VideoId != "local")
             {
                 var downloaded = await _localMusicService.GetDownloadedTrackByVideoIdAsync(current.VideoId);
-                if (downloaded != null && !downloaded.IsVideo && !string.IsNullOrWhiteSpace(downloaded.LocalFilePath))
+                if (downloaded != null
+                    && !string.IsNullOrWhiteSpace(downloaded.LocalFilePath)
+                    && !ShouldPlayLocalAsVideo(downloaded.LocalFilePath, downloaded.IsVideo))
                 {
                     item.LocalFilePath = downloaded.LocalFilePath;
                 }
@@ -975,6 +986,7 @@ namespace YTMusic.Services
         private async Task<bool> PlayInternalAsync(PlayingItem video)
         {
             var isTrackSwitch = CurrentVideo != null;
+            var shouldAutoPlay = isTrackSwitch ? IsPlaying : true;
             try
             {
                 if (isTrackSwitch)
@@ -1016,15 +1028,9 @@ namespace YTMusic.Services
                     }
                     else if (_nativeAudio.IsSupported && !IsCurrentStreamVideo)
                     {
-                        await StopOtherPlaybackPipelineAsync(willUseNativePlayback: true, willUseNativeVideoPlayback: false);
-                        IsUsingNativePlayback = true;
-                        IsUsingNativeVideoPlayback = false;
-                        CurrentStreamUrl = null;
-                        CurrentTime = 0;
-                        Duration = 100;
-                        await _nativeAudio.PlayAsync(video.LocalFilePath, true, video.Title, video.Author, video.DurationSeconds);
+                        await StartNativeLocalPlaybackAsync(video.LocalFilePath, video, shouldAutoPlay);
                         CurrentVideo = video;
-                        IsPlaying = true;
+                        IsPlaying = shouldAutoPlay;
                         AddToPlaybackHistory(video, false);
                     }
                     else
@@ -1037,7 +1043,7 @@ namespace YTMusic.Services
                         _fileProxy.CurrentFilePath = video.LocalFilePath;
                         CurrentStreamUrl = BuildLocalProxyStreamUrl(video.LocalFilePath);
                         CurrentVideo = video;
-                        IsPlaying = true;
+                        IsPlaying = shouldAutoPlay;
                         AddToPlaybackHistory(video, IsCurrentStreamVideo);
                     }
                     return true;
@@ -1045,9 +1051,23 @@ namespace YTMusic.Services
 
                 // Prefer downloaded local files when we have a record for this video id.
                 var downloaded = await _localMusicService.GetDownloadedTrackByVideoIdAsync(video.VideoId);
-                var skipLocalBecauseAudioOnly = video.IsVideo == true && downloaded != null && !downloaded.IsVideo;
-                if (!skipLocalBecauseAudioOnly && downloaded != null && !string.IsNullOrWhiteSpace(downloaded.LocalFilePath))
+                var useDownloadedLocal = downloaded != null && !string.IsNullOrWhiteSpace(downloaded.LocalFilePath);
+                if (video.IsVideo == true)
                 {
+                    // 显式请求视频时：纯音频下载、或非 .mp4 的“视频”下载，改走在线视频流。
+                    useDownloadedLocal = useDownloadedLocal
+                        && ShouldPlayLocalAsVideo(downloaded!.LocalFilePath, downloaded.IsVideo);
+                    if (downloaded != null && !useDownloadedLocal)
+                    {
+                        PlaybackDiagnostics.Log(
+                            $"PlayInternal skip local for remote video videoId={video.VideoId} downloadedIsVideo={downloaded.IsVideo} path={downloaded.LocalFilePath}");
+                    }
+                }
+
+                if (useDownloadedLocal)
+                {
+                    PlaybackDiagnostics.Log(
+                        $"PlayInternal using local download videoId={video.VideoId} requestVideo={video.IsVideo == true} downloadedIsVideo={downloaded!.IsVideo}");
                     video.LocalFilePath = downloaded.LocalFilePath;
                     video.IsVideo = downloaded.IsVideo;
                     IsCurrentStreamWebM = video.LocalFilePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
@@ -1055,13 +1075,7 @@ namespace YTMusic.Services
 
                     if (_nativeAudio.IsSupported && !IsCurrentStreamVideo)
                     {
-                        await StopOtherPlaybackPipelineAsync(willUseNativePlayback: true, willUseNativeVideoPlayback: false);
-                        IsUsingNativePlayback = true;
-                        IsUsingNativeVideoPlayback = false;
-                        CurrentStreamUrl = null;
-                        CurrentTime = 0;
-                        Duration = 100;
-                        await _nativeAudio.PlayAsync(video.LocalFilePath, true, video.Title, video.Author, video.DurationSeconds);
+                        await StartNativeLocalPlaybackAsync(video.LocalFilePath, video, shouldAutoPlay);
                         AddToPlaybackHistory(video, false);
                     }
                     else if (IsCurrentStreamVideo && UseNativeVideoPlayback)
@@ -1088,7 +1102,7 @@ namespace YTMusic.Services
                     }
 
                     CurrentVideo = video;
-                    IsPlaying = true;
+                    IsPlaying = shouldAutoPlay;
                     return true;
                 }
 
@@ -1096,47 +1110,55 @@ namespace YTMusic.Services
 
                 if (video.IsVideo == true)
                 {
-                    var muxedStreamInfo = await GetPreferredMuxedVideoStreamInfoAsync(video.VideoId, streamCts.Token);
+                    PlaybackDiagnostics.Log($"PlayRemoteVideo start videoId={video.VideoId} isTrackSwitch={isTrackSwitch}");
+                    var webVideo = await ResolveRemoteWebVideoStreamsAsync(video.VideoId, streamCts.Token).ConfigureAwait(false);
 
-                    if (muxedStreamInfo != null)
+                    if (webVideo != null)
                     {
-                        IsCurrentStreamWebM = muxedStreamInfo.Container == Container.WebM;
+                        var videoStreamInfo = webVideo.VideoStream;
+                        var companionAudio = webVideo.CompanionAudioStream;
+                        IsCurrentStreamWebM = videoStreamInfo.Container == Container.WebM;
                         IsCurrentStreamVideo = true;
+                        IsUsingNativeVideoPlayback = false;
+                        CurrentStreamUrl = await BuildWebVideoStreamUrlAsync(videoStreamInfo).ConfigureAwait(false);
 
-                        if (UseNativeVideoPlayback)
+                        if (companionAudio != null)
                         {
-                            await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: true);
-                            IsUsingNativePlayback = false;
-                            IsUsingNativeVideoPlayback = true;
-                            CurrentStreamUrl = null;
+                            PlaybackDiagnostics.Log(
+                                $"PlayRemoteVideo hybrid video={videoStreamInfo.Container} audio={companionAudio.Container} webUrl={PlaybackDiagnostics.DescribeUrl(CurrentStreamUrl)}");
+                            await StopOtherPlaybackPipelineAsync(willUseNativePlayback: true, willUseNativeVideoPlayback: false);
+                            IsUsingNativePlayback = true;
                             CurrentTime = 0;
                             Duration = 100;
-                            await _nativeVideo.PlayAsync(muxedStreamInfo.Url, false, video.Title, video.Author, video.DurationSeconds);
-                            AddToPlaybackHistory(video, true);
-                        }
-                        else if (OperatingSystem.IsAndroid())
-                        {
-                            await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: false);
-                            IsUsingNativePlayback = false;
-                            IsUsingNativeVideoPlayback = false;
-                            CurrentStreamUrl = muxedStreamInfo.Url;
-                            AddToPlaybackHistory(video, true);
+                            await _nativeAudio.PlayAsync(companionAudio.Url, false, video.Title, video.Author, video.DurationSeconds);
+                            if (!shouldAutoPlay)
+                            {
+                                await _nativeAudio.PauseAsync();
+                            }
+
+                            PlaybackDiagnostics.Log($"PlayRemoteVideo native audio started url={PlaybackDiagnostics.DescribeUrl(companionAudio.Url)}");
                         }
                         else
                         {
+                            PlaybackDiagnostics.Log(
+                                $"PlayRemoteVideo muxed/web-only video={videoStreamInfo.Container} webUrl={PlaybackDiagnostics.DescribeUrl(CurrentStreamUrl)}");
                             await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: false);
                             IsUsingNativePlayback = false;
-                            IsUsingNativeVideoPlayback = false;
-                            EnsureProxiesCreated();
-                            _proxy!.ContentType = GetStreamContentType(muxedStreamInfo, true);
-                            _proxy.CurrentStreamInfo = muxedStreamInfo;
-                            CurrentStreamUrl = $"{_proxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
-                            AddToPlaybackHistory(video, true);
                         }
 
                         CurrentVideo = video;
-                        IsPlaying = true;
+                        IsPlaying = shouldAutoPlay;
+                        AddToPlaybackHistory(video, true);
+                        PlaybackDiagnostics.Log(
+                            $"PlayRemoteVideo success hybrid={companionAudio != null} IsCurrentStreamVideo={IsCurrentStreamVideo} IsUsingNativePlayback={IsUsingNativePlayback}");
                         return true;
+                    }
+
+                    PlaybackDiagnostics.LogError($"PlayRemoteVideo no stream videoId={video.VideoId}");
+                    if (video.IsVideo == true)
+                    {
+                        await _networkErrorService.NotifyFailureAsync("播放");
+                        return false;
                     }
                 }
 
@@ -1188,14 +1210,19 @@ namespace YTMusic.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error playing video: {ex.Message}");
+                PlaybackDiagnostics.LogError($"PlayInternal failed videoId={video.VideoId} isVideo={video.IsVideo == true}", ex);
                 await _networkErrorService.NotifyFailureAsync("播放", ex);
-                if (!isTrackSwitch)
+                if (video.IsVideo == true || !isTrackSwitch)
                 {
                     await StopOtherPlaybackPipelineAsync(willUseNativePlayback: false, willUseNativeVideoPlayback: false);
                     IsPlaying = false;
                     IsUsingNativePlayback = false;
                     IsUsingNativeVideoPlayback = false;
+                    if (video.IsVideo == true)
+                    {
+                        IsCurrentStreamVideo = false;
+                        CurrentStreamUrl = null;
+                    }
                 }
 
                 return false;
@@ -1217,6 +1244,13 @@ namespace YTMusic.Services
         public async Task PauseAsync()
         {
             SetPlayingState(false);
+
+            if (IsUsingHybridWebVideo)
+            {
+                await _nativeAudio.PauseAsync();
+                OnRequestPause?.Invoke();
+                return;
+            }
 
             if (IsUsingNativePlayback)
             {
@@ -1253,6 +1287,13 @@ namespace YTMusic.Services
 
             SetPlayingState(true);
 
+            if (IsUsingHybridWebVideo)
+            {
+                await _nativeAudio.ResumeAsync();
+                OnRequestPlay?.Invoke();
+                return;
+            }
+
             if (IsUsingNativePlayback)
             {
                 await _nativeAudio.ResumeAsync();
@@ -1270,6 +1311,14 @@ namespace YTMusic.Services
         public async Task SeekAsync(double positionSeconds)
         {
             CurrentTime = positionSeconds;
+
+            if (IsUsingHybridWebVideo)
+            {
+                await _nativeAudio.SeekAsync(positionSeconds);
+                OnRequestSeek?.Invoke(positionSeconds);
+                OnTimeChanged?.Invoke();
+                return;
+            }
 
             if (IsUsingNativePlayback)
             {
@@ -1305,6 +1354,43 @@ namespace YTMusic.Services
             _fileProxy ??= new LocalFileProxy();
         }
 
+        private async Task EnsureAudioProxyCreatedAsync()
+        {
+            if (_proxy != null)
+            {
+                return;
+            }
+
+            await _audioProxyInitLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (_proxy != null)
+                {
+                    return;
+                }
+
+                if (OperatingSystem.IsAndroid())
+                {
+                    _proxy = await Task.Run(() => new LocalAudioProxy()).ConfigureAwait(false);
+                }
+                else
+                {
+                    _proxy = new LocalAudioProxy();
+                }
+
+                PlaybackDiagnostics.Log($"Audio proxy ready url={_proxy.ProxyUrl}");
+            }
+            catch (Exception ex)
+            {
+                PlaybackDiagnostics.LogError("Audio proxy init failed", ex);
+                throw;
+            }
+            finally
+            {
+                _audioProxyInitLock.Release();
+            }
+        }
+
         private async Task EnsureFileProxyCreatedAsync()
         {
             if (_fileProxy != null)
@@ -1335,40 +1421,70 @@ namespace YTMusic.Services
             }
         }
 
-        private async Task<IStreamInfo?> GetPreferredAudioStreamInfoAsync(string videoId, CancellationToken cancellationToken = default)
+        private sealed class RemoteWebVideoStreams
+        {
+            public IStreamInfo VideoStream { get; init; } = null!;
+            public IStreamInfo? CompanionAudioStream { get; init; }
+        }
+
+        private async Task<StreamManifest> GetStreamManifestAsync(string videoId, CancellationToken cancellationToken = default)
         {
             if (OperatingSystem.IsAndroid())
             {
-                // YoutubeExplode internals may hit synchronous network APIs on Android.
-                // Force manifest parsing off the UI thread to avoid NetworkOnMainThreadException.
                 return await Task.Run(async () =>
-                {
-                    var streamManifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId, cancellationToken);
-                    return streamManifest.GetAudioOnlyStreams()
-                        .Where(s => s.Container == Container.WebM)
-                        .GetWithHighestBitrate() ?? streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate();
-                }, cancellationToken);
+                    await _youtubeClient.Videos.Streams.GetManifestAsync(videoId, cancellationToken).ConfigureAwait(false)
+                ).ConfigureAwait(false);
             }
 
-            var manifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId, cancellationToken);
+            return await _youtubeClient.Videos.Streams.GetManifestAsync(videoId, cancellationToken).ConfigureAwait(false);
+        }
+
+        private static IStreamInfo? SelectPreferredAudioStream(StreamManifest manifest)
+        {
             return manifest.GetAudioOnlyStreams()
                 .Where(s => s.Container == Container.WebM)
                 .GetWithHighestBitrate() ?? manifest.GetAudioOnlyStreams().GetWithHighestBitrate();
         }
 
-        private async Task<IStreamInfo?> GetPreferredMuxedVideoStreamInfoAsync(string videoId, CancellationToken cancellationToken = default)
+        private async Task<RemoteWebVideoStreams?> ResolveRemoteWebVideoStreamsAsync(string videoId, CancellationToken cancellationToken = default)
         {
-            if (OperatingSystem.IsAndroid())
+            var manifest = await GetStreamManifestAsync(videoId, cancellationToken).ConfigureAwait(false);
+            var muxedCount = manifest.GetMuxedStreams().Count();
+            var videoOnlyCount = manifest.GetVideoOnlyStreams().Count();
+            var audioOnlyCount = manifest.GetAudioOnlyStreams().Count();
+            PlaybackDiagnostics.Log($"ResolveStreams videoId={videoId} muxed={muxedCount} videoOnly={videoOnlyCount} audioOnly={audioOnlyCount}");
+
+            var muxed = manifest.GetMuxedStreams().GetWithHighestVideoQuality();
+            if (muxed != null)
             {
-                return await Task.Run(async () =>
-                {
-                    var streamManifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId, cancellationToken);
-                    return streamManifest.GetMuxedStreams().GetWithHighestVideoQuality();
-                }, cancellationToken);
+                PlaybackDiagnostics.Log($"ResolveStreams using muxed container={muxed.Container}");
+                return new RemoteWebVideoStreams { VideoStream = muxed, CompanionAudioStream = null };
             }
 
-            var manifest = await _youtubeClient.Videos.Streams.GetManifestAsync(videoId, cancellationToken);
-            return manifest.GetMuxedStreams().GetWithHighestVideoQuality();
+            var videoOnly = manifest.GetVideoOnlyStreams()
+                .Where(s => s.Container == Container.Mp4)
+                .GetWithHighestVideoQuality()
+                ?? manifest.GetVideoOnlyStreams().GetWithHighestVideoQuality();
+            if (videoOnly == null)
+            {
+                PlaybackDiagnostics.LogError($"ResolveStreams no video-only stream videoId={videoId}");
+                return null;
+            }
+
+            var companionAudio = SelectPreferredAudioStream(manifest);
+            PlaybackDiagnostics.Log(
+                $"ResolveStreams using videoOnly container={videoOnly.Container} companionAudio={(companionAudio != null ? companionAudio.Container.ToString() : "none")}");
+            return new RemoteWebVideoStreams
+            {
+                VideoStream = videoOnly,
+                CompanionAudioStream = companionAudio
+            };
+        }
+
+        private async Task<IStreamInfo?> GetPreferredAudioStreamInfoAsync(string videoId, CancellationToken cancellationToken = default)
+        {
+            var manifest = await GetStreamManifestAsync(videoId, cancellationToken).ConfigureAwait(false);
+            return SelectPreferredAudioStream(manifest);
         }
 
         /// <summary>
@@ -1410,11 +1526,42 @@ namespace YTMusic.Services
             return isVideo ? "video/mp4" : "audio/mp4";
         }
 
+        private async Task<string> BuildWebVideoStreamUrlAsync(IStreamInfo videoStreamInfo)
+        {
+            await EnsureAudioProxyCreatedAsync().ConfigureAwait(false);
+            _proxy!.ContentType = GetStreamContentType(videoStreamInfo, true);
+            _proxy.CurrentStreamInfo = videoStreamInfo;
+            var url = $"{_proxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
+            PlaybackDiagnostics.Log($"BuildWebVideoStreamUrl proxy={url} upstream={PlaybackDiagnostics.DescribeUrl(videoStreamInfo.Url)}");
+            return url;
+        }
+
+        private async Task StartNativeLocalPlaybackAsync(string filePath, PlayingItem video, bool shouldAutoPlay)
+        {
+            await StopOtherPlaybackPipelineAsync(willUseNativePlayback: true, willUseNativeVideoPlayback: false);
+            if (_nativeAudio.IsSupported)
+            {
+                await _nativeAudio.StopAsync();
+            }
+
+            IsUsingNativePlayback = true;
+            IsUsingNativeVideoPlayback = false;
+            CurrentStreamUrl = null;
+            CurrentTime = 0;
+            Duration = 100;
+            await _nativeAudio.PlayAsync(filePath, true, video.Title, video.Author, video.DurationSeconds);
+            if (!shouldAutoPlay)
+            {
+                await _nativeAudio.PauseAsync();
+            }
+        }
+
         private async Task StopOtherPlaybackPipelineAsync(bool willUseNativePlayback, bool willUseNativeVideoPlayback)
         {
+            OnRequestStopWebPlayback?.Invoke();
+
             if (willUseNativePlayback)
             {
-                OnRequestPause?.Invoke();
                 if (_nativeVideo.IsSupported)
                 {
                     await _nativeVideo.StopAsync();
@@ -1429,12 +1576,10 @@ namespace YTMusic.Services
                 {
                     await _nativeAudio.StopAsync();
                 }
-                OnRequestPause?.Invoke();
                 IsUsingNativePlayback = false;
                 return;
             }
 
-            OnRequestPause?.Invoke();
             if (_nativeAudio.IsSupported)
             {
                 await _nativeAudio.StopAsync();

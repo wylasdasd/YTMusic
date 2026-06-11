@@ -344,8 +344,13 @@
                 return;
             }
 
-            if (!await NavigateToVideoIfSwitchedAsync(await PlayerService.PlayRemoteVideoForCurrentAsync()))
+            var playOk = await PlayerService.PlayRemoteVideoForCurrentAsync();
+            PlaybackDiagnostics.Log(
+                $"PlayerAudio.PlayVideo playOk={playOk} isVideo={PlayerService.IsCurrentStreamVideo} hybrid={PlayerService.IsUsingHybridWebVideo} url={PlaybackDiagnostics.DescribeUrl(PlayerService.CurrentStreamUrl)}");
+            if (!await NavigateToVideoIfSwitchedAsync(playOk))
             {
+                PlaybackDiagnostics.LogError(
+                    $"PlayerAudio.PlayVideo navigate failed playOk={playOk} isVideo={PlayerService.IsCurrentStreamVideo}");
                 Snackbar.Add("在线视频播放失败。", Severity.Error);
             }
         }
@@ -356,19 +361,28 @@
         }
     }
 
-    private async Task<bool> NavigateToVideoIfSwitchedAsync(bool switched)
+    private Task<bool> NavigateToVideoIfSwitchedAsync(bool switched)
     {
         if (!switched)
         {
-            return false;
+            PlaybackDiagnostics.Log("NavigateToVideo skipped: play returned false");
+            return Task.FromResult(false);
+        }
+
+        if (!PlayerService.IsCurrentStreamVideo)
+        {
+            PlaybackDiagnostics.Log(
+                $"NavigateToVideo skipped: IsCurrentStreamVideo=false hybrid={PlayerService.IsUsingHybridWebVideo}");
+            return Task.FromResult(false);
         }
 
         if (!(OperatingSystem.IsAndroid() && PlayerService.UseNativeVideoPlayback))
         {
+            PlaybackDiagnostics.Log("NavigateToVideo -> /player/video");
             NavigationManager.NavigateTo("/player/video");
         }
 
-        return true;
+        return Task.FromResult(true);
     }
 
     private async Task PlayAudioAsync()

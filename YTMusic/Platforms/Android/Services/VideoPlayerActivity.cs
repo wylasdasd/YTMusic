@@ -203,10 +203,8 @@ namespace YTMusic.Platforms.Android.Services
                     activity._player?.Stop();
                     activity.Finish();
                 });
-                return Task.CompletedTask;
             }
 
-            context.StartActivity(CreateIntent(context, ActionStop));
             return Task.CompletedTask;
         }
 

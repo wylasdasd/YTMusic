@@ -15,6 +15,12 @@ window.audioPlayer = {
     dotnetTimeIntervalMs: 500,
     progressRafId: null,
     progressRoot: null,
+    fullscreenTarget: null,
+    fullscreenHelper: null,
+    fullscreenEventsBound: false,
+    pendingWebVideoShouldPlay: false,
+    pendingWebVideoTime: null,
+    webVideoCanPlayHandler: null,
     progressBar: {
         container: null,
         slider: null,
@@ -35,6 +41,13 @@ window.audioPlayer = {
         };
         return `${map[code] || "UNKNOWN"}(${code})`;
     },
+    log: function (message, extra) {
+        const line = extra === undefined
+            ? `[YTMusic:Playback] ${message}`
+            : `[YTMusic:Playback] ${message} ${JSON.stringify(extra)}`;
+        console.log(line);
+    },
+
     reportError: function (tag, player, err) {
         const payload = {
             tag: tag,
@@ -319,20 +332,32 @@ window.audioPlayer = {
             }
         };
         player.onplay = function () {
-            if (self.activePlayer === player) {
-                self.startProgressLoop();
-                if (self.dotNetHelper) {
-                    self.dotNetHelper.invokeMethodAsync('OnPlayStateChanged', true);
-                }
+            if (self.activePlayer !== player) {
+                return;
+            }
+
+            if (player === self.nativeVideo && self.nativeVideo.muted && self.useNativeProgressMode) {
+                return;
+            }
+
+            self.startProgressLoop();
+            if (self.dotNetHelper) {
+                self.dotNetHelper.invokeMethodAsync('OnPlayStateChanged', true);
             }
         };
         player.onpause = function () {
-            if (self.activePlayer === player) {
-                self.stopProgressLoop();
-                self.updateProgressFromPlayer();
-                if (self.dotNetHelper) {
-                    self.dotNetHelper.invokeMethodAsync('OnPlayStateChanged', false);
-                }
+            if (self.activePlayer !== player) {
+                return;
+            }
+
+            if (player === self.nativeVideo && self.nativeVideo.muted && self.useNativeProgressMode) {
+                return;
+            }
+
+            self.stopProgressLoop();
+            self.updateProgressFromPlayer();
+            if (self.dotNetHelper) {
+                self.dotNetHelper.invokeMethodAsync('OnPlayStateChanged', false);
             }
         };
         player.onerror = function () {
@@ -351,27 +376,270 @@ window.audioPlayer = {
         this.nativeVideo.style.display = this.isVideoActive ? "block" : "none";
     },
 
+    stopWebAudio: function () {
+        if (!this.nativeAudio) {
+            return;
+        }
+
+        this.nativeAudio.pause();
+        this.nativeAudio.removeAttribute("src");
+        this.nativeAudio.load();
+    },
+
+    pauseAllWebMedia: function () {
+        if (this.nativeAudio) {
+            this.nativeAudio.pause();
+        }
+        if (this.nativeVideo) {
+            this.nativeVideo.pause();
+        }
+        this.stopProgressLoop();
+    },
+
+    stopWebPlayback: function () {
+        this.pendingWebVideoShouldPlay = false;
+        this.pendingWebVideoTime = null;
+        this.clearWebVideoCanPlayHandler();
+        this.stopWebAudio();
+        if (this.nativeVideo) {
+            this.nativeVideo.pause();
+        }
+        this.stopProgressLoop();
+    },
+
+    clearWebVideoCanPlayHandler: function () {
+        if (!this.nativeVideo || !this.webVideoCanPlayHandler) {
+            return;
+        }
+
+        this.nativeVideo.removeEventListener("canplay", this.webVideoCanPlayHandler);
+        this.webVideoCanPlayHandler = null;
+    },
+
+    applyPendingWebVideoPlayback: function () {
+        const video = this.nativeVideo;
+        if (!video || !this.isVideoActive) {
+            return;
+        }
+
+        const self = this;
+        const run = function () {
+            if (!self.isVideoActive || !self.nativeVideo) {
+                return;
+            }
+
+            if (self.pendingWebVideoTime != null && Number.isFinite(self.pendingWebVideoTime)) {
+                try {
+                    video.currentTime = self.pendingWebVideoTime;
+                } catch {
+                    video.currentTime = self.pendingWebVideoTime;
+                }
+            }
+
+            if (self.pendingWebVideoShouldPlay) {
+                video.play().catch(function (e) {
+                    self.reportError("applyPendingWebVideoPlayback", video, e);
+                });
+            }
+        };
+
+        if (video.readyState >= 2) {
+            run();
+            return;
+        }
+
+        this.clearWebVideoCanPlayHandler();
+        this.webVideoCanPlayHandler = function () {
+            self.clearWebVideoCanPlayHandler();
+            run();
+        };
+        video.addEventListener("canplay", this.webVideoCanPlayHandler);
+    },
+
+    syncWebVideoState: function (url, isWebM, hybrid, playing, time) {
+        if (!url || !this.nativeVideo) {
+            this.log("syncWebVideoState skipped", { hasUrl: !!url, hasVideo: !!this.nativeVideo });
+            return;
+        }
+
+        const video = this.nativeVideo;
+        this.stopWebAudio();
+        const currentSrc = video.currentSrc || video.src || "";
+        const sameUrl = currentSrc === url;
+
+        this.log("syncWebVideoState", {
+            url: url,
+            hybrid: !!hybrid,
+            playing: !!playing,
+            time: time,
+            sameUrl: sameUrl
+        });
+
+        this.pendingUrl = url;
+        this.pendingIsWebM = !!isWebM;
+        this.pendingIsVideo = true;
+        this.isVideoActive = true;
+        this.activePlayer = video;
+        this.pendingWebVideoShouldPlay = !!playing;
+        this.pendingWebVideoTime = Number.isFinite(time) ? time : null;
+        video.muted = !!hybrid;
+        this.updateVideoVisibility();
+
+        if (!sameUrl) {
+            video.pause();
+            video.src = url;
+            video.load();
+        } else if (!playing) {
+            video.pause();
+        }
+
+        this.applyPendingWebVideoPlayback();
+    },
+
+    getFullscreenElement: function () {
+        return document.fullscreenElement
+            || document.webkitFullscreenElement
+            || document.mozFullScreenElement
+            || document.msFullscreenElement
+            || null;
+    },
+
+    isVideoFullscreen: function () {
+        const active = this.getFullscreenElement();
+        if (!active) {
+            return false;
+        }
+
+        if (this.fullscreenTarget) {
+            return active === this.fullscreenTarget || this.fullscreenTarget.contains(active);
+        }
+
+        return active === this.nativeVideo;
+    },
+
+    notifyFullscreenChanged: function () {
+        if (!this.fullscreenHelper) {
+            return;
+        }
+
+        this.fullscreenHelper.invokeMethodAsync("OnVideoFullscreenChanged", this.isVideoFullscreen());
+    },
+
+    bindFullscreenEvents: function () {
+        if (this.fullscreenEventsBound) {
+            return;
+        }
+
+        this.fullscreenEventsBound = true;
+        const self = window.audioPlayer;
+        const handler = function () {
+            self.notifyFullscreenChanged();
+        };
+        document.addEventListener("fullscreenchange", handler);
+        document.addEventListener("webkitfullscreenchange", handler);
+    },
+
+    registerFullscreenListener: function (helper) {
+        this.fullscreenHelper = helper;
+        this.bindFullscreenEvents();
+    },
+
+    unregisterFullscreenListener: function () {
+        this.fullscreenHelper = null;
+    },
+
     attachVideoTo: function (container) {
-        if (!this.nativeVideo || !container) return;
+        if (!this.nativeVideo || !container) {
+            this.log("attachVideoTo skipped", { hasVideo: !!this.nativeVideo, hasContainer: !!container });
+            return;
+        }
         if (this.nativeVideo.parentElement !== container) {
             container.appendChild(this.nativeVideo);
         }
+        this.fullscreenTarget = container.closest
+            ? (container.closest(".player-video-frame") || container)
+            : container;
         this.nativeVideo.controls = false;
         this.nativeVideo.classList.add("player-video");
         this.nativeVideo.style.display = "block";
         this.updateVideoVisibility();
+        this.bindFullscreenEvents();
+        this.log("attachVideoTo ok", {
+            src: this.nativeVideo.currentSrc || this.nativeVideo.src || "",
+            parent: this.nativeVideo.parentElement ? this.nativeVideo.parentElement.className : ""
+        });
+
+        if (this.isVideoActive) {
+            this.applyPendingWebVideoPlayback();
+        }
+    },
+
+    toggleVideoFullscreen: async function () {
+        const target = this.fullscreenTarget || this.nativeVideo;
+        if (!target) {
+            this.log("toggleVideoFullscreen skipped", { hasTarget: false });
+            return false;
+        }
+
+        try {
+            if (this.isVideoFullscreen()) {
+                if (document.exitFullscreen) {
+                    await document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+                return false;
+            }
+
+            if (target.requestFullscreen) {
+                await target.requestFullscreen();
+            } else if (target.webkitRequestFullscreen) {
+                target.webkitRequestFullscreen();
+            } else if (this.nativeVideo && this.nativeVideo.webkitEnterFullscreen) {
+                this.nativeVideo.webkitEnterFullscreen();
+            } else {
+                throw new Error("Fullscreen API is not supported");
+            }
+
+            return true;
+        } catch (e) {
+            this.reportError("toggleVideoFullscreen", this.nativeVideo || target, e);
+            return false;
+        }
+    },
+
+    exitVideoFullscreen: async function () {
+        if (!this.isVideoFullscreen()) {
+            return;
+        }
+
+        try {
+            if (document.exitFullscreen) {
+                await document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            }
+        } catch (e) {
+            this.reportError("exitVideoFullscreen", this.nativeVideo, e);
+        }
     },
 
     detachVideo: function () {
+        this.exitVideoFullscreen();
         if (!this.nativeVideo || !this.videoHost) return;
+        this.nativeVideo.pause();
         if (this.nativeVideo.parentElement !== this.videoHost) {
             this.videoHost.appendChild(this.nativeVideo);
         }
         this.nativeVideo.style.display = "none";
+        this.fullscreenTarget = null;
     },
 
     clearVideoElement: function () {
         if (!this.nativeVideo) return;
+        this.pendingWebVideoShouldPlay = false;
+        this.pendingWebVideoTime = null;
+        this.clearWebVideoCanPlayHandler();
         if (this.activePlayer === this.nativeVideo) {
             this.activePlayer.pause();
             this.activePlayer.src = "";
@@ -406,6 +674,16 @@ window.audioPlayer = {
         this.isVideoActive = nextIsVideo;
         this.updateVideoVisibility();
 
+        if (!nextIsVideo) {
+            this.pendingWebVideoShouldPlay = false;
+            if (this.nativeVideo) {
+                this.nativeVideo.pause();
+                this.nativeVideo.muted = true;
+                this.nativeVideo.removeAttribute("src");
+                this.nativeVideo.load();
+            }
+        }
+
         if (!this.nativeVideo && this.isVideoActive) {
             return;
         }
@@ -427,6 +705,8 @@ window.audioPlayer = {
 
         if (this.isVideoActive && this.nativeVideo) {
             this.activePlayer = this.nativeVideo;
+            this.stopWebAudio();
+            this.nativeVideo.muted = false;
         } else {
             this.activePlayer = this.nativeAudio;
         }
@@ -485,12 +765,38 @@ window.audioPlayer = {
         this.play();
     },
 
+    loadVideoOnly: function (url, isWebM, playing, time) {
+        this.syncWebVideoState(url, isWebM, true, !!playing, Number.isFinite(time) ? time : null);
+    },
+
+    playVideoOnly: function () {
+        if (!this.nativeVideo) {
+            this.log("playVideoOnly skipped", { hasVideo: false });
+            return;
+        }
+
+        this.pendingWebVideoShouldPlay = true;
+        this.applyPendingWebVideoPlayback();
+    },
+
     play: function () {
+        if (this.isVideoActive && this.nativeVideo && this.activePlayer === this.nativeVideo) {
+            this.pendingWebVideoShouldPlay = true;
+            this.applyPendingWebVideoPlayback();
+            return;
+        }
+
         if (this.activePlayer) {
             this.activePlayer.play().catch(e => this.reportError("play", this.activePlayer, e));
         }
     },
     pause: function () {
+        if (this.isVideoActive && this.nativeVideo) {
+            this.pendingWebVideoShouldPlay = false;
+            this.nativeVideo.pause();
+            return;
+        }
+
         if (this.activePlayer) {
             this.activePlayer.pause();
         }
@@ -526,6 +832,9 @@ window.audioPlayer = {
     },
     dispose: function () {
         this.stopProgressLoop();
+        this.exitVideoFullscreen();
+        this.unregisterFullscreenListener();
+        this.stopWebPlayback();
         this.dotNetHelper = null;
     }
 };

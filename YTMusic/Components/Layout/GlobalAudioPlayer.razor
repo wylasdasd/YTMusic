@@ -16,12 +16,15 @@
     private DotNetObjectReference<GlobalAudioPlayer>? _objRef;
     private string? _lastUrl = null;
     private bool _lastIsVideo;
+    private bool _lastPlaying;
+    private bool _lastHybrid;
 
     protected override void OnInitialized()
     {
         PlayerService.OnChange += OnPlayerStateChanged;
         PlayerService.OnRequestReplay += OnRequestReplay;
         PlayerService.OnRequestPause += OnRequestPause;
+        PlayerService.OnRequestStopWebPlayback += OnRequestStopWebPlayback;
         PlayerService.OnRequestPlay += OnRequestPlay;
         PlayerService.OnRequestSeek += OnRequestSeek;
         PlayerService.OnTimeChanged += OnPlayerTimeChanged;
@@ -29,7 +32,7 @@
 
     private void OnPlayerTimeChanged()
     {
-        if (!PlayerService.IsUsingNativePlayback && !PlayerService.IsUsingNativeVideoPlayback)
+        if (!PlayerService.IsUsingNativePlayback && !PlayerService.IsUsingNativeVideoPlayback && !PlayerService.IsUsingHybridWebVideo)
         {
             return;
         }
@@ -82,7 +85,12 @@
 
     private void OnPlayerStateChanged()
     {
-        if (PlayerService.IsUsingNativePlayback)
+        if (PlayerService.IsUsingNativeVideoPlayback)
+        {
+            return;
+        }
+
+        if (PlayerService.IsUsingNativePlayback && !PlayerService.IsCurrentStreamVideo)
         {
             return;
         }
@@ -91,19 +99,50 @@
         {
             try
             {
-                if (PlayerService.CurrentStreamUrl != null &&
-                    (PlayerService.CurrentStreamUrl != _lastUrl || PlayerService.IsCurrentStreamVideo != _lastIsVideo))
-                {
-                    _lastUrl = PlayerService.CurrentStreamUrl;
-                    _lastIsVideo = PlayerService.IsCurrentStreamVideo;
-                    await SyncWebStreamAsync();
-                }
+                await SyncWebPlaybackIfNeededAsync();
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[AudioStateSyncError] {ex.Message}");
             }
         });
+    }
+
+    private async Task SyncWebPlaybackIfNeededAsync()
+    {
+        if (PlayerService.IsUsingNativeVideoPlayback || PlayerService.CurrentStreamUrl == null)
+        {
+            return;
+        }
+
+        if (PlayerService.IsUsingNativePlayback && !PlayerService.IsCurrentStreamVideo)
+        {
+            return;
+        }
+
+        var stateChanged = PlayerService.CurrentStreamUrl != _lastUrl
+            || PlayerService.IsCurrentStreamVideo != _lastIsVideo
+            || PlayerService.IsPlaying != _lastPlaying
+            || PlayerService.IsUsingHybridWebVideo != _lastHybrid;
+
+        if (!stateChanged)
+        {
+            return;
+        }
+
+        _lastUrl = PlayerService.CurrentStreamUrl;
+        _lastIsVideo = PlayerService.IsCurrentStreamVideo;
+        _lastPlaying = PlayerService.IsPlaying;
+        _lastHybrid = PlayerService.IsUsingHybridWebVideo;
+
+        if (PlayerService.IsCurrentStreamVideo)
+        {
+            await SyncWebVideoAsync();
+        }
+        else
+        {
+            await SyncWebAudioAsync();
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -113,32 +152,57 @@
             _objRef = DotNetObjectReference.Create(this);
             await JSRuntime.InvokeVoidAsync("audioPlayer.init", _audioElement, _videoElement, _videoHost, _objRef);
 
-            if (!PlayerService.IsUsingNativePlayback && PlayerService.CurrentStreamUrl != null)
+            if (PlayerService.CurrentStreamUrl != null
+                && (!PlayerService.IsUsingNativePlayback || PlayerService.IsCurrentStreamVideo))
             {
-                _lastUrl = PlayerService.CurrentStreamUrl;
-                _lastIsVideo = PlayerService.IsCurrentStreamVideo;
-                await SyncWebStreamAsync();
+                await SyncWebPlaybackIfNeededAsync();
             }
         }
     }
 
-    private async Task SyncWebStreamAsync()
+    private async Task SyncWebVideoAsync()
     {
-        if (PlayerService.IsUsingNativePlayback || PlayerService.CurrentStreamUrl == null)
-        {
-            return;
-        }
+        PlaybackDiagnostics.Log(
+            $"GlobalAudioPlayer.SyncWebVideo hybrid={PlayerService.IsUsingHybridWebVideo} playing={PlayerService.IsPlaying} url={PlaybackDiagnostics.DescribeUrl(PlayerService.CurrentStreamUrl)}");
+        await JSRuntime.InvokeVoidAsync(
+            "audioPlayer.syncWebVideoState",
+            PlayerService.CurrentStreamUrl,
+            PlayerService.IsCurrentStreamWebM,
+            PlayerService.IsUsingHybridWebVideo,
+            PlayerService.IsPlaying,
+            PlayerService.CurrentTime);
+    }
 
+    private async Task SyncWebAudioAsync()
+    {
+        PlaybackDiagnostics.Log(
+            $"GlobalAudioPlayer.SyncWebAudio playing={PlayerService.IsPlaying} url={PlaybackDiagnostics.DescribeUrl(PlayerService.CurrentStreamUrl)}");
         await JSRuntime.InvokeVoidAsync(
             "audioPlayer.loadSource",
             PlayerService.CurrentStreamUrl,
             PlayerService.IsCurrentStreamWebM,
-            PlayerService.IsCurrentStreamVideo);
+            false);
 
         if (PlayerService.IsPlaying)
         {
             await JSRuntime.InvokeVoidAsync("audioPlayer.play");
         }
+    }
+
+    private void OnRequestStopWebPlayback()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                _lastUrl = null;
+                await JSRuntime.InvokeVoidAsync("audioPlayer.stopWebPlayback");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AudioStopWebError] {ex.Message}");
+            }
+        });
     }
 
     private void OnRequestPause()
@@ -162,7 +226,14 @@
         {
             try
             {
-                await JSRuntime.InvokeVoidAsync("audioPlayer.play");
+                if (PlayerService.IsUsingHybridWebVideo)
+                {
+                    await JSRuntime.InvokeVoidAsync("audioPlayer.playVideoOnly");
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("audioPlayer.play");
+                }
             }
             catch (Exception ex)
             {
@@ -219,7 +290,7 @@
     [JSInvokable]
     public void OnPlaybackError(string details)
     {
-        Console.WriteLine($"[AudioPlaybackError] {details}");
+        PlaybackDiagnostics.LogError($"WebView playback error: {details}");
     }
 
     public void Dispose()
@@ -227,6 +298,7 @@
         PlayerService.OnChange -= OnPlayerStateChanged;
         PlayerService.OnRequestReplay -= OnRequestReplay;
         PlayerService.OnRequestPause -= OnRequestPause;
+        PlayerService.OnRequestStopWebPlayback -= OnRequestStopWebPlayback;
         PlayerService.OnRequestPlay -= OnRequestPlay;
         PlayerService.OnRequestSeek -= OnRequestSeek;
         PlayerService.OnTimeChanged -= OnPlayerTimeChanged;

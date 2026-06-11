@@ -34,7 +34,18 @@
             <div class="player-content player-content--video">
                 @if (!PlayerService.UseNativeVideoPlayback)
                 {
-                    <div class="player-video-frame" @ref="_videoFrame"></div>
+                    <div class="player-video-frame">
+                        <div class="player-video-frame__mount" @ref="_videoFrame"></div>
+                        @if (_videoAttached)
+                        {
+                            <button type="button"
+                                    class="player-video-fullscreen-btn"
+                                    @onclick="ToggleFullscreenAsync"
+                                    aria-label="@(_isFullscreen ? "Exit fullscreen" : "Enter fullscreen")">
+                                <MudIcon Icon="@(_isFullscreen ? Icons.Material.Filled.FullscreenExit : Icons.Material.Filled.Fullscreen)" />
+                            </button>
+                        }
+                    </div>
                 }
 
                 <div class="player-meta player-meta--video">
@@ -135,6 +146,8 @@
     private bool _progressMounted;
     private string? _progressTrackKey;
     private bool _lastNativeProgressMode;
+    private bool _isFullscreen;
+    private DotNetObjectReference<PlayerVideo>? _fullscreenObjRef;
 
     protected override void OnInitialized()
     {
@@ -163,8 +176,8 @@
 
         if (PlayerService.CurrentVideo != null && !_videoAttached)
         {
-            await JSRuntime.InvokeVoidAsync("audioPlayer.attachVideoTo", _videoFrame);
-            _videoAttached = true;
+            await AttachVideoFrameAsync();
+            await SyncWebVideoFromServiceAsync();
         }
 
         if (PlayerService.CurrentVideo != null && !PlayerService.UseNativeVideoPlayback)
@@ -195,6 +208,7 @@
         _ = CheckFavoriteStatusAsync();
         _ = CheckVideoAvailabilityAsync();
         _ = AttachVideoIfNeededAsync();
+        _ = SyncWebVideoFromServiceAsync();
         _ = SyncPlayerChromeAsync();
         InvokeAsync(StateHasChanged);
     }
@@ -279,13 +293,33 @@
 
         try
         {
-            await JSRuntime.InvokeVoidAsync("audioPlayer.attachVideoTo", _videoFrame);
-            _videoAttached = true;
+            PlaybackDiagnostics.Log(
+                $"PlayerVideo.AttachVideo hybrid={PlayerService.IsUsingHybridWebVideo} url={PlaybackDiagnostics.DescribeUrl(PlayerService.CurrentStreamUrl)}");
+            await AttachVideoFrameAsync();
+            await SyncWebVideoFromServiceAsync();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[PlayerVideo] attach video failed: {ex.Message}");
+            PlaybackDiagnostics.LogError("PlayerVideo attach video failed", ex);
         }
+    }
+
+    private async Task SyncWebVideoFromServiceAsync()
+    {
+        if (PlayerService.UseNativeVideoPlayback
+            || !PlayerService.IsCurrentStreamVideo
+            || PlayerService.CurrentStreamUrl == null)
+        {
+            return;
+        }
+
+        await JSRuntime.InvokeVoidAsync(
+            "audioPlayer.syncWebVideoState",
+            PlayerService.CurrentStreamUrl,
+            PlayerService.IsCurrentStreamWebM,
+            PlayerService.IsUsingHybridWebVideo,
+            PlayerService.IsPlaying,
+            PlayerService.CurrentTime);
     }
 
     protected override void OnAfterRender(bool firstRender)
@@ -427,6 +461,30 @@
         };
     }
 
+    private async Task AttachVideoFrameAsync()
+    {
+        _fullscreenObjRef ??= DotNetObjectReference.Create(this);
+        await JSRuntime.InvokeVoidAsync("audioPlayer.registerFullscreenListener", _fullscreenObjRef);
+        await JSRuntime.InvokeVoidAsync("audioPlayer.attachVideoTo", _videoFrame);
+        _videoAttached = true;
+        _isFullscreen = await JSRuntime.InvokeAsync<bool>("audioPlayer.isVideoFullscreen");
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleFullscreenAsync()
+    {
+        await JSRuntime.InvokeVoidAsync("audioPlayer.toggleVideoFullscreen");
+        _isFullscreen = await JSRuntime.InvokeAsync<bool>("audioPlayer.isVideoFullscreen");
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnVideoFullscreenChanged(bool isFullscreen)
+    {
+        _isFullscreen = isFullscreen;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
     private async Task PlayAudioAsync()
     {
         if (PlayerService.IsSwitchingTrack)
@@ -469,10 +527,14 @@
         {
             _ = JSRuntime.InvokeVoidAsync("audioPlayer.unmountProgressBar");
         }
+        _ = JSRuntime.InvokeVoidAsync("audioPlayer.exitVideoFullscreen");
+        _ = JSRuntime.InvokeVoidAsync("audioPlayer.unregisterFullscreenListener");
         if (!PlayerService.UseNativeVideoPlayback && PlayerService.IsCurrentStreamVideo)
         {
             _ = JSRuntime.InvokeVoidAsync("audioPlayer.detachVideo");
         }
         _videoAttached = false;
+        _fullscreenObjRef?.Dispose();
+        _fullscreenObjRef = null;
     }
 }
