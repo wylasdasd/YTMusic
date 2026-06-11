@@ -343,8 +343,8 @@ namespace YTMusic.Services
         public bool IsLoading { get; private set; }
         public bool IsSwitchingTrack { get; private set; }
         public bool UseNativePlayback => _nativeAudio.IsSupported;
-        // Android 视频与 Windows 一致：走 WebView + CurrentStreamUrl / LocalFileProxy，不用全屏原生 Activity。
-        public bool UseNativeVideoPlayback => false;
+        /// <summary>当前是否为 Android 全屏原生 ExoPlayer 视频（仅本地 .mp4）。在线视频仍为 WebView。</summary>
+        public bool UseNativeVideoPlayback => IsUsingNativeVideoPlayback;
         public IPlaybackInstance? ActivePlayback => _playbackSwitcher.Active;
         public PlaybackKind ActivePlaybackKind => _playbackSwitcher.ActiveKind;
         public bool IsUsingNativePlayback => ActivePlaybackKind == PlaybackKind.NativeAudio;
@@ -507,8 +507,9 @@ namespace YTMusic.Services
                 var artistName = string.IsNullOrWhiteSpace(author) ? "Local File" : author;
                 var options = BuildPlaybackOptions(autoPlay: true);
 
-                if (isStreamVideo && UseNativeVideoPlayback)
+                if (ShouldUseNativeLocalVideo(filePath, isVideo == true))
                 {
+                    PlaybackDiagnostics.Log($"PlayLocalFile native video path={filePath}");
                     await ActivatePlaybackAsync(
                         PlaybackKind.NativeVideo,
                         BuildLocalPlaybackSource(filePath, isWebM, isStreamVideo, title, artistName, null),
@@ -1011,8 +1012,9 @@ namespace YTMusic.Services
                     var isWebM = video.LocalFilePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
                     var isStreamVideo = ShouldPlayLocalAsVideo(video.LocalFilePath, video.IsVideo == true);
 
-                    if (isStreamVideo && UseNativeVideoPlayback)
+                    if (ShouldUseNativeLocalVideo(video.LocalFilePath, video.IsVideo == true))
                     {
+                        PlaybackDiagnostics.Log($"PlayInternal local native video path={video.LocalFilePath}");
                         await ActivatePlaybackAsync(
                             PlaybackKind.NativeVideo,
                             BuildLocalPlaybackSource(video.LocalFilePath, isWebM, isStreamVideo, video.Title, video.Author, video.DurationSeconds),
@@ -1076,8 +1078,9 @@ namespace YTMusic.Services
                             options);
                         AddToPlaybackHistory(video, false);
                     }
-                    else if (isStreamVideo && UseNativeVideoPlayback)
+                    else if (ShouldUseNativeLocalVideo(video.LocalFilePath, downloaded.IsVideo))
                     {
+                        PlaybackDiagnostics.Log($"PlayInternal downloaded native video path={video.LocalFilePath}");
                         await ActivatePlaybackAsync(
                             PlaybackKind.NativeVideo,
                             BuildLocalPlaybackSource(video.LocalFilePath, isWebM, isStreamVideo, video.Title, video.Author, video.DurationSeconds),
@@ -1472,6 +1475,12 @@ namespace YTMusic.Services
 
             return Path.GetExtension(filePath).Equals(".mp4", StringComparison.OrdinalIgnoreCase);
         }
+
+        /// <summary>Android 本地 .mp4 走 VideoPlayerActivity ExoPlayer；在线视频仍走 WebView。</summary>
+        private bool ShouldUseNativeLocalVideo(string filePath, bool markedAsVideo) =>
+            OperatingSystem.IsAndroid()
+            && _nativeVideo.IsSupported
+            && ShouldPlayLocalAsVideo(filePath, markedAsVideo);
 
         private static string GetFileContentType(string filePath, bool isVideo)
         {

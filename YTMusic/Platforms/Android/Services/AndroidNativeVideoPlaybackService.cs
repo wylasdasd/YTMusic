@@ -1,5 +1,6 @@
 using Android.Content;
 using Application = Android.App.Application;
+using Microsoft.Maui.ApplicationModel;
 
 namespace YTMusic.Platforms.Android.Services
 {
@@ -23,9 +24,13 @@ namespace YTMusic.Platforms.Android.Services
             VideoPlayerActivity.PlaybackStopped += OnPlaybackStopped;
         }
 
-        public Task PlayAsync(string source, bool isLocalFile, string? title, string? artist, double? durationSeconds = null)
+        public async Task PlayAsync(string source, bool isLocalFile, string? title, string? artist, double? durationSeconds = null)
         {
-            return VideoPlayerActivity.PlayAsync(_context, source, isLocalFile, title, artist, durationSeconds);
+            await MainThread.InvokeOnMainThreadAsync(() =>
+            {
+                var context = Platform.CurrentActivity ?? _context;
+                VideoPlayerActivity.PlayAsync(context, source, isLocalFile, title, artist, durationSeconds);
+            }).ConfigureAwait(false);
         }
 
         public Task PauseAsync()

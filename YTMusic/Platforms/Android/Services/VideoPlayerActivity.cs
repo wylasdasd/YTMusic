@@ -254,6 +254,8 @@ namespace YTMusic.Platforms.Android.Services
                             .SetUri(ResolveUri(source, isLocalFile))
                             .Build();
 
+                        _player.Stop();
+                        _player.ClearMediaItems();
                         _player.SetMediaItem(mediaItem);
                         _player.Prepare();
                         _player.Play();
