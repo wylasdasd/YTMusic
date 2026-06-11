@@ -365,13 +365,26 @@ namespace YTMusic.Services
         public PlaybackMode CurrentMode { get; private set; } = PlaybackMode.Sequential;
         private List<int> _shuffleIndices = new List<int>();
         private readonly List<PlaybackHistoryItem> _playbackHistory = new List<PlaybackHistoryItem>();
+        private readonly UiPreferencesService _uiPreferences;
+        private readonly object _remoteVideoPrefetchLock = new();
+        private string? _prefetchedRemoteVideoId;
+        private RemoteWebVideoStreams? _prefetchedRemoteVideo;
+        private RemoteVideoStreamQuality _prefetchedRemoteVideoQuality;
+        private DateTime _prefetchedRemoteVideoAt;
+        private static readonly TimeSpan RemoteVideoPrefetchTtl = TimeSpan.FromMinutes(30);
 
-        public MusicPlayerService(INativeAudioPlaybackService nativeAudio, INativeVideoPlaybackService nativeVideo, ILocalMusicService localMusicService, NetworkErrorService networkErrorService)
+        public MusicPlayerService(
+            INativeAudioPlaybackService nativeAudio,
+            INativeVideoPlaybackService nativeVideo,
+            ILocalMusicService localMusicService,
+            NetworkErrorService networkErrorService,
+            UiPreferencesService uiPreferences)
         {
             _nativeAudio = nativeAudio;
             _nativeVideo = nativeVideo;
             _localMusicService = localMusicService;
             _networkErrorService = networkErrorService;
+            _uiPreferences = uiPreferences;
             _youtubeClient = new YoutubeClient();
 
             if (!_nativeAudio.IsSupported && !OperatingSystem.IsAndroid())
@@ -1110,7 +1123,9 @@ namespace YTMusic.Services
                 if (video.IsVideo == true)
                 {
                     PlaybackDiagnostics.Log($"PlayRemoteVideo start videoId={video.VideoId} isTrackSwitch={isTrackSwitch}");
-                    var webVideo = await ResolveRemoteWebVideoStreamsAsync(video.VideoId, streamCts.Token).ConfigureAwait(false);
+                    var webVideo = await GetRemoteWebVideoStreamsForPlayAsync(
+                        video.VideoId,
+                        streamCts.Token).ConfigureAwait(false);
 
                     if (webVideo != null)
                     {
@@ -1268,6 +1283,7 @@ namespace YTMusic.Services
 
                     CurrentVideo = video;
                     IsPlaying = shouldAutoPlay;
+                    ScheduleRemoteVideoPrefetchIfEnabled(video.VideoId);
                     return true;
                 }
 
@@ -1463,13 +1479,106 @@ namespace YTMusic.Services
                 .GetWithHighestBitrate() ?? manifest.GetAudioOnlyStreams().GetWithHighestBitrate();
         }
 
-        private async Task<RemoteWebVideoStreams?> ResolveRemoteWebVideoStreamsAsync(string videoId, CancellationToken cancellationToken = default)
+        private bool PreferLowestRemoteVideoStream() =>
+            _uiPreferences.RemoteVideoStreamQuality == RemoteVideoStreamQuality.Lowest;
+
+        private void ScheduleRemoteVideoPrefetchIfEnabled(string videoId)
+        {
+            if (!_uiPreferences.PrefetchRemoteVideo
+                || string.IsNullOrWhiteSpace(videoId)
+                || videoId == "local")
+            {
+                return;
+            }
+
+            _ = PrefetchRemoteVideoAsync(videoId);
+        }
+
+        private async Task PrefetchRemoteVideoAsync(string videoId)
+        {
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                var streams = await ResolveRemoteWebVideoStreamsAsync(
+                    videoId,
+                    cts.Token,
+                    PreferLowestRemoteVideoStream()).ConfigureAwait(false);
+
+                lock (_remoteVideoPrefetchLock)
+                {
+                    _prefetchedRemoteVideoId = videoId;
+                    _prefetchedRemoteVideo = streams;
+                    _prefetchedRemoteVideoQuality = _uiPreferences.RemoteVideoStreamQuality;
+                    _prefetchedRemoteVideoAt = DateTime.UtcNow;
+                }
+
+                PlaybackDiagnostics.Log($"PrefetchRemoteVideo done videoId={videoId} available={streams != null}");
+            }
+            catch (Exception ex)
+            {
+                PlaybackDiagnostics.LogError($"PrefetchRemoteVideo failed videoId={videoId}", ex);
+            }
+        }
+
+        private Task<RemoteWebVideoStreams?> GetRemoteWebVideoStreamsForPlayAsync(
+            string videoId,
+            CancellationToken cancellationToken)
+        {
+            if (_uiPreferences.PrefetchRemoteVideo)
+            {
+                lock (_remoteVideoPrefetchLock)
+                {
+                    if (_prefetchedRemoteVideoId == videoId
+                        && _prefetchedRemoteVideo != null
+                        && _prefetchedRemoteVideoQuality == _uiPreferences.RemoteVideoStreamQuality
+                        && DateTime.UtcNow - _prefetchedRemoteVideoAt < RemoteVideoPrefetchTtl)
+                    {
+                        PlaybackDiagnostics.Log($"PlayRemoteVideo using prefetch videoId={videoId}");
+                        return Task.FromResult<RemoteWebVideoStreams?>(_prefetchedRemoteVideo);
+                    }
+                }
+            }
+
+            return ResolveRemoteWebVideoStreamsAsync(
+                videoId,
+                cancellationToken,
+                PreferLowestRemoteVideoStream());
+        }
+
+        private static IVideoStreamInfo? SelectLowestVideoOnlyStream(StreamManifest manifest)
+        {
+            var mp4Streams = manifest.GetVideoOnlyStreams()
+                .Where(s => s.Container == Container.Mp4)
+                .OrderBy(s => s.VideoQuality.MaxHeight)
+                .ToList();
+
+            IVideoStreamInfo? selected = mp4Streams.Count > 0
+                ? mp4Streams[0]
+                : manifest.GetVideoOnlyStreams()
+                    .OrderBy(s => s.VideoQuality.MaxHeight)
+                    .FirstOrDefault();
+
+            if (selected == null)
+            {
+                return null;
+            }
+
+            PlaybackDiagnostics.Log(
+                $"ResolveStreams lowest video height={selected.VideoQuality.MaxHeight} label={selected.VideoQuality.Label} container={selected.Container}");
+            return selected;
+        }
+
+        private async Task<RemoteWebVideoStreams?> ResolveRemoteWebVideoStreamsAsync(
+            string videoId,
+            CancellationToken cancellationToken = default,
+            bool preferLowestVideo = true)
         {
             var manifest = await GetStreamManifestAsync(videoId, cancellationToken).ConfigureAwait(false);
             var muxedCount = manifest.GetMuxedStreams().Count();
             var videoOnlyCount = manifest.GetVideoOnlyStreams().Count();
             var audioOnlyCount = manifest.GetAudioOnlyStreams().Count();
-            PlaybackDiagnostics.Log($"ResolveStreams videoId={videoId} muxed={muxedCount} videoOnly={videoOnlyCount} audioOnly={audioOnlyCount}");
+            PlaybackDiagnostics.Log(
+                $"ResolveStreams videoId={videoId} muxed={muxedCount} videoOnly={videoOnlyCount} audioOnly={audioOnlyCount} preferLowest={preferLowestVideo}");
 
             var muxed = manifest.GetMuxedStreams().GetWithHighestVideoQuality();
             if (muxed != null)
@@ -1478,10 +1587,12 @@ namespace YTMusic.Services
                 return new RemoteWebVideoStreams { VideoStream = muxed, CompanionAudioStream = null };
             }
 
-            var videoOnly = manifest.GetVideoOnlyStreams()
-                .Where(s => s.Container == Container.Mp4)
-                .GetWithHighestVideoQuality()
-                ?? manifest.GetVideoOnlyStreams().GetWithHighestVideoQuality();
+            var videoOnly = preferLowestVideo
+                ? SelectLowestVideoOnlyStream(manifest)
+                : manifest.GetVideoOnlyStreams()
+                    .Where(s => s.Container == Container.Mp4)
+                    .GetWithHighestVideoQuality()
+                    ?? manifest.GetVideoOnlyStreams().GetWithHighestVideoQuality();
             if (videoOnly == null)
             {
                 PlaybackDiagnostics.LogError($"ResolveStreams no video-only stream videoId={videoId}");
@@ -1489,8 +1600,11 @@ namespace YTMusic.Services
             }
 
             var companionAudio = SelectPreferredAudioStream(manifest);
+            var videoHeight = videoOnly is IVideoStreamInfo videoStream
+                ? videoStream.VideoQuality.MaxHeight
+                : 0;
             PlaybackDiagnostics.Log(
-                $"ResolveStreams using videoOnly container={videoOnly.Container} companionAudio={(companionAudio != null ? companionAudio.Container.ToString() : "none")}");
+                $"ResolveStreams using videoOnly container={videoOnly.Container} height={videoHeight} companionAudio={(companionAudio != null ? companionAudio.Container.ToString() : "none")}");
             return new RemoteWebVideoStreams
             {
                 VideoStream = videoOnly,

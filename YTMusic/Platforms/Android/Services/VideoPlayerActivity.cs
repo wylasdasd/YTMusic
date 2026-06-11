@@ -72,10 +72,13 @@ namespace YTMusic.Platforms.Android.Services
             };
             _playerView.SetBackgroundColor(global::Android.Graphics.Color.Black);
             _playerView.UseController = true;
+            _playerView.KeepScreenOn = true;
 
             root.AddView(_playerView);
+            root.KeepScreenOn = true;
 
             SetContentView(root);
+            Window?.AddFlags(WindowManagerFlags.KeepScreenOn);
 
             _player = AndroidExoPlayerFactory.CreateVideoPlayer(this);
             _player.AddListener(this);
@@ -94,6 +97,7 @@ namespace YTMusic.Platforms.Android.Services
         protected override void OnDestroy()
         {
             var shouldNotifyStopped = _player != null;
+            Window?.ClearFlags(WindowManagerFlags.KeepScreenOn);
             StopPositionUpdates();
 
             if (_player != null)

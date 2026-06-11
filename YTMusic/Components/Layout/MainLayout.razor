@@ -134,6 +134,37 @@
                            Value="UiPreferences.MediaTitleTwoLines"
                            ValueChanged="OnMediaTitleTwoLinesChanged" />
             </div>
+            <div class="ytm-setting-item">
+                <div class="ytm-setting-copy">
+                    <span class="ytm-theme-dot" style="background: var(--ytm-accent);"></span>
+                    <div class="ytm-setting-text">
+                        <span>视频流后台预检</span>
+                        <small>播放在线音频时后台解析视频流，点视频时更快（额外消耗流量）</small>
+                    </div>
+                </div>
+                <MudSwitch T="bool"
+                           Color="Color.Primary"
+                           Value="UiPreferences.PrefetchRemoteVideo"
+                           ValueChanged="OnPrefetchRemoteVideoChanged" />
+            </div>
+            <div class="ytm-setting-item">
+                <div class="ytm-setting-copy">
+                    <span class="ytm-theme-dot" style="background: var(--ytm-accent);"></span>
+                    <div class="ytm-setting-text">
+                        <span>分离流视频画质</span>
+                        <small>无 muxed 时 video-only 分辨率：最低起播更快，最高画质更好</small>
+                    </div>
+                </div>
+                <MudSelect T="RemoteVideoStreamQuality"
+                           Dense="true"
+                           Margin="Margin.Dense"
+                           Value="UiPreferences.RemoteVideoStreamQuality"
+                           ValueChanged="OnRemoteVideoStreamQualityChanged"
+                           Style="max-width: 6.5rem;">
+                    <MudSelectItem Value="RemoteVideoStreamQuality.Lowest">最低</MudSelectItem>
+                    <MudSelectItem Value="RemoteVideoStreamQuality.Highest">最高</MudSelectItem>
+                </MudSelect>
+            </div>
             <button class="ytm-theme-item" @onclick="CopyDownloadPathAsync">
                 <span class="ytm-theme-dot" style="background: var(--ytm-accent);"></span>
                 <span>Copy Download Path</span>
@@ -431,6 +462,18 @@
     private Task OnMediaTitleTwoLinesChanged(bool value)
     {
         UiPreferences.SetMediaTitleTwoLines(value);
+        return Task.CompletedTask;
+    }
+
+    private Task OnPrefetchRemoteVideoChanged(bool value)
+    {
+        UiPreferences.SetPrefetchRemoteVideo(value);
+        return Task.CompletedTask;
+    }
+
+    private Task OnRemoteVideoStreamQualityChanged(RemoteVideoStreamQuality value)
+    {
+        UiPreferences.SetRemoteVideoStreamQuality(value);
         return Task.CompletedTask;
     }
 

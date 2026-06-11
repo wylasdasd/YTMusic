@@ -323,26 +323,19 @@
             return;
         }
 
+        var parameters = new DialogParameters { { "TrackTitle", currentVideo.Title } };
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<RemoteVideoConfirmDialog>("播放视频", parameters, options);
+        var result = await dialog.Result;
+        if (result == null || result.Canceled)
+        {
+            return;
+        }
+
         try
         {
             GlobalState.ShowLoading();
             StateHasChanged();
-
-            var remoteAvailable = await PlayerService.CheckRemoteVideoAvailableAsync(currentVideo.VideoId);
-            if (!remoteAvailable)
-            {
-                Snackbar.Add("无法获取在线视频流，视频可能不可用或网络异常。", Severity.Warning);
-                return;
-            }
-
-            var parameters = new DialogParameters { { "TrackTitle", currentVideo.Title } };
-            var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
-            var dialog = await DialogService.ShowAsync<RemoteVideoConfirmDialog>("播放视频", parameters, options);
-            var result = await dialog.Result;
-            if (result == null || result.Canceled)
-            {
-                return;
-            }
 
             var playOk = await PlayerService.PlayRemoteVideoForCurrentAsync();
             PlaybackDiagnostics.Log(
@@ -351,7 +344,7 @@
             {
                 PlaybackDiagnostics.LogError(
                     $"PlayerAudio.PlayVideo navigate failed playOk={playOk} isVideo={PlayerService.IsCurrentStreamVideo}");
-                Snackbar.Add("在线视频播放失败。", Severity.Error);
+                Snackbar.Add("在线视频播放失败，视频可能不可用或网络异常。", Severity.Error);
             }
         }
         finally
