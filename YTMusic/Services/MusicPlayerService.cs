@@ -1539,10 +1539,8 @@ namespace YTMusic.Services
         private async Task StartNativeLocalPlaybackAsync(string filePath, PlayingItem video, bool shouldAutoPlay)
         {
             await StopOtherPlaybackPipelineAsync(willUseNativePlayback: true, willUseNativeVideoPlayback: false);
-            if (_nativeAudio.IsSupported)
-            {
-                await _nativeAudio.StopAsync();
-            }
+            // 不要在此调用 StopAsync：Android Stop 会 StopSelf 销毁 ForegroundService，
+            // 与紧随其后的 PlayAsync 竞态会导致本地音频无法起播。PlayAsync 内部会 Stop+换源。
 
             IsUsingNativePlayback = true;
             IsUsingNativeVideoPlayback = false;
