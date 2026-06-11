@@ -7,6 +7,8 @@ using MudBlazor;
 using YTMusic.Services;
 using YTMusic.Components.Dialogs;
 
+using YTMusic.Services.Abstractions;
+
 namespace YTMusic.Components.Pages
 {
     public class DownloadsVM

@@ -6,7 +6,7 @@ using Foundation;
 
 namespace YTMusic.Platforms.iOS.Services
 {
-    public class IosNativeAudioPlaybackService : YTMusic.Services.INativeAudioPlaybackService
+    public class IosNativeAudioPlaybackService : YTMusic.Services.Abstractions.INativeAudioPlaybackService
     {
         private AVPlayer? _player;
         private NSObject? _timeObserver;

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using YoutubeExplode.Search;
 
-namespace YTMusic.Services
+namespace YTMusic.Services.Abstractions
 {
     public interface IYouTubeService
     {

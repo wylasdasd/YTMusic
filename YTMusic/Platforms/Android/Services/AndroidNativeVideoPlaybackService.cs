@@ -4,7 +4,7 @@ using Microsoft.Maui.ApplicationModel;
 
 namespace YTMusic.Platforms.Android.Services
 {
-    public class AndroidNativeVideoPlaybackService : YTMusic.Services.INativeVideoPlaybackService
+    public class AndroidNativeVideoPlaybackService : YTMusic.Services.Abstractions.INativeVideoPlaybackService
     {
         private readonly Context _context;
 

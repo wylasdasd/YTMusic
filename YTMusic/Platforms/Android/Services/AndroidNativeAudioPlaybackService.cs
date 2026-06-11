@@ -4,7 +4,7 @@ using Application = Android.App.Application;
 
 namespace YTMusic.Platforms.Android.Services
 {
-    public class AndroidNativeAudioPlaybackService : YTMusic.Services.INativeAudioPlaybackService
+    public class AndroidNativeAudioPlaybackService : YTMusic.Services.Abstractions.INativeAudioPlaybackService
     {
         private readonly Context _context;
 

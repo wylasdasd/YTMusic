@@ -1,5 +1,7 @@
 # 系统模式 (System Patterns)
 
+> 最后更新：2026-06-29
+
 ## 技术架构
 - **框架**: .NET 10 Blazor MAUI (跨平台桌面/移动端)。
 - **UI 组件**: MudBlazor。
@@ -27,7 +29,8 @@
   - `ytm-tabs-touch-scroll` + `initTouchScrollTabs`：隐藏 Mud 箭头，用 `.mud-tabs-tabbar-content` 原生横向滚动。
 - **全局状态管理**: `MusicPlayerService` 作为单例/作用域状态提供者，向整个 UI 提供数据，并通过事件 (`OnChange`) 通知组件更新。
 - **轻量设置持久化**:
-  - `UiPreferencesService` 统一承接主题索引、`Favorites Image`、`MediaTitleTwoLines` 等轻量设置。
+  - `UiPreferencesService` 统一承接主题索引、`Favorites Image`、`MediaTitleTwoLines`、分离流画质、视频预检等。
+  - `AListUploadSettingsService` 承接 AList `BaseUrl` / `Token` / `RemoteDirectory`。
   - 这类设置不落 SQLite，而是走 MAUI `Preferences`。
 - **标题展示**:
   - `MediaTitle` 组件读取 `UiPreferencesService.MediaTitleTwoLines`，全局统一两行截断或完整换行。
@@ -37,14 +40,20 @@
 - **页面级 CSS**:
   - 项目 `EnableDefaultCssItems=false`；`*.razor.css` 会进 `YTMusic.styles.css`，但不宜假设所有页面样式自动生效，关键布局应优先 `app.css` 或确认 bundle。
 - **导航分层**:
-  - 底部导航保留高频核心入口（Home / Favorites / Player / Download / Other）。
-  - `Other` 承接低频页面；`Transfers` 等页面内部再做页内二/三级导航。
+  - 底部导航：**Favorites / Player / Home / Other**（4 项）。
+  - `Other` 承接本地资源、传输任务、AList 上传、播放历史；`Transfers` 等页内二/三级导航。
 - **播放历史统一入口**:
   - 播放历史不应在页面层各自维护，而是统一在 `MusicPlayerService` 成功开始播放后写入。
   - 页面层只负责展示与回放历史项。
+- **播放架构（方案 B）**:
+  - 详见 **[playbackArchitecture.md](./playbackArchitecture.md)**（路由表、五种 `PlaybackKind`、`PlaybackSwitcher`、流解析、UI 协作、设置项）。
+  - 概要：`MusicPlayerService` → `PlaybackSwitcher`（`SemaphoreSlim`）→ `IPlaybackInstance`；任意时刻单活跃管线；`NativeAudio`↔`Hybrid` 可 `preserveNative` 共享 ExoPlayer 音频后端。
+  - Android 在线视频：`NativeVideo` + ExoPlayer（muxed 单流或 `MergingMediaSource` 合并分离流）；Windows 分离流走 `Hybrid`。
+  - 在线流：muxed 优先；分离流画质由 `UiPreferencesService.RemoteVideoStreamQuality`（默认最低）；可选后台预检 `PrefetchRemoteVideo`（默认关）。
 - **Android 视频分流**:
-  - Android 视频播放主路径为原生 `VideoPlayerActivity`。
+  - Android 视频播放主路径为原生 `VideoPlayerActivity`（`KeepScreenOn` 防熄屏）。
   - `INativeVideoPlaybackService` 需要提供足够的事件（包括 `PlaybackStopped`），让 `MusicPlayerService` 能同步原生退出、结束、暂停等状态。
+  - 在线视频确认弹窗不再预检 manifest（确认后才 loading + 解析）。
 - **Windows 窗口壳层定制**:
   - Windows 端使用 `Platforms/Windows/MainWindow.xaml` 接管默认 MAUI 窗口，而不是只依赖 `new Window(new MainPage())`。
   - `MauiProgram` 中通过 `ConfigureLifecycleEvents` 配置 `AppWindow.TitleBar` 与 `OverlappedPresenter`，保留边框、缩放、最小化/最大化能力，同时折叠标题栏高度。

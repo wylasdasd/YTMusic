@@ -1,4 +1,6 @@
-namespace YTMusic.Services
+using YTMusic.Services;
+
+namespace YTMusic.Services.Abstractions
 {
     public interface IAListRemoteDownloadManagerService
     {

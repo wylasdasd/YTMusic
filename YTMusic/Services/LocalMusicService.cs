@@ -7,6 +7,8 @@ using Microsoft.Data.Sqlite;
 using Dapper;
 using CommonTool.FileHelps;
 
+using YTMusic.Services.Abstractions;
+
 namespace YTMusic.Services
 {
     public class LocalMusicService : ILocalMusicService

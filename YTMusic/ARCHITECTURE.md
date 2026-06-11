@@ -1,24 +1,97 @@
 # 项目框架思路 (Project Architecture & Design)
 
-YTMusic 采用了 **.NET MAUI Blazor Hybrid** 架构。这种混合架构结合了原生应用的系统级访问能力和现代 Web 开发的灵活性。
+YTMusic 采用 **.NET MAUI Blazor Hybrid** 架构，结合原生系统能力与 Web UI 的迭代效率。
 
-## 1. 核心架构模式 (Core Architecture Pattern)
+## 1. 核心架构模式
 
-项目主要遵循 **MVVM (Model-View-ViewModel)** 以及 **依赖注入 (Dependency Injection)** 的设计模式：
+项目遵循 **MVVM** 与 **依赖注入**：
 
-*   **View (视图):** 使用 Blazor (`.razor` 文件) 和 MudBlazor 组件库来构建跨平台的用户界面。UI 是响应式的，能够适应桌面和移动端屏幕。
-*   **ViewModel (视图模型):** 位于 `Components/Pages/` 目录下（例如 `SearchVM`, `DownloadsVM`）。它们负责处理页面特定的业务逻辑、状态管理，并与后台服务进行交互，保持 UI 代码的整洁。
-*   **Services (服务层):** 位于 `Services/` 目录下。这些服务被注册为单例 (Singleton) 或瞬态 (Transient)，并在整个应用中共享核心逻辑。
+| 层级 | 位置 | 职责 |
+|------|------|------|
+| View | `Components/**/*.razor` | MudBlazor UI，响应式布局 |
+| ViewModel | `Components/Pages/*VM.cs` | 页面状态、命令、与服务交互 |
+| Services | `Services/` | 业务逻辑、持久化、播放状态机 |
+| Platform | `Platforms/` | Android ExoPlayer、Windows 窗口壳层、iOS 原生音频等 |
 
-## 2. 服务层职责拆分 (Service Layer Breakdown)
+页面尽量轻量；播放队列、当前曲目、平台分流等全局状态集中在 `MusicPlayerService`。
 
-应用将不同的业务域划分到了具体的接口和服务中：
+## 2. 播放架构（方案 B）
 
-*   `IYouTubeService`: 负责与 YouTube 后端交互。它封装了 `YoutubeExplode` 库，处理搜索、流媒体地址解析和文件下载的核心逻辑。
-*   `MusicPlayerService`: 充当全局的播放器状态机。它保存当前播放的曲目、播放状态、进度等，并作为 UI 组件（如 `Player.razor`）和底层 JavaScript 播放器之间的桥梁。
-*   `IDownloadManagerService` & `ILocalMusicService`: 负责处理本地文件系统的 I/O 操作，确保在不同操作系统的沙盒环境（如 Android/iOS 的 LocalAppData）下正确地保存和读取音乐文件。
+播放是项目最复杂的子系统，已从单一巨型方法拆出管线层：
 
-## 3. UI 与原生交互 (UI and Native Interop)
+```
+UI (PlayerAudio / PlayerVideo / GlobalAudioPlayer)
+        ↓
+MusicPlayerService (IPlaybackHost — 唯一状态源)
+        ↓ ActivatePlaybackAsync
+PlaybackSwitcher (SemaphoreSlim 串行)
+        ↓ Detach 旧实例 → Attach 新实例
+IPlaybackInstance × 5
+        ↓
+NativeAudio | NativeVideo | WebAudio | WebMuxedVideo | Hybrid
+```
 
-*   **Blazor WebView:** 整个应用的 UI 运行在 MAUI 提供的原生 WebView 控件中。所有的 HTML/CSS 渲染均在这个容器内完成。
-*   **JS Interop:** 由于部分多媒体控制（特别是复杂的音频解码）在 Web 层处理更佳，项目使用了 Blazor 的 JavaScript 互操作功能 (`IJSRuntime`)。C# 代码可以通过它调用 `wwwroot/js/audioPlayer.js` 中的方法来控制媒体播放，同时 JS 也能触发 C# 的事件（如更新播放进度）。
+- **`PlaybackSwitcher`**：保证任意时刻只有一条活跃管线，避免双音轨。
+- **`IPlaybackHost`**：宿主回调（代理配置、Web 同步、原生服务访问）。
+- **`GlobalAudioPlayer.razor`**：跨页持久 `<audio>` / `<video>`，Web/Hybrid 同步入口。
+
+完整路由表、平台差异与勿回归清单见 [`../memory-bank/playbackArchitecture.md`](../memory-bank/playbackArchitecture.md)。
+
+## 3. 服务层职责拆分
+
+| 服务 | 职责 |
+|------|------|
+| `IYouTubeService` / `YouTubeService` | YoutubeExplode 搜索、流解析、下载 |
+| `MusicPlayerService` | 播放状态机、队列、历史、`IPlaybackHost` |
+| `IDownloadManagerService` | 下载任务队列与进度 |
+| `ILocalMusicService` | 本地下载记录（SQLite） |
+| `IFavoriteService` | 收藏夹与文件夹（SQLite） |
+| `AListUploadService` / `UploadManagerService` / `IAListRemoteDownloadManagerService` | AList 上传与远端目录下载 |
+| `AListUploadSettingsService` | AList 连接设置（Preferences） |
+| `UiPreferencesService` | 主题、播放设置、标题展示偏好 |
+| `GlobalStateService` | 全局 Loading 遮罩 |
+| `NetworkErrorService` | 播放/搜索失败时的 VPN 提示 |
+| `WindowChromeService` | Windows 窗口拖拽与系统按钮 |
+| `AppResetService` | 还原默认设置 |
+
+原生播放按平台注入（`MauiProgram.cs`）：
+
+- **Android**：`AndroidNativeAudioPlaybackService` + `AndroidNativeVideoPlaybackService`
+- **iOS**：`IosNativeAudioPlaybackService` + `NullNativeVideoPlaybackService`
+- **其他**：`NullNative*` → Web 播放 + 本地 HTTP 代理
+
+## 4. UI 与原生交互
+
+- **Blazor WebView**：UI 在 MAUI WebView 内渲染。
+- **JS Interop**：`audioPlayer.js` 控制媒体元素；`ytmLayout.js` 处理底栏、滚动缓存、Tab 触摸滑动；`mouseInterop.js` 配合 Windows 拖拽。
+- **本地代理**：`LocalAudioProxy` / `LocalFileProxy`（`HttpListener`）为 WebView 提供可访问的 HTTP 地址，绕过 CORS 与本地文件限制。
+- **Windows 窗口**：`Platforms/Windows/MainWindow.xaml` + `MauiProgram` 生命周期配置 + `MainLayout` 顶栏按钮。
+
+## 5. 数据持久化
+
+- **SQLite + Dapper**：收藏夹、文件夹、下载记录（`FavoriteService`、`LocalMusicService`）。
+- **Preferences**：主题、AList 设置、播放偏好（`UiPreferencesService`、`AListUploadSettingsService`）。
+- **播放历史**：当前为 `MusicPlayerService` 运行期内存列表，尚未落库。
+
+## 6. 项目结构速览
+
+```
+YTMusic/
+  Components/Layout/     MainLayout, GlobalAudioPlayer, PageListScroll
+  Components/Pages/      页面 + *VM.cs
+  Components/Dialogs/    确认/收藏/重置等弹窗
+  Services/              业务服务
+  Services/Abstractions/ 接口（含 Playback/）
+  Services/Playback/     PlaybackSwitcher, PlaybackInstances
+  Platforms/             平台特定代码
+  wwwroot/js/            audioPlayer.js, ytmLayout.js
+CommonHelp/              共享工具库
+YTMusic.Tests/           单元测试（含 YoutubeExplode 联网测试）
+memory-bank/             决策、进度、播放架构
+```
+
+## 延伸阅读
+
+- [`CORE_LOGIC.md`](CORE_LOGIC.md) — 核心难点与解决思路
+- [`PROJECT_ANALYSIS.md`](PROJECT_ANALYSIS.md) — 代码结构与维护风险分析
+- [`../memory-bank/playbackArchitecture.md`](../memory-bank/playbackArchitecture.md) — 播放管线详细设计

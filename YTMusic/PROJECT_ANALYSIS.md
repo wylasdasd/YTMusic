@@ -1,321 +1,185 @@
 # 项目分析
 
+> 与代码对齐：2026-06-29
+
 ## 整体判断
 
-这是一个以 `MusicPlayerService` 为核心状态机的 `.NET MAUI Blazor Hybrid` 项目，UI 使用 Razor + MudBlazor，数据与媒体能力由服务层承接，跨端差异主要收敛在播放器实现和存储路径处理上。
+这是一个以 `MusicPlayerService` 为核心状态机的 `.NET MAUI Blazor Hybrid` 项目。UI 使用 Razor + MudBlazor；播放能力已通过 **方案 B**（`PlaybackSwitcher` + 五种 `IPlaybackInstance`）从单一方法中部分解耦，但队列、流解析、历史、代理等仍集中在 `MusicPlayerService`。
 
-项目当前更接近“Blazor 页面 + 页面级 VM + 全局单例服务”的混合结构，而不是严格意义上的纯 MVVM。这样的结构优点是开发效率高、主链路直观，缺点是核心服务会比较容易变胖，状态边界也会逐渐集中。
+结构为「Blazor 页面 + 页面级 VM + 全局单例服务」，开发效率高，核心服务仍偏重。
 
-## 仓库结构理解
+## 仓库结构
 
-- `YTMusic/` 是主应用目录。
-- `Components/` 放 UI 组件、布局和页面。
-- `Services/` 放业务服务，是项目的主要逻辑层。
-- `wwwroot/js/` 放前端交互脚本，主要负责布局修正和媒体控制。
-- `Platforms/` 放平台差异实现，尤其是 Android/iOS 的原生播放能力。
-- `CommonHelp/` 是共享工具库，提供文件、字符串、网络、时间等基础能力。
+| 目录 | 说明 |
+|------|------|
+| `YTMusic/Components/` | UI、布局、页面、弹窗 |
+| `YTMusic/Services/` | 业务逻辑主层 |
+| `YTMusic/Services/Abstractions/Playback/` | `IPlaybackHost`、`IPlaybackInstance` |
+| `YTMusic/Services/Playback/` | `PlaybackSwitcher`、`PlaybackInstances` |
+| `YTMusic/wwwroot/js/` | 布局修正、媒体控制、Windows 拖拽 |
+| `YTMusic/Platforms/` | Android ExoPlayer、Windows 窗口、iOS 原生音频 |
+| `CommonHelp/` | 文件、字符串、网络、时间等工具 |
+| `memory-bank/` | 决策、进度、播放架构 |
 
 ## 依赖注入与运行入口
 
-入口在 `MauiProgram.cs`。
+入口：`MauiProgram.cs`。
 
-当前注册方式体现了项目的运行思路：
+**Singleton 服务（全局共享）：**
+- 媒体与数据：`IYouTubeService`、`MusicPlayerService`、`ILocalMusicService`、`IFavoriteService`、`IDownloadManagerService`
+- AList：`AListUploadService`、`AListUploadSettingsService`、`IUploadManagerService`、`IAListRemoteDownloadManagerService`
+- UI / 工具：`GlobalStateService`、`UiPreferencesService`、`NetworkErrorService`、`WindowChromeService`、`AppResetService`
 
-- `IYouTubeService`、`GlobalStateService`、`MusicPlayerService`、`UiPreferencesService`、`DownloadManagerService`、`FavoriteService`、`LocalMusicService` 都是全局共享服务。
-- `SearchVM` 生命周期更长，适合承接搜索页状态。
-- `DownloadsVM`、`TransfersVM`、`FavoritesVM` 更偏页面进入后即时加载。
-- 原生播放服务按平台注入：
-  - Android 注入原生音频和原生视频播放。
-  - iOS 注入原生音频播放，视频为空实现。
-  - 其他平台主要依赖 Web 层播放器桥接。
+**Scoped / Transient VM：**
+- `SearchVM`（Scoped，搜索页状态较长）
+- `DownloadsVM`、`TransfersVM`、`FavoritesVM`、`FavoritesFolderVM`、`UploadVM`（Transient）
 
-这种设计说明项目的核心原则是：页面尽量轻，状态集中到服务层，平台差异通过接口隔离。
+**原生播放（按平台）：**
+- Android：原生音频 + 原生视频
+- iOS：原生音频 + 空视频实现
+- 其他：`NullNative*` → Web + 代理
 
-## UI 与布局层分析
+## UI 与布局
 
-全局布局在 `Components/Layout/MainLayout.razor`。
+`MainLayout.razor` 承担：
 
-它承担了几项重要职责：
+- 顶栏品牌、三横杠菜单、Windows 窗口控制
+- 右侧主题抽屉（5 套主题 + 播放/显示设置）
+- 固定底部导航：**Favorites → Player → Home → Other**
+- `GlobalAudioPlayer` 全局挂载
+- `ytmLayout.js` 初始化（底栏键盘、`visualViewport`、滚动位置缓存）
 
-- 顶栏品牌入口、菜单按钮和 Windows 窗口控制。
-- 主题系统维护。
-- 右侧主题抽屉开关与主题切换。
-- 固定底部导航。
-- 初始化底部导航与输入法适配脚本。
-- 承载全局播放器组件 `GlobalAudioPlayer`。
+`Other` 页承接：本地资源、传输任务、AList 上传、播放历史。
 
-当前布局实现满足现有约束：
+稳定性要点：主题索引边界校验、`ActiveTheme` 安全访问、小屏顶栏不越界。
 
-- 顶栏保留品牌、搜索入口语义和三横杠菜单按钮。
-- 主题切换不是直接切，而是先打开右侧主题面板。
-- 底部导航固定在屏幕底部，没有回退为侧边 Rail。
-- 使用 `env(safe-area-inset-bottom)` 处理 Web 层安全区。
-- 依赖 `wwwroot/js/ytmLayout.js` 对键盘弹出导致的底部导航位移做修正。
+## 搜索与发现
 
-主题逻辑已经有比较明确的稳定性保护：
+`Search` 页即 Home 初始态（无多余标题/引导）。
 
-- 内置 5 套主题，其中包含 2 套亮色。
-- 读取主题统一经过 `ActiveTheme` 安全访问。
-- 选择主题时先做边界校验，避免索引越界。
+`SearchVM`：搜索、分页、`LoadNextPageAsync`、批量收藏状态、下载入队、收藏对话框。
 
-这部分的实现是当前项目 UI 稳定性的关键区域，后续改动时应优先保护顶部栏、主题抽屉、底部导航和小屏表现。
+主链路：输入 → `SearchAsync` → 分页结果 → `MusicPlayerService.PlayAsync` → 导航播放器。
 
-## 搜索页与首页分析
+## 播放器架构
 
-首页实际由 `Search` 页面承担，初始态保持极简，不展示多余标题和引导块。
+### 状态机与管线
 
-搜索页特点：
+`MusicPlayerService` 仍负责：
 
-- 搜索框开启 `Immediate="true"`。
-- 回车通过 `OnKeyUp` 直接触发搜索。
-- 结果卡片支持直接播放、下载、加入收藏夹。
-- 搜索结果支持分页加载。
+- 当前曲目、流 URL、播放/暂停、Seek
+- 播放列表、模式（顺序/随机/单曲循环）、运行期历史
+- 远程流解析、`PlayInternalAsync` 路由决策
+- 实现 `IPlaybackHost`（代理、Web 同步、原生访问）
 
-`SearchVM` 负责：
+**已拆出的管线层：**
 
-- 发起搜索。
-- 管理分页枚举器。
-- 批量回填收藏状态。
-- 发起下载任务。
-- 打开收藏夹对话框并刷新状态。
+```
+MusicPlayerService (IPlaybackHost)
+    → PlaybackSwitcher (SemaphoreSlim)
+    → NativeAudio | NativeVideo | WebAudio | WebMuxedVideo | Hybrid
+```
 
-搜索链路整体比较顺：
+| 平台 | 音频 | 视频 |
+|------|------|------|
+| Android | ExoPlayer 前台服务 | ExoPlayer 全屏 Activity |
+| iOS | 原生音频服务 | Web 兜底 |
+| Windows | Web + `LocalAudioProxy` | Web `<video>` / Hybrid |
 
-1. 用户输入关键词。
-2. `SearchVM.SearchAsync()` 清空旧状态并创建新的异步搜索枚举器。
-3. `LoadNextPageAsync()` 每次拉取固定数量结果。
-4. 新结果批量查询收藏状态后再更新 UI。
-5. 点击卡片后调用 `MusicPlayerService.PlayAsync(...)`，随后跳转到播放器页。
+### Web 桥接
 
-这是一个比较符合产品直觉的“所见即所得”搜索体验。
+`GlobalAudioPlayer.razor`：
 
-## 播放器架构分析
+- 持久 `<audio>` / `<video>`
+- `NativeAudio` / `NativeVideo` 时不走 Web 同步（原生自管进度）
+- 原生进度：`OnTimeChanged` → `audioPlayer.setProgress`
+- Web 停止：`OnRequestStopWebPlayback` → `stopWebPlayback`
 
-项目最核心的服务是 `Services/MusicPlayerService.cs`。
+### 进度条
 
-它当前同时负责：
+`audioPlayer.js` 的 `mountProgressBar`（`ytm-player-progress`）直接更新 DOM；`.NET` 侧 `OnTimeUpdate` 约 500ms 节流，**不**用于刷新进度条 UI。
 
-- 当前播放项状态。
-- 当前流地址状态。
-- 播放/暂停/继续/跳转。
-- 本地文件播放。
-- 播放列表与播放模式。
-- 随机播放与单曲循环。
-- 播放历史记录。
-- Web 播放与原生播放通道切换。
-- 本地代理流与本地文件代理流。
-- 曲目结束后的续播逻辑。
+### 代理
 
-可以把它理解成整个项目的“全局播放器状态机”。
-
-### 播放通道设计
-
-项目没有使用单一播放方案，而是根据平台和资源类型动态选择：
-
-- Android：
-  - 音频优先走原生播放。
-  - 视频优先走原生视频播放。
-- iOS：
-  - 音频可走原生播放。
-  - 视频能力较弱，存在空实现兜底。
-- 其他平台：
-  - 更多依赖 Blazor + JS Interop 控制 Web 播放。
-  - 必要时使用本地 HTTP 代理包装流地址或本地文件。
-
-### Web 播放桥接
-
-`GlobalAudioPlayer.razor` 是 Web 播放桥。
-
-它做的事情包括：
-
-- 在布局层保留一个持久化的隐藏 `<audio>` 元素。
-- 监听页面切换时的播放器状态变化。
-- 通过 `audioPlayer.js` 加载和控制流媒体。
-- 把播放时间、总时长、结束事件、播放状态再回传给 `MusicPlayerService`。
-
-这样设计的好处是：
-
-- 页面切换时播放器不容易中断。
-- C# 状态和 JS 实际播放状态能保持同步。
-- Web 播放逻辑不会散落到多个页面中。
-
-### 本地代理的作用
-
-`LocalAudioProxy` 和 `LocalFileProxy` 说明作者已经遇到过 WebView、跨端解码和本地文件访问差异问题。
-
-它们的作用主要是：
-
-- 为远程流提供本地回环地址，方便 WebView 统一访问。
-- 提供 Range 支持，兼容拖动进度和媒体控件读取。
-- 处理某些平台下 WebView 对真实源地址或本地文件协议的限制。
-
-这是一种很务实的工程化方案，也说明播放器这块已经不是“简单放个 audio 标签”能解决的问题。
+- `LocalAudioProxy`：远程 YouTube 流 → 本地 HTTP
+- `LocalFileProxy`：本地文件 → HTTP，URL 含 `&f=` 区分文件
 
 ## 下载、收藏与本地库
 
 ### YouTubeService
 
-`YouTubeService` 主要负责三类事情：
-
-- 搜索 YouTube 视频。
-- 获取音频流或视频流地址。
-- 下载音频或视频到本地。
-
-服务依赖 `YoutubeExplode`，并在 Android 下通过 `Task.Run` 规避某些同步网络调用触发主线程异常的问题。
+搜索、流 URL、下载；Android 下部分调用 `Task.Run` 规避主线程网络限制。
 
 ### DownloadManagerService
 
-下载管理器负责任务级状态，而不是只负责单次下载。
-
-它的特点：
-
-- 避免同一个视频、同一种类型重复入队。
-- 内存中维护任务列表。
-- 通过进度回调刷新 UI。
-- 下载完成后把记录写入本地数据库。
-- 同步回填收藏记录中的本地文件路径。
-- 自动裁剪历史任务数量，避免列表无限增长。
-
-这说明“下载中”和“下载完成后如何被业务系统识别”已经被明确设计过。
+任务队列、去重、进度、完成后写 SQLite、回填收藏本地路径、裁剪历史任务数。
 
 ### FavoriteService
 
-收藏服务使用 SQLite 存储，并且支持收藏夹。
-
-当前能力包括：
-
-- 默认收藏夹。
-- 自定义收藏夹。
-- 收藏与取消收藏。
-- 查询某批视频是否已收藏。
-- 查询某个视频位于哪些收藏夹中。
-- 记录收藏项对应的本地下载路径。
-
-它不是简单的“收藏一张表”，而是已经具备基础媒体库组织能力。
+SQLite：默认/自定义收藏夹、批量查询、本地路径关联。
 
 ### LocalMusicService
 
-本地下载记录也单独走 SQLite。
+`YTMusicDownloads.db3` / `DownloadedTracks`；孤儿清理、删文件同步删记录。
 
-它负责：
+收藏与下载为**双库**，一致性靠业务层主动维护（如删除、下载完成回填）。
 
-- 下载记录入库。
-- 根据视频 ID 或文件路径查本地记录。
-- 清理孤儿记录。
-- 删除本地文件时同步删数据库记录。
-- 枚举下载目录中的本地文件。
+## 页面职责
 
-整体上，项目把“收藏”和“下载记录”拆成两个持久化服务，职责上是清楚的，但也意味着一致性需要靠业务逻辑主动维护。
+| 页面 | 职责 |
+|------|------|
+| `Search` | 搜索与发现 |
+| `Player` / `PlayerAudio` / `PlayerVideo` | 播放器（按类型路由） |
+| `Favorites` / `FavoritesFolder` | 收藏夹与文件夹内播放 |
+| `Downloads` | 已下载媒体 |
+| `Transfers` | 下载/上传任务 |
+| `Upload` | AList 配置与上传 |
+| `History` | 播放历史 |
+| `Other` | 次级入口聚合 |
 
-## 页面职责划分
+## 优点
 
-当前页面分工比较明确：
+- 跨端播放策略务实（原生 + Web + 代理 + 方案 B 串行切换）
+- 搜索、播放、下载、收藏、AList 主链路完整
+- Android 后台、主题越界、底栏键盘、切歌同步等真实问题有针对性处理
+- 文档与 `memory-bank` 决策记录较完整
 
-- `Search`：搜索与发现入口。
-- `Player`：根据当前资源类型跳转到音频或视频播放页。
-- `Favorites`：收藏夹浏览、批量播放、随机播放。
-- `Downloads`：已下载媒体浏览、删除、收藏、本地播放。
-- `Transfers`：下载任务状态页。
-- `History`：历史播放列表入口。
-- `Other`：承接“下载任务”“历史播放”这类次级入口。
+## 风险与维护成本
 
-这样的信息架构比较直接，适合当前这个产品阶段。
+### 1. MusicPlayerService 仍偏大
 
-## 当前项目的优点
+管线已拆到 `PlaybackSwitcher`，但队列、解析、历史、代理、路由决策仍在同一服务。后续功能（断点续播、缓存、歌词）会继续增加复杂度。
 
-- 跨端思路现实，不依赖单一播放方案。
-- 搜索、播放、下载、收藏主链路已经完整打通。
-- 布局约束集中，UI 行为比较统一。
-- 对 Android 主线程网络问题、主题越界、底部导航键盘适配等真实问题已经有处理。
-- 下载与收藏都有持久化，不是纯内存玩具项目。
-- 已经有一定测试基础和文档意识。
+### 2. 双库一致性
 
-## 当前项目的主要风险与维护成本
+收藏与下载分表，删除/覆盖需同步多处；AList 重复下载允许覆盖，需留意路径一致性。
 
-### 1. `MusicPlayerService` 过于庞大
+### 3. Hybrid 与 Windows
 
-这是当前最明显的结构性风险。
+分离流在线视频在非 Android 平台走 `Hybrid`（Web 静音视频 + `INativeAudio` 播 companion 音频）。Windows 注入 `NullNativeAudioPlaybackService`，该路径下原生音频为 no-op；实际依赖 muxed 优先或后续改进。
 
-它已经同时承担：
+### 4. VM 组织
 
-- 播放状态管理。
-- 播放队列。
-- 流解析。
-- 平台切换。
-- 历史记录。
-- 本地代理。
+`Search` 的 partial 与 `SearchVM` 同文件，与「一组件一 VM 文件」约定略有偏差。
 
-后续如果继续往里加功能，例如歌词、后台恢复、断点续播、倍速、缓存策略，复杂度会继续堆高。
+### 5. 测试依赖网络
 
-### 2. 页面 VM 组织不完全统一
+`YouTubeServiceTests` 直连 YouTube，适合联调而非稳定 CI。
 
-仓库约定是组件与 VM 同目录，VM 文件以 `VM.cs` 结尾。
+## 建议演进方向
 
-但当前 `Search` 的页面 partial 和 `SearchVM` 类写在同一个 `SearchVM.cs` 文件里。它虽然没违反运行逻辑，但从维护一致性来说会让后来者产生理解成本。
+1. 继续拆分 `MusicPlayerService`：队列、流解析、历史持久化独立服务。
+2. 补充离线单元测试：播放列表切歌、下载去重、收藏筛选。
+3. 评估 Windows 分离流策略（Web 双轨或强制 muxed）。
+4. `PlaybackHistory` SQLite 持久化。
 
-### 3. 收藏与下载是双库设计
+## 结论
 
-优点是职责清楚。
+项目已跑通真实用户主流程，不是 demo。价值在于完整产品链路、跨端播放的工程化处理，以及可继续演进的服务层结构。优先投入：**播放器服务进一步解耦**、**离线测试**、**播放历史落库**。
 
-缺点是：
+## 相关文档
 
-- 删除文件时要同步清理多个来源的数据。
-- 收藏项的本地路径和下载记录需要保持一致。
-- 音频与视频副本后续如果都要支持，会让同步逻辑更复杂。
-
-### 4. 测试偏向真实联网验证
-
-`YTMusic.Tests/YouTubeServiceTests.cs` 会直接访问 YouTube。
-
-这类测试能验证真实链路，但不稳定因素很多：
-
-- 网络环境。
-- VPN 状态。
-- YouTube 上游变动。
-- 地区限制。
-
-它更适合作为手工验证或定期联调测试，而不是完全可靠的 CI 基础。
-
-## 建议的演进方向
-
-如果后面继续维护，我建议优先考虑以下方向：
-
-### 1. 拆分播放器核心服务
-
-可以优先拆成几块：
-
-- 播放状态与通知。
-- 播放队列与播放模式。
-- 资源解析与流选择。
-- 平台播放适配。
-
-这样后续改单一能力时更不容易影响整条链路。
-
-### 2. 补充离线可跑的业务测试
-
-建议先把不依赖网络的逻辑测起来，例如：
-
-- 播放列表切歌逻辑。
-- 下载任务去重。
-- 收藏夹筛选。
-- 历史记录裁剪。
-
-这样能显著提高后续重构的安全感。
-
-### 3. 统一 VM 文件组织
-
-建议把 `Search` 页面 partial 和 `SearchVM` 进一步按约定拆清楚，保持项目内部结构一致。
-
-### 4. 明确媒体数据模型
-
-后续如果继续增强下载、收藏、历史等功能，建议梳理统一媒体实体模型，减少“播放项”“收藏项”“下载项”之间字段重复和同步负担。
-
-## 当前结论
-
-这是一个已经跑通真实用户主流程的跨端播放器项目，不是简单 demo。它的价值主要体现在三个方面：
-
-- 产品链路完整：搜索、播放、下载、收藏都能闭环。
-- 工程处理务实：对跨端播放差异和移动端布局问题有针对性解决方案。
-- 可继续演进：虽然核心播放器服务偏重，但整体结构仍然具备继续整理和扩展的基础。
-
-如果后续以“稳定迭代”为目标，最值得优先投入的地方是播放器服务解耦和测试体系补强。
+- [`ARCHITECTURE.md`](ARCHITECTURE.md)
+- [`CORE_LOGIC.md`](CORE_LOGIC.md)
+- [`../memory-bank/playbackArchitecture.md`](../memory-bank/playbackArchitecture.md)
+- [`../memory-bank/progress.md`](../memory-bank/progress.md)

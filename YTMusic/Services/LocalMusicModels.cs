@@ -1,25 +1,7 @@
 using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace YTMusic.Services
 {
-    public interface ILocalMusicService
-    {
-        Task<IReadOnlyList<DownloadedTrack>> GetDownloadedTracksAsync();
-        Task<DownloadedTrack?> GetDownloadedTrackByVideoIdAsync(string videoId);
-        Task<DownloadedTrack?> GetDownloadedTrackByFilePathAsync(string filePath);
-        Task ResetAllAsync();
-        Task AddDownloadedTrackAsync(DownloadedTrack track);
-        Task RemoveDownloadedTrackAsync(string videoId, string filePath);
-        Task MarkTrackUploadedAsync(string localFilePath, string remotePath);
-        Task<DownloadedTrack?> GetDownloadedTrackByRemoteSourcePathAsync(string remoteSourcePath);
-        
-        // Keep for legacy fallback or direct disk access if needed
-        Task<IReadOnlyList<LocalAudioFile>> GetDownloadedAudioFilesAsync();
-        Task DeleteAudioFileAsync(string filePath);
-    }
-
     public class DownloadedTrack
     {
         public string VideoId { get; set; } = string.Empty;

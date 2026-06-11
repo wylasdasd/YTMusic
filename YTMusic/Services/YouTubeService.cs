@@ -10,6 +10,8 @@ using YoutubeExplode.Search;
 using YoutubeExplode.Videos;
 using YoutubeExplode.Videos.Streams;
 
+using YTMusic.Services.Abstractions;
+
 namespace YTMusic.Services
 {
     public class YouTubeService : IYouTubeService

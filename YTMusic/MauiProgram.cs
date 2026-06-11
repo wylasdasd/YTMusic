@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Maui.LifecycleEvents;
 using MudBlazor.Services;
 using YTMusic.Services;
+using YTMusic.Services.Abstractions;
 
 #if WINDOWS
 using Microsoft.UI.Windowing;

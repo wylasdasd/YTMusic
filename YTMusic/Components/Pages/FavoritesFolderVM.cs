@@ -6,6 +6,8 @@ using MudBlazor;
 using YTMusic.Components.Dialogs;
 using YTMusic.Services;
 
+using YTMusic.Services.Abstractions;
+
 namespace YTMusic.Components.Pages
 {
     public enum FavoriteTrackSortMode

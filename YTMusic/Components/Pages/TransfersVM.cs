@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using Microsoft.AspNetCore.Components;
 using YTMusic.Services;
 
+using YTMusic.Services.Abstractions;
+
 namespace YTMusic.Components.Pages
 {
     public class TransfersVM : IDisposable

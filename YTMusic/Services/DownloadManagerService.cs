@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
+using YTMusic.Services.Abstractions;
+
 namespace YTMusic.Services
 {
     public class DownloadManagerService : IDownloadManagerService

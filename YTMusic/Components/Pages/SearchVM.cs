@@ -7,6 +7,8 @@ using YoutubeExplode.Search;
 using YTMusic.Services;
 using YTMusic.Components.Dialogs;
 
+using YTMusic.Services.Abstractions;
+
 namespace YTMusic.Components.Pages
 {
     public partial class Search : ComponentBase, IDisposable

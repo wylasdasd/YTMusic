@@ -1,7 +1,9 @@
 using System.Threading.Tasks;
 using YoutubeExplode.Videos.Streams;
+using YTMusic.Services.Abstractions;
+using YTMusic.Services.Playback;
 
-namespace YTMusic.Services.Playback
+namespace YTMusic.Services.Abstractions.Playback
 {
     public interface IPlaybackHost
     {

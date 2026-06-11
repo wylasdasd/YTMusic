@@ -5,6 +5,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using CommonTool.FileHelps;
 
+using YTMusic.Services.Abstractions;
+
 namespace YTMusic.Services
 {
     public class AListRemoteDownloadManagerService : IAListRemoteDownloadManagerService

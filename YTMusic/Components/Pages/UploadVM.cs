@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Maui.Storage;
 using MudBlazor;
 using YTMusic.Services;
+using YTMusic.Services.Abstractions;
 
 namespace YTMusic.Components.Pages
 {

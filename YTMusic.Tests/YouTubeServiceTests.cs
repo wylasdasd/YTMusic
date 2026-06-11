@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Xunit;
 using YoutubeExplode.Common;
 using YTMusic.Services;
+using YTMusic.Services.Abstractions;
 
 namespace YTMusic.Tests
 {

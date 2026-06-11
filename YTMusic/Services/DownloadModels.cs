@@ -18,11 +18,4 @@ namespace YTMusic.Services
         public string? SourcePath { get; set; }
         public string? DestinationPath { get; set; }
     }
-
-    public interface IDownloadManagerService
-    {
-        System.Collections.Generic.IReadOnlyList<DownloadTaskInfo> ActiveDownloads { get; }
-        event System.Action? OnDownloadsChanged;
-        void StartDownload(string videoId, string title, bool isVideo);
-    }
 }

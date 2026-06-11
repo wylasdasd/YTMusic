@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
 
-namespace YTMusic.Services
+namespace YTMusic.Services.Abstractions
 {
     public interface INativeVideoPlaybackService : IDisposable
     {

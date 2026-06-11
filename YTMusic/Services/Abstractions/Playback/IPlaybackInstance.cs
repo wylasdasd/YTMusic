@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
+using YTMusic.Services.Playback;
 
-namespace YTMusic.Services.Playback
+namespace YTMusic.Services.Abstractions.Playback
 {
     public interface IPlaybackInstance
     {

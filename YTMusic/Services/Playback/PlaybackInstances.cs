@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using YTMusic.Services.Abstractions.Playback;
 
 namespace YTMusic.Services.Playback
 {

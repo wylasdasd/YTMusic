@@ -7,6 +7,8 @@ using System.Text;
 using System.Threading.Tasks;
 using CommonTool.FileHelps;
 
+using YTMusic.Services.Abstractions;
+
 namespace YTMusic.Services
 {
     public class UploadManagerService : IUploadManagerService
