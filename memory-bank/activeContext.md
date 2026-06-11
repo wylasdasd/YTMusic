@@ -1,6 +1,9 @@
 # 活动上下文 (Active Context)
 
 ## 当前焦点
+- **播放架构文档**：完整方案 B 已写入 **[memory-bank/playbackArchitecture.md](./playbackArchitecture.md)**（路由、切换、流解析、设置、勿回归清单）。
+- **Android 在线视频**：`NativeVideo` + ExoPlayer；muxed 优先；分离流可设最低/最高画质；可选后台预检（默认关）；全屏 `KeepScreenOn`；自动播放经 Intent `autoPlay`。
+- **在线视频弹窗**：去掉弹窗前 manifest 预检，确认后才 loading。
 - **播放器进度条**：已改为 `audioPlayer.js` 托管（`ytm-player-progress`），音频/视频页共用；解决 MudSlider + Blazor 重绘导致的不跟手。本地非 `.mp4` 或未定 `IsVideo` 的文件不按视频播。
 - **布局与滚动**：整页不滚；各页列表在 `PageListScroll` / Upload Tab 内滚。切换路由后滚动位置由 `ytmLayout._pageScrolls`（JS 内存）恢复，非 C#、非控件自带。
 - **AList 上传/下载**：上传流程已改为 `metadata.json` 优先、仅 `coverUrl`（`thumbnailUrl`）入 JSON，不再上传封面文件；上传进度在任务完成前封顶 99%。

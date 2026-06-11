@@ -1,5 +1,20 @@
 # 决策日志 (Decision Log)
 
+## 2026-06-11: 播放架构方案 B（`ActivePlayback` + `PlaybackSwitcher`）与 Android 在线原生视频
+- **决策**:
+  - `Services/Playback/` 引入 `PlaybackSwitcher`（`SemaphoreSlim` 串行）、五种 `IPlaybackInstance`、`IPlaybackHost`；`MusicPlayerService` 实现宿主并通过 `ActivatePlaybackAsync` 切换。
+  - 任意时刻仅一条活跃管线；`NativeAudio`↔`Hybrid` 切换时 `SharesNativeAudioBackend` 保留 ExoPlayer 音频前台服务。
+  - Android 在线视频统一走 `NativeVideo` / `VideoPlayerActivity`：muxed 单 URL；分离流用 `ExoPlayerStreamSourceFactory` + Java 反射 `MergingMediaSource`。
+  - 流选择：muxed 优先；分离流 video-only 画质进 `UiPreferencesService.RemoteVideoStreamQuality`（默认最低）；可选 `PrefetchRemoteVideo` 后台预检（默认关）。
+  - 在线视频 UI：确认弹窗不再前置 manifest 检测；确认后才 loading + 解析（避免弹窗前长时间等待）。
+  - 全屏视频：`Intent` 传递 `autoPlay`；`VideoPlayerActivity` `KeepScreenOn` 防熄屏；禁止 Attach 后再 `PauseAsync` 造成竞态。
+  - 完整架构说明见 **`memory-bank/playbackArchitecture.md`**。
+- **依据**:
+  - 音频切视频、Web/原生并存时曾出现双音轨与状态不同步；串行 Detach/Attach 可收敛。
+  - Android WebView 播放在线分离流体验差；ExoPlayer 合并更接近原生播放器。
+  - 弹窗前后两次 manifest 拉取是 loading 过长主因；预检改为可选设置项。
+- **相关文件**: `Services/Playback/**`、`MusicPlayerService.cs`、`VideoPlayerActivity.cs`、`ExoPlayerStreamSourceFactory.cs`、`UiPreferencesService.cs`、`PlayerAudio.razor`、`GlobalAudioPlayer.razor`。
+
 ## 2026-06-07: 播放器进度条改由 JS 托管（`ytm-player-progress`），不再用 MudSlider 绑 Blazor 状态
 - **决策**:
   - `audioPlayer.js` 提供 `mountProgressBar` / `setProgress` / `seekProgressTo`；`PlayerAudio` / `PlayerVideo` 仅提供空容器 `@ref`，进度与时间由 DOM 直接更新。

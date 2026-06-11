@@ -42,9 +42,15 @@
 - **播放历史统一入口**:
   - 播放历史不应在页面层各自维护，而是统一在 `MusicPlayerService` 成功开始播放后写入。
   - 页面层只负责展示与回放历史项。
+- **播放架构（方案 B）**:
+  - 详见 **[playbackArchitecture.md](./playbackArchitecture.md)**（路由表、五种 `PlaybackKind`、`PlaybackSwitcher`、流解析、UI 协作、设置项）。
+  - 概要：`MusicPlayerService` → `PlaybackSwitcher`（`SemaphoreSlim`）→ `IPlaybackInstance`；任意时刻单活跃管线；`NativeAudio`↔`Hybrid` 可 `preserveNative` 共享 ExoPlayer 音频后端。
+  - Android 在线视频：`NativeVideo` + ExoPlayer（muxed 单流或 `MergingMediaSource` 合并分离流）；Windows 分离流走 `Hybrid`。
+  - 在线流：muxed 优先；分离流画质由 `UiPreferencesService.RemoteVideoStreamQuality`（默认最低）；可选后台预检 `PrefetchRemoteVideo`（默认关）。
 - **Android 视频分流**:
-  - Android 视频播放主路径为原生 `VideoPlayerActivity`。
+  - Android 视频播放主路径为原生 `VideoPlayerActivity`（`KeepScreenOn` 防熄屏）。
   - `INativeVideoPlaybackService` 需要提供足够的事件（包括 `PlaybackStopped`），让 `MusicPlayerService` 能同步原生退出、结束、暂停等状态。
+  - 在线视频确认弹窗不再预检 manifest（确认后才 loading + 解析）。
 - **Windows 窗口壳层定制**:
   - Windows 端使用 `Platforms/Windows/MainWindow.xaml` 接管默认 MAUI 窗口，而不是只依赖 `new Window(new MainPage())`。
   - `MauiProgram` 中通过 `ConfigureLifecycleEvents` 配置 `AppWindow.TitleBar` 与 `OverlappedPresenter`，保留边框、缩放、最小化/最大化能力，同时折叠标题栏高度。

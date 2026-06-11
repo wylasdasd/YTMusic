@@ -18,6 +18,9 @@
 - [x] 无缝单曲循环（JS `currentTime` 重置）。
 - [x] Android Media3 + ExoPlayer + 手写前台通知；平台 MediaStyle 三键。
 - [x] Android 原生视频主路径；`PlaybackStopped` 状态链。
+- [x] **方案 B 播放架构**：`PlaybackSwitcher` + 五种 `IPlaybackInstance`；文档见 `memory-bank/playbackArchitecture.md`。
+- [x] Android 在线视频 ExoPlayer（muxed / `MergingMediaSource`）；全屏自动播放 + 防熄屏。
+- [x] 播放设置：分离流画质（默认最低）、视频后台预检（默认关）；在线视频弹窗去掉预检。
 - [x] **已下载歌曲切歌**：Web 代理 URL 误判修复 + Android ExoPlayer 切歌清理。
 - [x] **播放器进度条 JS 托管**（`ytm-player-progress`）：替代 MudSlider+Blazor 重绘，解决不跟手；音频/视频页共用；本地仅 `.mp4`+`IsVideo` 走视频流。
 - [x] 在线播放统一 WebM 偏好（移除 High Quality Audio 设置）。
