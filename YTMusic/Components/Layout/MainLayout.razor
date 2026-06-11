@@ -147,10 +147,7 @@
 
     <MudPaper Elevation="0" id="ytm-bottom-nav" Class="ytm-bottom-nav"
               Style="position: fixed; left: 0; right: 0; bottom: 0; z-index: 5000; display: flex; justify-content: space-around; border-radius: 0; padding-bottom: env(safe-area-inset-bottom);">
-        <div @onclick='() => NavigateToTab("")' class="@GetBottomItemClass("Search")">
-            <MudIcon Icon="@Icons.Material.Filled.Search" Style="@GetBottomItemContentStyle("Search")" />
-            <MudText Typo="Typo.caption" Style="@GetBottomItemContentStyle("Search")">Home</MudText>
-        </div>
+ 
         <div @onclick='() => NavigateToTab("favorites")' class="@GetBottomItemClass("Favorites")">
             <MudIcon Icon="@Icons.Material.Filled.Favorite" Style="@GetBottomItemContentStyle("Favorites")" />
             <MudText Typo="Typo.caption" Style="@GetBottomItemContentStyle("Favorites")">Favorites</MudText>
@@ -158,6 +155,10 @@
         <div @onclick='() => NavigateToTab("player")' class="@GetBottomItemClass("Player")">
             <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Style="@GetBottomItemContentStyle("Player")" />
             <MudText Typo="Typo.caption" Style="@GetBottomItemContentStyle("Player")">Player</MudText>
+        </div>
+        <div @onclick='() => NavigateToTab("")' class="@GetBottomItemClass("Search")">
+            <MudIcon Icon="@Icons.Material.Filled.Search" Style="@GetBottomItemContentStyle("Search")" />
+            <MudText Typo="Typo.caption" Style="@GetBottomItemContentStyle("Search")">Home</MudText>
         </div>
         <div @onclick='() => NavigateToTab("other")' class="@GetBottomItemClass("Other")">
             <MudIcon Icon="@Icons.Material.Filled.MoreHoriz" Style="@GetBottomItemContentStyle("Other")" />

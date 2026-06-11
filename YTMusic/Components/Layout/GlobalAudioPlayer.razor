@@ -1,4 +1,5 @@
 @using YTMusic.Services
+@using YTMusic.Services.Playback
 @inject MusicPlayerService PlayerService
 @inject IJSRuntime JSRuntime
 @implements IDisposable
@@ -32,7 +33,7 @@
 
     private void OnPlayerTimeChanged()
     {
-        if (!PlayerService.IsUsingNativePlayback && !PlayerService.IsUsingNativeVideoPlayback && !PlayerService.IsUsingHybridWebVideo)
+        if (PlayerService.ActivePlaybackKind is not (PlaybackKind.NativeAudio or PlaybackKind.NativeVideo or PlaybackKind.Hybrid))
         {
             return;
         }
@@ -85,12 +86,7 @@
 
     private void OnPlayerStateChanged()
     {
-        if (PlayerService.IsUsingNativeVideoPlayback)
-        {
-            return;
-        }
-
-        if (PlayerService.IsUsingNativePlayback && !PlayerService.IsCurrentStreamVideo)
+        if (PlayerService.ActivePlaybackKind is PlaybackKind.NativeVideo or PlaybackKind.NativeAudio)
         {
             return;
         }
@@ -110,12 +106,7 @@
 
     private async Task SyncWebPlaybackIfNeededAsync()
     {
-        if (PlayerService.IsUsingNativeVideoPlayback || PlayerService.CurrentStreamUrl == null)
-        {
-            return;
-        }
-
-        if (PlayerService.IsUsingNativePlayback && !PlayerService.IsCurrentStreamVideo)
+        if (!PlayerService.UsesWebPlaybackSink || PlayerService.CurrentStreamUrl == null)
         {
             return;
         }
@@ -152,8 +143,7 @@
             _objRef = DotNetObjectReference.Create(this);
             await JSRuntime.InvokeVoidAsync("audioPlayer.init", _audioElement, _videoElement, _videoHost, _objRef);
 
-            if (PlayerService.CurrentStreamUrl != null
-                && (!PlayerService.IsUsingNativePlayback || PlayerService.IsCurrentStreamVideo))
+            if (PlayerService.CurrentStreamUrl != null && PlayerService.UsesWebPlaybackSink)
             {
                 await SyncWebPlaybackIfNeededAsync();
             }
@@ -197,10 +187,12 @@
             {
                 _lastUrl = null;
                 await JSRuntime.InvokeVoidAsync("audioPlayer.stopWebPlayback");
+                PlayerService.CompleteWebStop();
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[AudioStopWebError] {ex.Message}");
+                PlayerService.CompleteWebStop();
             }
         });
     }

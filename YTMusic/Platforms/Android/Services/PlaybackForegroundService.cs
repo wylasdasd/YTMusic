@@ -34,6 +34,7 @@ namespace YTMusic.Platforms.Android.Services
         private const string ActionPrevious = "YTMusic.Playback.Previous";
         private const string ActionNext = "YTMusic.Playback.Next";
         private const string ActionStop = "YTMusic.Playback.Stop";
+        private const string ActionDetach = "YTMusic.Playback.Detach";
 
         private const string ExtraSource = "source";
         private const string ExtraIsLocalFile = "isLocalFile";
@@ -188,6 +189,12 @@ namespace YTMusic.Platforms.Android.Services
             return Task.CompletedTask;
         }
 
+        public static Task DetachAsync(Context context)
+        {
+            StartServiceIntent(context, CreateIntent(context, ActionDetach));
+            return Task.CompletedTask;
+        }
+
         private void HandleAction(Intent? intent)
         {
             var player = _player;
@@ -258,8 +265,21 @@ namespace YTMusic.Platforms.Android.Services
                 case ActionNext:
                     RequestPlaylistNavigation(next: true);
                     break;
+                case ActionDetach:
+                    player.Stop();
+                    player.ClearMediaItems();
+                    StopPositionTimer();
+                    _expectedDurationMs = 0;
+                    UpdatePlatformSessionState(forceMetadata: false);
+                    if (_isForegroundStarted)
+                    {
+                        StopForeground(StopForegroundFlags.Remove);
+                        _isForegroundStarted = false;
+                    }
+                    break;
                 case ActionStop:
                     player.Stop();
+                    player.ClearMediaItems();
                     StopPositionTimer();
                     _expectedDurationMs = 0;
                     UpdatePlatformSessionState(forceMetadata: false);

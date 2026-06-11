@@ -49,6 +49,11 @@ namespace YTMusic.Platforms.Android.Services
             return PlaybackForegroundService.StopAsync(_context);
         }
 
+        public Task DetachAsync()
+        {
+            return PlaybackForegroundService.DetachAsync(_context);
+        }
+
         public void Dispose()
         {
             PlaybackForegroundService.PositionChanged -= OnPositionChanged;

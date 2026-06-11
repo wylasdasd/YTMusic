@@ -16,6 +16,7 @@ namespace YTMusic.Services
         public Task ResumeAsync() => Task.CompletedTask;
         public Task SeekAsync(double positionSeconds) => Task.CompletedTask;
         public Task StopAsync() => Task.CompletedTask;
+        public Task DetachAsync() => Task.CompletedTask;
         public void Dispose() { }
     }
 #pragma warning restore CS0067
