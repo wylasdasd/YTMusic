@@ -7,7 +7,7 @@
 ```
 YTMusic（UI / MAUI Blazor）
   ├── 引用 YTMusic.BLL、YTMusic.DAL（仅 DI 注册）、CommonHelp
-  ├── ViewModels/、Components/、Adapters/、Infrastructure/、Services/（播放 + UI 壳层）
+  ├── Components/（Pages、Layout：`.razor` + 同目录 `*VM.cs` + `.razor.css`）、ViewModels.Shared/、Adapters/、Infrastructure/、Services/（播放 + UI 壳层）
   └── AppGlobal.cs
 
 YTMusic.BLL（业务逻辑层）
@@ -44,7 +44,7 @@ memory-bank/（决策、进度、播放架构文档）
 | TFM | `net10.0-android` / `ios` / `maccatalyst` / `windows10.0.19041.0` |
 | 职责 | Blazor 页面、ViewModel、平台适配器、播放管线、UI 偏好与窗口壳层 |
 | 全局入口 | `AppGlobal.cs`：存储路径、UI 偏好键、播放诊断标识、`Runtime.Services` |
-| ViewModel | 统一放 `ViewModels/`，文件后缀 `*VM.cs`（如 `SearchVM.cs`） |
+| ViewLogic（*VM.cs） | 与对应 `.razor` 同目录（`Components/Pages/` 或 `Components/Layout/`）；**共享** VM 放 `ViewModels.Shared/`（如 `PlayerVM`、`ViewModelBase`、`ThemePresets`） |
 | 适配器 | `Adapters/` 实现 BLL `Ports/`（`MauiDatabasePathProvider`、`MudUiNotifier` 等） |
 | 基础设施 | `Infrastructure/`：播放/平台相关技术实现（非独立类库）；`Proxies/`（`LocalAudioProxy`、`LocalFileProxy`）、`Storage/`（`StoragePaths`） |
 | 保留在 UI 的 `Services/` | **仅**播放与 UI 壳层：`MusicPlayerService`、`Playback/*`、`UiPreferencesService`、`GlobalStateService`、`WindowChromeService`、`AppResetService`、原生播放 `INative*` |
@@ -123,9 +123,10 @@ memory-bank/（决策、进度、播放架构文档）
 ## 仓库结构（UI 子目录）
 
 - `Components/Layout/`：全局布局（`MainLayout.razor`、`GlobalAudioPlayer.razor`）
-- `Components/Pages/`：页面组件（`.razor` + 可选 `.razor.css`）
+- `Components/Pages/`：页面（`Search.razor` + `SearchVM.cs` + `Search.razor.css` 等同目录）
+- `Components/Layout/`：全局布局（`MainLayout.razor` + `MainLayoutVM.cs`、`GlobalAudioPlayer.razor`）
 - `Components/Dialogs/`：弹窗
-- `ViewModels/`：页面 ViewModel（`*VM.cs`）；含 `SearchVM`、`FavoritesVM`、`HistoryVM`、`PlayerVM`、`MainLayoutVM`、`ThemePresets`
+- `ViewModels.Shared/`：跨页共享 ViewLogic（`PlayerVM`、`ViewModelBase`、`ThemePresets`）
 - `Adapters/`：BLL `Ports` 的 MAUI/MudBlazor 实现
 - `Infrastructure/`：UI 层技术实现（`Proxies/` 本地 HTTP 代理、`Storage/` 平台路径）
 - `Services/`：播放管线 + UI 壳层（见上文「保留在 UI 的 Services」）
@@ -147,7 +148,8 @@ memory-bank/（决策、进度、播放架构文档）
 
 ## 通用开发约定
 
-- 命名空间与 `RootNamespace` 及目录结构一致（`YTMusic`、`YTMusic.BLL`、`YTMusic.DAL`）。
+- 命名空间与目录一致：页面 VM → `YTMusic.Components.Pages`；布局 VM → `YTMusic.Components.Layout`；共享 → `YTMusic.ViewModels.Shared`。
+- 禁止跨目录放置「一对一」页面 VM（`History.razor` 与 `HistoryVM.cs` 必须同在 `Components/Pages/`）。
 - Razor 组件命名空间与 `YTMusic/Components/**` 对齐（例如 `YTMusic.Components.Pages`）。
 - 页面通过 DI 注入 BLL 的 `I*Service` 接口，不注入具体 Repository。
 - 优先复用 `CommonHelp` 现有能力，避免新增零散工具函数。
@@ -175,7 +177,7 @@ memory-bank/（决策、进度、播放架构文档）
 - 主题切换：
   - 点击三横杠打开右侧主题侧边栏（不是直接切换）。
   - 主题由侧边栏列表选择，当前内置 5 套（含 2 套亮色）。
-  - 主题逻辑在 `MainLayout.razor` 中维护，使用 `ThemePreset`。
+  - 主题逻辑在 `MainLayoutVM` + `ViewModels.Shared/ThemePresets.cs`。
   - 侧边栏还包含：分离流视频画质、视频后台预检、两行显示标题、`Favorites Image` 等（`UiPreferencesService`，键名见 `AppGlobal.Ui.PreferenceKeys`）。
 - 底部导航：
   - 顺序：Favorites → Player → Home → Other；全端固定在最底部（`position: fixed; bottom: 0`），不能回退到侧边 Rail。

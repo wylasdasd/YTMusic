@@ -4,7 +4,7 @@ using YTMusic.BLL.Ports;
 using YTMusic.Services;
 using YTMusic.Services.Playback;
 
-namespace YTMusic.ViewModels;
+namespace YTMusic.ViewModels.Shared;
 
 public sealed class PlayerVM : ViewModelBase
 {

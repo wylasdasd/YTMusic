@@ -22,13 +22,14 @@
 
 ```
 App（UI / MAUI Blazor）
-  ├── Components/          # Razor 页面与布局（尽量薄）
-  ├── ViewLogic/           # 页面交互逻辑（见下文命名说明）
-  ├── ViewModels/          # 仅供 View 绑定的展示模型（DTO for UI）
+  ├── Components/Pages/    # {Page}.razor + {Page}VM.cs + {Page}.razor.css 同目录
+  ├── Components/Layout/   # MainLayout.razor + MainLayoutVM.cs 等同目录
+  ├── ViewModels.Shared/   # 跨页共享 ViewLogic（PlayerVM、ViewModelBase、ThemePresets）
+  ├── ViewModels/          # （可选）仅供 View 绑定的展示 DTO
   ├── Adapters/            # 实现 BLL Ports（平台 / UI 框架适配）
   ├── Infrastructure/      # UI 层技术实现（代理、路径、平台细节）
   ├── Services/            # 仅保留 UI 壳层 / 实时状态机（如播放器）
-  └── Mappers/             # BLL/DTO → UI ViewModel 转换 也可以是其他数据转换（可选，见下文）
+  └── Mappers/             # BLL/DTO → UI 展示模型（可选，见下文）
 
 BLL（业务逻辑）
   ├── Abstractions/        # I*Service
@@ -66,7 +67,7 @@ CommonHelp                 # 无业务语义并且具有普适性的共享工具
 | 概念 | 英文建议 | 放哪 | 职责 | 不应包含 |
 |------|----------|------|------|----------|
 | **视图展示模型** | View Model（展示模型） | 各层 `ViewModels/` 或 `Presentation/` | 仅供 View 绑定的数据结构：列表项、表单字段、只读展示字段 | 调 Service、弹窗、导航、JS interop |
-| **视图交互逻辑** | View Logic | UI `ViewLogic/`（或继续叫 `*VM.cs` 但文档写清边界） | 用户操作编排：调 BLL、确认对话框、Toast、加载态、刷新列表 | 业务规则、SQL、播放器状态机 |
+| **视图交互逻辑** | View Logic | 与对应 `.razor` 同目录的 `*VM.cs`；**共享**放 `ViewModels.Shared/` | 用户操作编排：调 BLL、确认对话框、Toast、加载态、刷新列表 | 业务规则、SQL、播放器状态机 |
 | **业务模型** | Domain / BLL Model | `BLL/Models/` | 收藏、下载记录、播放历史等领域对象 | MudBlazor、Razor、平台 API |
 | **模型转换** | Mapper / Projection | **各层各自** `Mappers/` | `PlaybackHistoryRecord` → `HistoryListItem`；DB 行 → BLL Model | 业务判断、UI 交互 |
 
@@ -76,19 +77,32 @@ CommonHelp                 # 无业务语义并且具有普适性的共享工具
 - 教程、招聘、搜索都认这个词，沟通成本低
 - 实际项目里的 `SearchVM` 往往是 **View Logic + 少量展示状态** 的混合体
 
-### 本项目的务实约定
+### 本项目的务实约定（YTMusic 2026-07）
 
-**代码里可以继续用 `ViewModels/*VM.cs`**（不必为改名而大重构），但 Agent 与文档中应理解为：
-
-> **`XxxVM` = View Logic（页面交互层）**  
-> 不是「把所有状态都塞进 ViewModel」的经典 MVVM。
-
-**更理想的长期目标**（新项目可直接采用）：
+**页面 VM 与 Razor 同目录；共享 VM 放 `ViewModels.Shared/`：**
 
 ```
-ViewLogic/SearchLogic.cs      # 调 BLL、处理搜索按钮、分页
-ViewModels/SearchItem.cs      # 卡片上绑定的 Title、ThumbnailUrl
-Mappers/SearchResultMapper.cs # YoutubeExplode 结果 → SearchItem
+Components/Pages/History.razor
+Components/Pages/HistoryVM.cs
+Components/Pages/History.razor.css   # 若有样式
+
+Components/Layout/MainLayout.razor
+Components/Layout/MainLayoutVM.cs
+
+ViewModels.Shared/PlayerVM.cs        # PlayerAudio + PlayerVideo 共用
+ViewModels.Shared/ViewModelBase.cs
+ViewModels.Shared/ThemePresets.cs
+```
+
+命名空间：`YTMusic.Components.Pages`、`YTMusic.Components.Layout`、`YTMusic.ViewModels.Shared`。
+
+> **`XxxVM` = View Logic（页面交互层）**，不是经典 MVVM 全状态 ViewModel。
+
+**若将来拆展示 DTO**（可选）：
+
+```
+ViewModels/SearchItem.cs              # 仅 UI 绑定字段
+Mappers/SearchResultMapper.cs
 ```
 
 ### ViewLogic 典型职责（以播放器页为例）
@@ -278,10 +292,12 @@ dotnet build App/App.csproj -c Debug -f net10.0-windows10.0.19041.0 -o App/bin/.
 ### 页面逻辑下沉到 ViewLogic
 
 ```
-把 {Page}.razor 里的 @code 业务交互抽到 {Page}VM：
+把 {Page}.razor 里的 @code 业务交互抽到同目录 {Page}VM.cs：
+- VM 命名空间 YTMusic.Components.Pages（或 Layout）
 - VM 只调 BLL I*Service 与 Ports（IUiNotifier、IDialogHost）
+- 多页共用 VM 放 ViewModels.Shared/（如 PlayerVM）
 - 保留 Razor 内：布局、JS interop、NavigationManager、ElementReference
-- Razor 注入 VM，OnInitialized 设 VM.StateHasChanged = StateHasChanged
+- OnInitialized 设 VM.StateHasChanged = StateHasChanged
 不要往 VM 塞播放器状态机或 SQL。
 ```
 

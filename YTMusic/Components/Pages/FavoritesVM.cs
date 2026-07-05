@@ -1,8 +1,9 @@
 using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Models;
 using YTMusic.BLL.Ports;
+using YTMusic.ViewModels.Shared;
 
-namespace YTMusic.ViewModels;
+namespace YTMusic.Components.Pages;
 
 public sealed class FavoritesVM : ViewModelBase
 {

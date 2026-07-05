@@ -3,8 +3,9 @@ using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Ports;
 using YTMusic.Infrastructure.Storage;
 using YTMusic.Services;
+using YTMusic.ViewModels.Shared;
 
-namespace YTMusic.ViewModels;
+namespace YTMusic.Components.Layout;
 
 public sealed class MainLayoutVM : ViewModelBase, IDisposable
 {

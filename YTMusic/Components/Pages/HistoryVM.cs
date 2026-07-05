@@ -3,8 +3,9 @@ using YTMusic.BLL.Models;
 using YTMusic.BLL.Ports;
 using YTMusic.Services;
 using YTMusic.Services.Playback;
+using YTMusic.ViewModels.Shared;
 
-namespace YTMusic.ViewModels;
+namespace YTMusic.Components.Pages;
 
 public sealed class HistoryVM : ViewModelBase
 {

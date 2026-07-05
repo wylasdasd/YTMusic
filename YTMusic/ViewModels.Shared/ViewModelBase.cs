@@ -1,4 +1,4 @@
-namespace YTMusic.ViewModels;
+namespace YTMusic.ViewModels.Shared;
 
 public abstract class ViewModelBase
 {

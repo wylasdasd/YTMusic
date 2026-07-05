@@ -1,6 +1,6 @@
 ﻿using MudBlazor;
 
-namespace YTMusic.ViewModels;
+namespace YTMusic.ViewModels.Shared;
 
 public static class ThemePresets
 {

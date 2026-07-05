@@ -1,7 +1,8 @@
 using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Models;
+using YTMusic.ViewModels.Shared;
 
-namespace YTMusic.ViewModels;
+namespace YTMusic.Components.Pages;
 
 public sealed class TransfersVM : ViewModelBase, IDisposable
 {
