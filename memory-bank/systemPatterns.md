@@ -1,6 +1,16 @@
 # 系统模式 (System Patterns)
 
-> 最后更新：2026-06-29
+> 最后更新：2026-07-05
+
+## 分层架构（BLL / DAL / UI）
+
+- **YTMusic.BLL**：业务服务与模型；定义 `I*Service`、`I*Repository`、`Ports`；`AppGlobal.cs` 集中业务常量。
+- **YTMusic.DAL**：仅 SQLite + Dapper；实现 BLL 仓储接口；表迁移走 `SqliteSchemaMigration`。
+- **YTMusic（UI）**：Blazor 页面、`ViewModels/`、播放管线、`Adapters/` 实现 Ports；`AppGlobal.cs` 集中 UI/播放常量。
+- **依赖**：UI → BLL；DAL → BLL；BLL 不引用 DAL；UI 除 `MauiProgram.AddYTMusicDal()` 外不引用 DAL 类型。
+- **DI 顺序**：`AddYTMusicDal()` → `AddYTMusicBll()` → UI 单例与 VM。
+
+详见 [`../AGENTS.md`](../AGENTS.md) 各项目职责表。
 
 ## 技术架构
 - **框架**: .NET 10 Blazor MAUI (跨平台桌面/移动端)。
@@ -73,6 +83,7 @@
 - **Favorites.razor**: 负责收藏歌曲的管理及列表播放的触发。
 
 ## 数据持久化
-- **SQLite**: 使用 `Dapper` 进行关于收藏夹、文件夹和音轨的数据库操作。
-- **下载库**: `LocalMusicService` 使用 SQLite `YTMusicDownloads.db3 / DownloadedTracks` 维护下载记录；文件本体位于 `StoragePaths.GetDownloadedMusicDirectory()`。
-- **播放历史**: 当前为 `MusicPlayerService` 运行期内存列表，尚未落库。
+- **SQLite（DAL）**：`FavoriteRepository`、`DownloadedTrackRepository`；UI 经 BLL `IFavoriteService` / `ILocalMusicService` 访问。
+- **下载库**：`LocalMusicService` + `YTMusicDownloads.db3`；文件本体位于 `StoragePaths`（目录名 `AppGlobal.Storage.DownloadedMusicFolderName`）。
+- **Preferences**：主题与 AList 键名见 UI/BLL 各自 `AppGlobal`；`MauiPreferencesStore` 适配 `IPreferencesStore`。
+- **播放历史**：当前为 `MusicPlayerService` 运行期内存列表，尚未落库。

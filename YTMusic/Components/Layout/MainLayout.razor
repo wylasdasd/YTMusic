@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @using MudBlazor
+@using YTMusic.BLL.Abstractions
 @using YTMusic.Services
 @using YTMusic.Components.Dialogs
 @inject GlobalStateService GlobalState
@@ -10,7 +11,7 @@
 @inject UiPreferencesService UiPreferences
 @inject MusicPlayerService PlayerService
 @inject AppResetService AppResetService
-@inject NetworkErrorService NetworkErrorService
+@inject INetworkErrorService NetworkErrorService
 @implements IDisposable
 
 <MudThemeProvider Theme="@CurrentMudTheme" IsDarkMode="@CurrentIsDark" />
@@ -217,7 +218,7 @@
     {
         GlobalState.OnChange += StateHasChanged;
         UiPreferences.OnChange += StateHasChanged;
-        NetworkErrorService.SnackbarRequested += OnNetworkSnackbarRequested;
+        NetworkErrorService.NotificationRequested += OnNetworkSnackbarRequested;
         if (_themes.Length > 0)
         {
             _themeIndex = Math.Clamp(UiPreferences.ThemeIndex, 0, _themes.Length - 1);
@@ -536,7 +537,7 @@
 
     public void Dispose()
     {
-        NetworkErrorService.SnackbarRequested -= OnNetworkSnackbarRequested;
+        NetworkErrorService.NotificationRequested -= OnNetworkSnackbarRequested;
         GlobalState.OnChange -= StateHasChanged;
         UiPreferences.OnChange -= StateHasChanged;
         if (_locationChangedHandler != null)

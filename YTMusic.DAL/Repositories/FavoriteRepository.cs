@@ -12,7 +12,7 @@ public sealed class FavoriteRepository : IFavoriteRepository
 
     public FavoriteRepository(IDatabasePathProvider pathProvider)
     {
-        _connectionFactory = new SqliteConnectionFactory(pathProvider, "YTMusicFavorites.db3");
+        _connectionFactory = new SqliteConnectionFactory(pathProvider, AppGlobal.Database.FavoritesFileName);
         InitializeDatabase();
     }
 
@@ -31,7 +31,9 @@ public sealed class FavoriteRepository : IFavoriteRepository
         var defaultFolder = connection.QueryFirstOrDefault<int>("SELECT COUNT(1) FROM FavoriteFolders WHERE Id = 1;");
         if (defaultFolder == 0)
         {
-            connection.Execute("INSERT INTO FavoriteFolders (Id, Name, IsDefault) VALUES (1, '默认收藏夹', 1);");
+            connection.Execute(
+                "INSERT INTO FavoriteFolders (Id, Name, IsDefault) VALUES (1, @Name, 1);",
+                new { Name = AppGlobal.Favorites.DefaultFolderName });
         }
 
         const string createTracksSql = @"
@@ -88,8 +90,12 @@ public sealed class FavoriteRepository : IFavoriteRepository
         using var connection = _connectionFactory.CreateConnection();
         await connection.ExecuteAsync("DELETE FROM FavoriteTracks;");
         await connection.ExecuteAsync("DELETE FROM FavoriteFolders WHERE Id != 1;");
-        await connection.ExecuteAsync("INSERT OR IGNORE INTO FavoriteFolders (Id, Name, IsDefault) VALUES (1, '默认收藏夹', 1);");
-        await connection.ExecuteAsync("UPDATE FavoriteFolders SET Name = '默认收藏夹', IsDefault = 1 WHERE Id = 1;");
+        await connection.ExecuteAsync(
+            "INSERT OR IGNORE INTO FavoriteFolders (Id, Name, IsDefault) VALUES (1, @Name, 1);",
+            new { Name = AppGlobal.Favorites.DefaultFolderName });
+        await connection.ExecuteAsync(
+            "UPDATE FavoriteFolders SET Name = @Name, IsDefault = 1 WHERE Id = 1;",
+            new { Name = AppGlobal.Favorites.DefaultFolderName });
     }
 
     public async Task<List<FavoriteTrack>> GetTracksAsync(int? folderId = null, bool? hasLocalFilePath = null)

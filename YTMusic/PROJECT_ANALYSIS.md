@@ -1,38 +1,49 @@
 # 项目分析
 
-> 与代码对齐：2026-06-29
+> 与代码对齐：2026-07-05
 
 ## 整体判断
 
-这是一个以 `MusicPlayerService` 为核心状态机的 `.NET MAUI Blazor Hybrid` 项目。UI 使用 Razor + MudBlazor；播放能力已通过 **方案 B**（`PlaybackSwitcher` + 五种 `IPlaybackInstance`）从单一方法中部分解耦，但队列、流解析、历史、代理等仍集中在 `MusicPlayerService`。
+这是一个以 `MusicPlayerService` 为核心状态机的 `.NET MAUI Blazor Hybrid` 项目。UI 使用 Razor + MudBlazor；业务逻辑已拆至 `YTMusic.BLL`，SQLite 访问在 `YTMusic.DAL`。播放能力通过 **方案 B**（`PlaybackSwitcher` + 五种 `IPlaybackInstance`）保留在 UI 层。
 
-结构为「Blazor 页面 + 页面级 VM + 全局单例服务」，开发效率高，核心服务仍偏重。
+结构为「Blazor 页面 + `ViewModels/` + BLL 服务 + UI 播放单例」，分层后业务可测性更好，播放器服务仍偏重。
 
 ## 仓库结构
 
-| 目录 | 说明 |
-|------|------|
+| 目录 / 项目 | 说明 |
+|-------------|------|
 | `YTMusic/Components/` | UI、布局、页面、弹窗 |
-| `YTMusic/Services/` | 业务逻辑主层 |
+| `YTMusic/ViewModels/` | 页面 VM（`*VM.cs`），注入 BLL `I*Service` |
+| `YTMusic/Adapters/` | BLL `Ports` 的 MAUI 实现 |
+| `YTMusic/Services/` | 播放管线 + UI 壳层（非业务编排） |
 | `YTMusic/Services/Abstractions/Playback/` | `IPlaybackHost`、`IPlaybackInstance` |
 | `YTMusic/Services/Playback/` | `PlaybackSwitcher`、`PlaybackInstances` |
-| `YTMusic/wwwroot/js/` | 布局修正、媒体控制、Windows 拖拽 |
-| `YTMusic/Platforms/` | Android ExoPlayer、Windows 窗口、iOS 原生音频 |
+| `YTMusic/AppGlobal.cs` | UI 全局常量与 `Runtime.Services` |
+| `YTMusic.BLL/` | 业务服务、模型、仓储接口、Ports |
+| `YTMusic.DAL/` | SQLite 仓储实现与迁移 |
 | `CommonHelp/` | 文件、字符串、网络、时间等工具 |
 | `memory-bank/` | 决策、进度、播放架构 |
 
+各库依赖约束见 [`../AGENTS.md`](../AGENTS.md)。
+
 ## 依赖注入与运行入口
 
-入口：`MauiProgram.cs`。
+入口：`MauiProgram.cs`（`AddYTMusicDal()` → `AddYTMusicBll()` → UI 服务）。
 
-**Singleton 服务（全局共享）：**
-- 媒体与数据：`IYouTubeService`、`MusicPlayerService`、`ILocalMusicService`、`IFavoriteService`、`IDownloadManagerService`
-- AList：`AListUploadService`、`AListUploadSettingsService`、`IUploadManagerService`、`IAListRemoteDownloadManagerService`
-- UI / 工具：`GlobalStateService`、`UiPreferencesService`、`NetworkErrorService`、`WindowChromeService`、`AppResetService`
+**BLL Singleton（`AddYTMusicBll`）：**
+- `INetworkErrorService`、`IYouTubeService`、`IFavoriteService`、`ILocalMusicService`
+- `IDownloadManagerService`、`IUploadManagerService`
+- `IAListUploadService`、`IAListUploadSettingsService`、`IAListRemoteDownloadManagerService`
 
-**Scoped / Transient VM：**
-- `SearchVM`（Scoped，搜索页状态较长）
-- `DownloadsVM`、`TransfersVM`、`FavoritesVM`、`FavoritesFolderVM`、`UploadVM`（Transient）
+**DAL Singleton（`AddYTMusicDal`）：**
+- `IFavoriteRepository`、`IDownloadedTrackRepository`
+
+**UI Singleton：**
+- `MusicPlayerService`、`UiPreferencesService`、`GlobalStateService`、`WindowChromeService`、`AppResetService`
+- Ports 适配：`IPreferencesStore`、`IDatabasePathProvider`、`IDownloadMusicDirectoryProvider`
+
+**Scoped VM：**
+- `SearchVM`、`DownloadsVM`、`TransfersVM`、`FavoritesVM`、`FavoritesFolderVM`、`UploadVM`
 
 **原生播放（按平台）：**
 - Android：原生音频 + 原生视频
@@ -106,21 +117,21 @@ MusicPlayerService (IPlaybackHost)
 
 ## 下载、收藏与本地库
 
-### YouTubeService
+### YouTubeService（BLL）
 
 搜索、流 URL、下载；Android 下部分调用 `Task.Run` 规避主线程网络限制。
 
-### DownloadManagerService
+### DownloadManagerService（BLL）
 
-任务队列、去重、进度、完成后写 SQLite、回填收藏本地路径、裁剪历史任务数。
+任务队列、去重、进度、完成后经 `ILocalMusicService` 写库、回填收藏本地路径。
 
-### FavoriteService
+### FavoriteService（BLL）
 
-SQLite：默认/自定义收藏夹、批量查询、本地路径关联。
+经 `IFavoriteRepository` 访问 SQLite：默认/自定义收藏夹、批量查询、本地路径关联。
 
-### LocalMusicService
+### LocalMusicService（BLL）
 
-`YTMusicDownloads.db3` / `DownloadedTracks`；孤儿清理、删文件同步删记录。
+经 `IDownloadedTrackRepository` 维护 `YTMusicDownloads.db3`；孤儿清理、删文件同步删记录。
 
 收藏与下载为**双库**，一致性靠业务层主动维护（如删除、下载完成回填）。
 
@@ -160,7 +171,7 @@ SQLite：默认/自定义收藏夹、批量查询、本地路径关联。
 
 ### 4. VM 组织
 
-`Search` 的 partial 与 `SearchVM` 同文件，与「一组件一 VM 文件」约定略有偏差。
+ViewModel 已统一至 `ViewModels/`；`Search` 的 partial 与 `SearchVM` 同文件，与「一组件一 VM 文件」约定略有偏差。
 
 ### 5. 测试依赖网络
 
@@ -179,6 +190,7 @@ SQLite：默认/自定义收藏夹、批量查询、本地路径关联。
 
 ## 相关文档
 
+- [`../AGENTS.md`](../AGENTS.md)
 - [`ARCHITECTURE.md`](ARCHITECTURE.md)
 - [`CORE_LOGIC.md`](CORE_LOGIC.md)
 - [`../memory-bank/playbackArchitecture.md`](../memory-bank/playbackArchitecture.md)

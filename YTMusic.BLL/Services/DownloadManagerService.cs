@@ -6,16 +6,16 @@ using System.Threading.Tasks;
 using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Models;
 
-namespace YTMusic.Services
+namespace YTMusic.BLL.Services
 {
     public class DownloadManagerService : IDownloadManagerService
     {
         // 防止 Transfers 页面无限增长，保留最近 N 条任务记录。
-        private const int MaxRetainedTasks = 100;
+        private const int MaxRetainedTasks = AppGlobal.Transfers.MaxRetainedTasks;
         private readonly IYouTubeService _youTubeService;
         private readonly IFavoriteService _favoriteService;
         private readonly ILocalMusicService _localMusicService;
-        private readonly NetworkErrorService _networkErrorService;
+        private readonly INetworkErrorService _networkErrorService;
         private readonly object _syncRoot = new();
         private readonly List<DownloadTaskInfo> _activeDownloads = new();
 
@@ -31,7 +31,7 @@ namespace YTMusic.Services
         }
         public event Action? OnDownloadsChanged;
 
-        public DownloadManagerService(IYouTubeService youTubeService, IFavoriteService favoriteService, ILocalMusicService localMusicService, NetworkErrorService networkErrorService)
+        public DownloadManagerService(IYouTubeService youTubeService, IFavoriteService favoriteService, ILocalMusicService localMusicService, INetworkErrorService networkErrorService)
         {
             _youTubeService = youTubeService;
             _favoriteService = favoriteService;
@@ -92,7 +92,7 @@ namespace YTMusic.Services
                     lock (_syncRoot)
                     {
                         // 仅在进度有明显变化时刷新 UI，降低高频重绘开销。
-                        shouldNotify = Math.Abs(taskInfo.Progress - p) >= 0.005 || p >= 1.0;
+                        shouldNotify = Math.Abs(taskInfo.Progress - p) >= AppGlobal.Transfers.ProgressNotifyThreshold || p >= 1.0;
                         taskInfo.Progress = p;
                     }
                     if (shouldNotify)
@@ -108,7 +108,7 @@ namespace YTMusic.Services
                 {
                     VideoId = taskInfo.VideoId,
                     Title = taskInfo.Title,
-                    Author = "Unknown Artist",
+                    Author = AppGlobal.AList.UnknownArtist,
                     ThumbnailUrl = $"https://img.youtube.com/vi/{taskInfo.VideoId}/mqdefault.jpg",
                     LocalFilePath = filePath,
                     IsVideo = taskInfo.IsVideo,
@@ -133,7 +133,7 @@ namespace YTMusic.Services
                     taskInfo.ErrorMessage = ex.Message;
                 }
 
-                if (NetworkErrorService.IsNetworkRelated(ex))
+                if (NetworkErrorHelper.IsNetworkRelated(ex))
                 {
                     _ = _networkErrorService.NotifyFailureAsync("下载", ex);
                 }

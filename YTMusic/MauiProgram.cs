@@ -18,7 +18,11 @@ namespace YTMusic
 {
     public static class MauiProgram
     {
-        public static IServiceProvider? Services { get; private set; }
+        public static IServiceProvider? Services
+        {
+            get => AppGlobal.Runtime.Services;
+            private set => AppGlobal.Runtime.Services = value;
+        }
 
         public static MauiApp CreateMauiApp()
         {
@@ -68,23 +72,16 @@ namespace YTMusic
             builder.Services.AddScoped<IDialogHost, MudDialogHost>();
             builder.Services.AddSingleton<IFilePickerService, MauiFilePickerService>();
 
+            builder.Services.AddSingleton<IPreferencesStore, MauiPreferencesStore>();
             builder.Services.AddSingleton<IDatabasePathProvider, MauiDatabasePathProvider>();
             builder.Services.AddSingleton<IDownloadMusicDirectoryProvider, MauiDownloadMusicDirectoryProvider>();
             builder.Services.AddYTMusicDal();
             builder.Services.AddYTMusicBll();
 
-            builder.Services.AddSingleton<IYouTubeService, YouTubeService>();
             builder.Services.AddSingleton<GlobalStateService>();
             builder.Services.AddSingleton<UiPreferencesService>();
-            builder.Services.AddSingleton<IAListUploadSettingsService, AListUploadSettingsService>();
             builder.Services.AddSingleton<AppResetService>();
-            builder.Services.AddSingleton<IDownloadManagerService, DownloadManagerService>();
-            builder.Services.AddSingleton<IAListUploadService, AListUploadService>();
-            builder.Services.AddSingleton<IUploadManagerService, UploadManagerService>();
-            builder.Services.AddSingleton<IAListRemoteDownloadManagerService, AListRemoteDownloadManagerService>();
             builder.Services.AddSingleton<MusicPlayerService>();
-            builder.Services.AddSingleton<NetworkErrorService>();
-            builder.Services.AddSingleton<INetworkErrorService>(sp => sp.GetRequiredService<NetworkErrorService>());
             builder.Services.AddSingleton<WindowChromeService>();
 #if ANDROID
             builder.Services.AddSingleton<INativeAudioPlaybackService, YTMusic.Platforms.Android.Services.AndroidNativeAudioPlaybackService>();

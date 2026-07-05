@@ -7,26 +7,30 @@ using CommonTool.FileHelps;
 
 using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Models;
+using YTMusic.BLL.Ports;
 
-namespace YTMusic.Services
+namespace YTMusic.BLL.Services
 {
     public class AListRemoteDownloadManagerService : IAListRemoteDownloadManagerService
     {
-        private const int MaxRetainedTasks = 100;
-        private readonly AListUploadService _aListUploadService;
+        private const int MaxRetainedTasks = AppGlobal.Transfers.MaxRetainedTasks;
+        private readonly IAListUploadService _aListUploadService;
         private readonly ILocalMusicService _localMusicService;
         private readonly IFavoriteService _favoriteService;
+        private readonly IDownloadMusicDirectoryProvider _downloadMusicDirectoryProvider;
         private readonly object _syncRoot = new();
         private readonly List<DownloadTaskInfo> _activeRemoteDownloads = new();
 
         public AListRemoteDownloadManagerService(
-            AListUploadService aListUploadService,
+            IAListUploadService aListUploadService,
             ILocalMusicService localMusicService,
-            IFavoriteService favoriteService)
+            IFavoriteService favoriteService,
+            IDownloadMusicDirectoryProvider downloadMusicDirectoryProvider)
         {
             _aListUploadService = aListUploadService;
             _localMusicService = localMusicService;
             _favoriteService = favoriteService;
+            _downloadMusicDirectoryProvider = downloadMusicDirectoryProvider;
         }
 
         public IReadOnlyList<DownloadTaskInfo> ActiveRemoteDownloads
@@ -110,7 +114,7 @@ namespace YTMusic.Services
                     bool shouldNotify;
                     lock (_syncRoot)
                     {
-                        shouldNotify = Math.Abs(taskInfo.Progress - p) >= 0.005 || p >= 1.0;
+                        shouldNotify = Math.Abs(taskInfo.Progress - p) >= AppGlobal.Transfers.ProgressNotifyThreshold || p >= 1.0;
                         taskInfo.Progress = p;
                     }
 
@@ -124,9 +128,9 @@ namespace YTMusic.Services
 
                 await _localMusicService.AddDownloadedTrackAsync(new DownloadedTrack
                 {
-                    VideoId = $"alist:{taskInfo.SourcePath}",
+                    VideoId = $"{AppGlobal.AList.RemoteTrackIdPrefix}{taskInfo.SourcePath}",
                     Title = taskInfo.Title,
-                    Author = "AList",
+                    Author = AppGlobal.AList.RemoteAuthor,
                     ThumbnailUrl = null,
                     LocalFilePath = localFilePath,
                     IsVideo = false,
@@ -184,7 +188,7 @@ namespace YTMusic.Services
                     throw new InvalidOperationException("No audio or video file was found in this AList directory.");
                 }
 
-                var localDirectory = StoragePaths.ResolveLocalDownloadDirectory(metadata?.FavoriteFolderNames);
+                var localDirectory = _downloadMusicDirectoryProvider.ResolveLocalDownloadDirectory(metadata?.FavoriteFolderNames);
                 FileHelp.EnsureDirectoryExists(localDirectory);
 
                 var resolvedTitleFromMetadata = metadata?.Title;
@@ -216,9 +220,9 @@ namespace YTMusic.Services
                 {
                     downloadedTrack = new DownloadedTrack
                     {
-                        VideoId = $"alist:{mediaItem.Path}",
+                        VideoId = $"{AppGlobal.AList.RemoteTrackIdPrefix}{mediaItem.Path}",
                         Title = resolvedTitle,
-                        Author = "AList",
+                        Author = AppGlobal.AList.RemoteAuthor,
                         LocalFilePath = localMediaPath,
                         DownloadedDate = DateTime.UtcNow,
                         RemoteSourcePath = mediaItem.Path
@@ -273,7 +277,7 @@ namespace YTMusic.Services
                 return currentTitle;
             }
 
-            var normalizedDirectory = AListUploadSettingsService.NormalizeDirectory(directoryPath);
+            var normalizedDirectory = AListPathHelper.NormalizeDirectory(directoryPath);
             var tracks = await _localMusicService.GetDownloadedTracksAsync();
 
             var uploadedTrack = tracks.FirstOrDefault(track =>
@@ -308,7 +312,7 @@ namespace YTMusic.Services
             var combined = mediaProgress;
             lock (_syncRoot)
             {
-                shouldNotify = Math.Abs(taskInfo.Progress - combined) >= 0.005 || combined >= 1.0;
+                shouldNotify = Math.Abs(taskInfo.Progress - combined) >= AppGlobal.Transfers.ProgressNotifyThreshold || combined >= 1.0;
                 taskInfo.Progress = combined;
             }
 
@@ -326,7 +330,7 @@ namespace YTMusic.Services
 
             if (metadataItem == null)
             {
-                var metadataPath = AListUploadService.BuildRemotePath(directoryPath, RemoteTrackMetadata.FileName);
+                var metadataPath = AListPathHelper.BuildRemotePath(directoryPath, RemoteTrackMetadata.FileName);
                 return await _aListUploadService.TryDownloadJsonAsync<RemoteTrackMetadata>(metadataPath);
             }
 

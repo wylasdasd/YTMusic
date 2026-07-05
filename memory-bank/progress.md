@@ -1,6 +1,6 @@
 # 项目进度 (Progress)
 
-> 最后更新：2026-06-29
+> 最后更新：2026-07-05
 
 ## 已完成
 ### AList
@@ -37,6 +37,14 @@
 - [x] 底部导航 / `Other` / 运行期播放历史 / 还原默认等。
 
 - [x] **文档与代码对齐**（2026-06-29）：README、ARCHITECTURE、CORE_LOGIC、PROJECT_ANALYSIS、AGENTS、memory-bank 全量更新。
+
+### 架构拆分（BLL / DAL）
+- [x] 新建 `YTMusic.BLL`、`YTMusic.DAL`；仓储接口在 BLL，实现在 DAL。
+- [x] 业务服务迁入 BLL：`YouTubeService`、收藏/下载/AList/网络错误等。
+- [x] UI `Adapters/` 实现 BLL `Ports`；`MauiProgram` 注册 `AddYTMusicDal()` + `AddYTMusicBll()`。
+- [x] UI `Services/` 仅保留播放管线与 UI 壳层。
+- [x] 两层 `AppGlobal.cs` 集中常量与运行时状态。
+- [x] **文档与 AGENTS 对齐**（2026-07-05）：各库职责、依赖约束、AppGlobal 约定。
 
 ## 进行中
 - [ ] Android 已下载切歌实机回归（列表 + 通知栏）。

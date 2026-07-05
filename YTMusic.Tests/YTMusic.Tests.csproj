@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CommonHelp\CommonHelp.csproj" />
+    <ProjectReference Include="..\YTMusic.BLL\YTMusic.BLL.csproj" />
   </ItemGroup>
 
   <ItemGroup>

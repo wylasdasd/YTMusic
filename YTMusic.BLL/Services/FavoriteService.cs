@@ -19,7 +19,7 @@ public sealed class FavoriteService : IFavoriteService
         var dbFolders = await _repository.GetFoldersAsync();
 
         var defaultFolder = dbFolders.FirstOrDefault(f => f.Id == FavoriteFolderIds.Default)
-            ?? new FavoriteFolder { Id = FavoriteFolderIds.Default, Name = "默认收藏夹", IsDefault = true };
+            ?? new FavoriteFolder { Id = FavoriteFolderIds.Default, Name = AppGlobal.Favorites.DefaultFolderName, IsDefault = true };
 
         var folders = new List<FavoriteFolder> { defaultFolder };
         folders.Add(new FavoriteFolder

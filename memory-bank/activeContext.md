@@ -1,14 +1,14 @@
 # 活动上下文 (Active Context)
 
-> 最后更新：2026-06-29
+> 最后更新：2026-07-05
 
 ## 当前焦点
 
-- **文档**：全仓库 `.md` 已与当前代码基线（方案 B 播放架构、服务列表、底栏结构）对齐。
+- **分层架构**：`YTMusic`（UI）/ `YTMusic.BLL` / `YTMusic.DAL` / `CommonHelp`；约束见 [`../AGENTS.md`](../AGENTS.md)。
+- **AppGlobal**：BLL 与 UI 各一份，集中常量与 `Runtime` 状态；成员需 `///` 注释。
 - **播放架构**：`MusicPlayerService` + `PlaybackSwitcher` + 五种 `IPlaybackInstance`；详见 [playbackArchitecture.md](./playbackArchitecture.md)。
-- **Android**：在线视频 `NativeVideo` + ExoPlayer；音频 `PlaybackForegroundService`；muxed 优先，分离流可合并。
-- **Web 播放**：`GlobalAudioPlayer` + `audioPlayer.js`；进度条 JS 托管；WebM 音频走 `<audio>` + 代理。
-- **AList**：`metadata.json` + 主媒体上传；远端目录下载；设置由 `AListUploadSettingsService` 持久化。
+- **Android**：在线视频 `NativeVideo` + ExoPlayer；音频 `PlaybackForegroundService`。
+- **AList**：业务在 BLL；设置键 `AppGlobal.AList.PreferenceKeys`。
 
 ## 最近有效能力（维持现状）
 

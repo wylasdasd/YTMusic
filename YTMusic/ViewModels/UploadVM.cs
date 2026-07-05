@@ -44,9 +44,9 @@ public sealed class UploadVM : ViewModelBase, IDisposable
     public string RemoteDirectory { get; set; } = "/";
     public bool IsLoading { get; private set; }
     public bool IsRemoteLoading { get; private set; }
-    public const int LocalTabIndex = 0;
-    public const int RemoteTabIndex = 1;
-    public const int SettingsTabIndex = 2;
+    public const int LocalTabIndex = AppGlobal.UploadPage.LocalTabIndex;
+    public const int RemoteTabIndex = AppGlobal.UploadPage.RemoteTabIndex;
+    public const int SettingsTabIndex = AppGlobal.UploadPage.SettingsTabIndex;
 
     public int SelectedTabIndex { get; set; } = RemoteTabIndex;
     public List<DownloadedTrack> DownloadedFiles { get; private set; } = new();

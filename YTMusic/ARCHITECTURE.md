@@ -1,23 +1,53 @@
 # 项目框架思路 (Project Architecture & Design)
 
-YTMusic 采用 **.NET MAUI Blazor Hybrid** 架构，结合原生系统能力与 Web UI 的迭代效率。
+YTMusic 采用 **.NET MAUI Blazor Hybrid** 架构，结合原生系统能力与 Web UI 的迭代效率。业务与数据已拆分为 **BLL / DAL** 类库，UI 层只保留播放管线和平台壳层。
 
-## 1. 核心架构模式
+## 1. 分层架构
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  YTMusic（UI）                                           │
+│  Components / ViewModels / Adapters / Services(播放+UI) │
+│  AppGlobal.cs                                            │
+└───────────────┬─────────────────────┬───────────────────┘
+                │ I*Service / Ports   │ AddYTMusicDal() 仅 DI
+                ▼                     ▼
+┌───────────────────────────┐  ┌──────────────────────────┐
+│  YTMusic.BLL              │  │  YTMusic.DAL             │
+│  Services / Models / Ports│◄─│  Repositories / SQLite   │
+│  AppGlobal.cs             │  │  Infrastructure          │
+└───────────────┬───────────┘  └──────────────────────────┘
+                │
+                ▼
+         CommonHelp（通用工具）
+```
+
+| 层级 | 项目 | 职责 |
+|------|------|------|
+| UI | `YTMusic` | MudBlazor 页面、ViewModel、播放状态机、MAUI 适配器、主题/窗口 |
+| BLL | `YTMusic.BLL` | 收藏、下载、YouTube、AList、网络错误等业务编排 |
+| DAL | `YTMusic.DAL` | SQLite + Dapper 仓储实现 |
+| 共享 | `CommonHelp` | 文件、JSON、字符串、时间等无业务工具 |
+
+**依赖规则：** UI → BLL（接口）；DAL → BLL（仓储接口）；BLL 不引用 DAL；UI 除 `MauiProgram` 注册外不直接引用 DAL 类型。
+
+## 2. 核心架构模式（UI 内）
 
 项目遵循 **MVVM** 与 **依赖注入**：
 
 | 层级 | 位置 | 职责 |
 |------|------|------|
 | View | `Components/**/*.razor` | MudBlazor UI，响应式布局 |
-| ViewModel | `Components/Pages/*VM.cs` | 页面状态、命令、与服务交互 |
-| Services | `Services/` | 业务逻辑、持久化、播放状态机 |
+| ViewModel | `ViewModels/*VM.cs` | 页面状态、命令、与 BLL `I*Service` 交互 |
+| UI Services | `Services/` | 播放管线、UI 偏好、全局 Loading、窗口壳层 |
+| Adapters | `Adapters/` | 实现 BLL `Ports`（数据库路径、Preferences、对话框等） |
 | Platform | `Platforms/` | Android ExoPlayer、Windows 窗口壳层、iOS 原生音频等 |
 
 页面尽量轻量；播放队列、当前曲目、平台分流等全局状态集中在 `MusicPlayerService`。
 
-## 2. 播放架构（方案 B）
+## 3. 播放架构（方案 B）
 
-播放是项目最复杂的子系统，已从单一巨型方法拆出管线层：
+播放是项目最复杂的子系统，保留在 UI 层（不迁入 BLL）：
 
 ```
 UI (PlayerAudio / PlayerVideo / GlobalAudioPlayer)
@@ -37,22 +67,39 @@ NativeAudio | NativeVideo | WebAudio | WebMuxedVideo | Hybrid
 
 完整路由表、平台差异与勿回归清单见 [`../memory-bank/playbackArchitecture.md`](../memory-bank/playbackArchitecture.md)。
 
-## 3. 服务层职责拆分
+## 4. 服务层职责拆分
+
+### BLL（`YTMusic.BLL/Services/`）
+
+| 接口 | 实现 | 职责 |
+|------|------|------|
+| `IYouTubeService` | `YouTubeService` | YoutubeExplode 搜索、流解析、下载 |
+| `IFavoriteService` | `FavoriteService` | 收藏夹与文件夹 |
+| `ILocalMusicService` | `LocalMusicService` | 本地下载记录 |
+| `IDownloadManagerService` | `DownloadManagerService` | 下载任务队列与进度 |
+| `IUploadManagerService` | `UploadManagerService` | 本地上传 AList 任务 |
+| `IAListUploadService` | `AListUploadService` | AList HTTP 上传与元数据 |
+| `IAListRemoteDownloadManagerService` | `AListRemoteDownloadManagerService` | 远端目录下载 |
+| `IAListUploadSettingsService` | `AListUploadSettingsService` | AList 连接设置（Preferences） |
+| `INetworkErrorService` | `NetworkErrorService` | 播放/搜索失败时的 VPN 提示 |
+
+### UI（`YTMusic/Services/`）
 
 | 服务 | 职责 |
 |------|------|
-| `IYouTubeService` / `YouTubeService` | YoutubeExplode 搜索、流解析、下载 |
 | `MusicPlayerService` | 播放状态机、队列、历史、`IPlaybackHost` |
-| `IDownloadManagerService` | 下载任务队列与进度 |
-| `ILocalMusicService` | 本地下载记录（SQLite） |
-| `IFavoriteService` | 收藏夹与文件夹（SQLite） |
-| `AListUploadService` / `UploadManagerService` / `IAListRemoteDownloadManagerService` | AList 上传与远端目录下载 |
-| `AListUploadSettingsService` | AList 连接设置（Preferences） |
 | `UiPreferencesService` | 主题、播放设置、标题展示偏好 |
 | `GlobalStateService` | 全局 Loading 遮罩 |
-| `NetworkErrorService` | 播放/搜索失败时的 VPN 提示 |
 | `WindowChromeService` | Windows 窗口拖拽与系统按钮 |
 | `AppResetService` | 还原默认设置 |
+| `StoragePaths` | 本地下载目录路径（常量见 `AppGlobal.Storage`） |
+
+### DAL（`YTMusic.DAL/Repositories/`）
+
+| 接口（BLL） | 实现（DAL） | 职责 |
+|-------------|-------------|------|
+| `IFavoriteRepository` | `FavoriteRepository` | 收藏夹、文件夹、曲目 CRUD |
+| `IDownloadedTrackRepository` | `DownloadedTrackRepository` | 下载记录 CRUD |
 
 原生播放按平台注入（`MauiProgram.cs`）：
 
@@ -60,38 +107,51 @@ NativeAudio | NativeVideo | WebAudio | WebMuxedVideo | Hybrid
 - **iOS**：`IosNativeAudioPlaybackService` + `NullNativeVideoPlaybackService`
 - **其他**：`NullNative*` → Web 播放 + 本地 HTTP 代理
 
-## 4. UI 与原生交互
+## 5. AppGlobal
+
+| 层 | 文件 | 用途 |
+|----|------|------|
+| BLL | `YTMusic.BLL/AppGlobal.cs` | 数据库名、传输阈值、AList/网络常量、运行时冷却 |
+| UI | `YTMusic/AppGlobal.cs` | 存储目录、UI 偏好键、播放日志前缀、`Runtime.Services` |
+
+## 6. UI 与原生交互
 
 - **Blazor WebView**：UI 在 MAUI WebView 内渲染。
 - **JS Interop**：`audioPlayer.js` 控制媒体元素；`ytmLayout.js` 处理底栏、滚动缓存、Tab 触摸滑动；`mouseInterop.js` 配合 Windows 拖拽。
 - **本地代理**：`LocalAudioProxy` / `LocalFileProxy`（`HttpListener`）为 WebView 提供可访问的 HTTP 地址，绕过 CORS 与本地文件限制。
 - **Windows 窗口**：`Platforms/Windows/MainWindow.xaml` + `MauiProgram` 生命周期配置 + `MainLayout` 顶栏按钮。
 
-## 5. 数据持久化
+## 7. 数据持久化
 
-- **SQLite + Dapper**：收藏夹、文件夹、下载记录（`FavoriteService`、`LocalMusicService`）。
-- **Preferences**：主题、AList 设置、播放偏好（`UiPreferencesService`、`AListUploadSettingsService`）。
+- **SQLite + Dapper（DAL）**：收藏夹、下载记录；业务经 BLL `I*Service` 访问，UI 不直连。
+- **Preferences**：主题、AList 设置、播放偏好（`UiPreferencesService`、`AListUploadSettingsService`；键名集中在各层 `AppGlobal`）。
 - **播放历史**：当前为 `MusicPlayerService` 运行期内存列表，尚未落库。
 
-## 6. 项目结构速览
+## 8. 项目结构速览
 
 ```
-YTMusic/
-  Components/Layout/     MainLayout, GlobalAudioPlayer, PageListScroll
-  Components/Pages/      页面 + *VM.cs
-  Components/Dialogs/    确认/收藏/重置等弹窗
-  Services/              业务服务
-  Services/Abstractions/ 接口（含 Playback/）
-  Services/Playback/     PlaybackSwitcher, PlaybackInstances
-  Platforms/             平台特定代码
-  wwwroot/js/            audioPlayer.js, ytmLayout.js
+YTMusic/                 # MAUI Blazor 主应用（UI）
+  Components/            Layout、Pages、Dialogs
+  ViewModels/            *VM.cs
+  Adapters/              BLL Ports 的 MAUI 实现
+  Services/              播放 + UI 壳层
+  AppGlobal.cs
+YTMusic.BLL/             # 业务逻辑
+  Abstractions/          I*Service、I*Repository
+  Services/              业务实现
+  Models/、Ports/
+  AppGlobal.cs
+YTMusic.DAL/             # 数据访问
+  Repositories/
+  Infrastructure/
 CommonHelp/              共享工具库
-YTMusic.Tests/           单元测试（含 YoutubeExplode 联网测试）
+YTMusic.Tests/           单元测试
 memory-bank/             决策、进度、播放架构
 ```
 
 ## 延伸阅读
 
+- [`../AGENTS.md`](../AGENTS.md) — 各库职责、依赖约束、开发约定
 - [`CORE_LOGIC.md`](CORE_LOGIC.md) — 核心难点与解决思路
 - [`PROJECT_ANALYSIS.md`](PROJECT_ANALYSIS.md) — 代码结构与维护风险分析
 - [`../memory-bank/playbackArchitecture.md`](../memory-bank/playbackArchitecture.md) — 播放管线详细设计

@@ -12,12 +12,13 @@ using System.Threading.Tasks;
 using CommonTool.FileHelps;
 using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Models;
+using YTMusic.BLL.Ports;
 
-namespace YTMusic.Services
+namespace YTMusic.BLL.Services
 {
     public class AListUploadService : IAListUploadService
     {
-        private const long MaxInMemoryUploadBytes = 512L * 1024 * 1024;
+        private const long MaxInMemoryUploadBytes = AppGlobal.AList.MaxInMemoryUploadBytes;
 
         private static readonly HttpClient _httpClient = new();
         private static readonly HttpClient _uploadHttpClient = new()
@@ -30,11 +31,13 @@ namespace YTMusic.Services
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = true
         };
-        private readonly AListUploadSettingsService _settingsService;
+        private readonly IAListUploadSettingsService _settingsService;
+        private readonly IDownloadMusicDirectoryProvider _downloadMusicDirectoryProvider;
 
-        public AListUploadService(AListUploadSettingsService settingsService)
+        public AListUploadService(IAListUploadSettingsService settingsService, IDownloadMusicDirectoryProvider downloadMusicDirectoryProvider)
         {
             _settingsService = settingsService;
+            _downloadMusicDirectoryProvider = downloadMusicDirectoryProvider;
         }
 
         public async Task<string> UploadFileAsync(string localFilePath, string? displayName, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
@@ -55,7 +58,7 @@ namespace YTMusic.Services
                 throw new InvalidOperationException("Unable to determine file name.");
             }
 
-            var remoteFilePath = CombineRemotePath(_settingsService.RemoteDirectory, fileName);
+            var remoteFilePath = AListPathHelper.BuildRemotePath(_settingsService.RemoteDirectory, fileName);
             await UploadFileToPathAsync(localFilePath, remoteFilePath, progress, cancellationToken);
             return remoteFilePath;
         }
@@ -84,7 +87,7 @@ namespace YTMusic.Services
                 }
             }
 
-            const int maxAttempts = 3;
+            const int maxAttempts = AppGlobal.AList.UploadMaxAttempts;
             Exception? lastError = null;
 
             for (var attempt = 1; attempt <= maxAttempts; attempt++)
@@ -292,7 +295,7 @@ namespace YTMusic.Services
 
             var targetPath = string.IsNullOrWhiteSpace(remotePath)
                 ? _settingsService.RemoteDirectory
-                : AListUploadSettingsService.NormalizeDirectory(remotePath);
+                : AListPathHelper.NormalizeDirectory(remotePath);
 
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{_settingsService.BaseUrl}/api/fs/list");
             request.Headers.TryAddWithoutValidation("Authorization", _settingsService.Token);
@@ -374,7 +377,7 @@ namespace YTMusic.Services
                 result.Add(new AListDirectoryItem
                 {
                     Name = name,
-                    Path = CombineRemotePath(targetPath, name),
+                    Path = AListPathHelper.BuildRemotePath(targetPath, name),
                     Size = size,
                     IsDir = isDir,
                     ModifiedAt = modifiedAt
@@ -392,7 +395,7 @@ namespace YTMusic.Services
                 throw new InvalidOperationException("Unable to determine remote file name.");
             }
 
-            var localDirectory = StoragePaths.GetDownloadedMusicDirectory();
+            var localDirectory = _downloadMusicDirectoryProvider.GetDownloadedMusicDirectory();
             FileHelp.EnsureDirectoryExists(localDirectory);
             var localFilePath = Path.Combine(localDirectory, FileHelp.SafeFileName(fileName));
             return await DownloadFileToPathAsync(remotePath, localFilePath, progress, cancellationToken);
@@ -503,20 +506,6 @@ namespace YTMusic.Services
             }
 
             return null;
-        }
-
-        private static string CombineRemotePath(string directory, string fileName)
-        {
-            var normalizedDirectory = AListUploadSettingsService.NormalizeDirectory(directory);
-            var safeFileName = fileName.Replace('\\', '/').TrimStart('/');
-            return normalizedDirectory == "/"
-                ? "/" + safeFileName
-                : normalizedDirectory + "/" + safeFileName;
-        }
-
-        public static string BuildRemotePath(string directory, string fileName)
-        {
-            return CombineRemotePath(directory, fileName);
         }
 
         private static string EncodeRemotePath(string remotePath)
@@ -742,7 +731,7 @@ namespace YTMusic.Services
 
         private async Task VerifyRemoteFileSizeWithRetryAsync(string remoteFilePath, long expectedSize, CancellationToken cancellationToken)
         {
-            const int maxAttempts = 5;
+            const int maxAttempts = AppGlobal.AList.UploadVerifyMaxAttempts;
             Exception? lastError = null;
 
             for (var attempt = 1; attempt <= maxAttempts; attempt++)

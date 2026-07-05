@@ -34,7 +34,7 @@ namespace YTMusic.Services
                 baseDirectory = Environment.CurrentDirectory;
             }
 
-            return Path.Combine(baseDirectory, "DownloadedMusic");
+            return Path.Combine(baseDirectory, AppGlobal.Storage.DownloadedMusicFolderName);
         }
 
         public static string ResolveLocalDownloadDirectory(IReadOnlyList<string>? folderNames)

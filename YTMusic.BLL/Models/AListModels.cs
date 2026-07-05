@@ -120,4 +120,13 @@ public static class AListPathHelper
 
         return trimmed;
     }
+
+    public static string BuildRemotePath(string directory, string fileName)
+    {
+        var normalizedDirectory = NormalizeDirectory(directory);
+        var safeFileName = fileName.Replace('\\', '/').TrimStart('/');
+        return normalizedDirectory == "/"
+            ? "/" + safeFileName
+            : normalizedDirectory + "/" + safeFileName;
+    }
 }

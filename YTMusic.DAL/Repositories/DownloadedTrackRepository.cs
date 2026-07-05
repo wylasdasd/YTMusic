@@ -13,7 +13,7 @@ public sealed class DownloadedTrackRepository : IDownloadedTrackRepository
 
     public DownloadedTrackRepository(IDatabasePathProvider pathProvider)
     {
-        _connectionFactory = new SqliteConnectionFactory(pathProvider, "YTMusicDownloads.db3");
+        _connectionFactory = new SqliteConnectionFactory(pathProvider, AppGlobal.Database.DownloadsFileName);
         InitializeDatabase();
     }
 

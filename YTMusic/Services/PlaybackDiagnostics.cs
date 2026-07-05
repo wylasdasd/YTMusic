@@ -4,11 +4,11 @@ namespace YTMusic.Services
 {
     internal static class PlaybackDiagnostics
     {
-        private const string Tag = "YTMusic";
+        private const string Tag = AppGlobal.Playback.DiagnosticsTag;
 
         public static void Log(string message)
         {
-            var line = $"[YTMusic:Playback] {message}";
+            var line = $"{AppGlobal.Playback.LogPrefix} {message}";
             Console.WriteLine(line);
 #if ANDROID
             global::Android.Util.Log.Info(Tag, line);
@@ -18,8 +18,8 @@ namespace YTMusic.Services
         public static void LogError(string message, Exception? ex = null)
         {
             var line = ex == null
-                ? $"[YTMusic:Playback] {message}"
-                : $"[YTMusic:Playback] {message} | {ex.GetType().Name}: {ex.Message}";
+                ? $"{AppGlobal.Playback.LogPrefix} {message}"
+                : $"{AppGlobal.Playback.LogPrefix} {message} | {ex.GetType().Name}: {ex.Message}";
             Console.WriteLine(line);
 #if ANDROID
             global::Android.Util.Log.Error(Tag, line);

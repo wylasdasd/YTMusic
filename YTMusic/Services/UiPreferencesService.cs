@@ -11,15 +11,15 @@ namespace YTMusic.Services
 
     public class UiPreferencesService
     {
-        private const string ShowFavoriteCardImagesKey = "ui.showFavoriteCardImages";
-        private const string MediaTitleTwoLinesKey = "ui.mediaTitleTwoLines";
-        private const string ThemeIndexKey = "ui.themeIndex";
-        private const string PrefetchRemoteVideoKey = "playback.prefetchRemoteVideo";
-        private const string RemoteVideoStreamQualityKey = "playback.remoteVideoStreamQuality";
+        private const string ShowFavoriteCardImagesKey = AppGlobal.Ui.PreferenceKeys.ShowFavoriteCardImages;
+        private const string MediaTitleTwoLinesKey = AppGlobal.Ui.PreferenceKeys.MediaTitleTwoLines;
+        private const string ThemeIndexKey = AppGlobal.Ui.PreferenceKeys.ThemeIndex;
+        private const string PrefetchRemoteVideoKey = AppGlobal.Ui.PreferenceKeys.PrefetchRemoteVideo;
+        private const string RemoteVideoStreamQualityKey = AppGlobal.Ui.PreferenceKeys.RemoteVideoStreamQuality;
 
         public bool ShowFavoriteCardImages { get; private set; } = Preferences.Default.Get(ShowFavoriteCardImagesKey, true);
         public bool MediaTitleTwoLines { get; private set; } = LoadMediaTitleTwoLines();
-        public int ThemeIndex { get; private set; } = Preferences.Default.Get(ThemeIndexKey, 0);
+        public int ThemeIndex { get; private set; } = Preferences.Default.Get(ThemeIndexKey, AppGlobal.Ui.DefaultThemeIndex);
         public bool PrefetchRemoteVideo { get; private set; } = Preferences.Default.Get(PrefetchRemoteVideoKey, false);
         public RemoteVideoStreamQuality RemoteVideoStreamQuality { get; private set; } = LoadRemoteVideoStreamQuality();
 

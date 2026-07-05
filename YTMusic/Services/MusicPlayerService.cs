@@ -320,7 +320,7 @@ namespace YTMusic.Services
         private readonly INativeAudioPlaybackService _nativeAudio;
         private readonly INativeVideoPlaybackService _nativeVideo;
         private readonly ILocalMusicService _localMusicService;
-        private readonly NetworkErrorService _networkErrorService;
+        private readonly INetworkErrorService _networkErrorService;
         private LocalAudioProxy? _proxy;
         private LocalFileProxy? _fileProxy;
         private readonly SemaphoreSlim _fileProxyInitLock = new(1, 1);
@@ -374,13 +374,13 @@ namespace YTMusic.Services
         private RemoteWebVideoStreams? _prefetchedRemoteVideo;
         private RemoteVideoStreamQuality _prefetchedRemoteVideoQuality;
         private DateTime _prefetchedRemoteVideoAt;
-        private static readonly TimeSpan RemoteVideoPrefetchTtl = TimeSpan.FromMinutes(30);
+        private static readonly TimeSpan RemoteVideoPrefetchTtl = AppGlobal.Playback.RemoteVideoPrefetchTtl;
 
         public MusicPlayerService(
             INativeAudioPlaybackService nativeAudio,
             INativeVideoPlaybackService nativeVideo,
             ILocalMusicService localMusicService,
-            NetworkErrorService networkErrorService,
+            INetworkErrorService networkErrorService,
             UiPreferencesService uiPreferences)
         {
             _nativeAudio = nativeAudio;

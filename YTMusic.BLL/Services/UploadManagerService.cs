@@ -10,22 +10,22 @@ using CommonTool.FileHelps;
 using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Models;
 
-namespace YTMusic.Services
+namespace YTMusic.BLL.Services
 {
     public class UploadManagerService : IUploadManagerService
     {
-        private const int MaxRetainedTasks = 100;
-        private const double MaxInProgressUpload = 0.99;
-        private readonly AListUploadService _aListUploadService;
-        private readonly AListUploadSettingsService _settingsService;
+        private const int MaxRetainedTasks = AppGlobal.Transfers.MaxRetainedTasks;
+        private const double MaxInProgressUpload = AppGlobal.Transfers.MaxInProgressUploadProgress;
+        private readonly IAListUploadService _aListUploadService;
+        private readonly IAListUploadSettingsService _settingsService;
         private readonly ILocalMusicService _localMusicService;
         private readonly IFavoriteService _favoriteService;
         private readonly object _syncRoot = new();
         private readonly List<DownloadTaskInfo> _activeUploads = new();
 
         public UploadManagerService(
-            AListUploadService aListUploadService,
-            AListUploadSettingsService settingsService,
+            IAListUploadService aListUploadService,
+            IAListUploadSettingsService settingsService,
             ILocalMusicService localMusicService,
             IFavoriteService favoriteService)
         {
@@ -113,16 +113,16 @@ namespace YTMusic.Services
             try
             {
                 var directoryKey = BuildMusicDirectoryKey(track.Title);
-                var remoteDirectory = AListUploadService.BuildRemotePath(_settingsService.RemoteDirectory, directoryKey);
+                var remoteDirectory = AListPathHelper.BuildRemotePath(_settingsService.RemoteDirectory, directoryKey);
                 await _aListUploadService.CreateDirectoryAsync(remoteDirectory);
 
                 var mediaExtension = Path.GetExtension(track.LocalFilePath);
                 var mediaFileName = $"{directoryKey}{mediaExtension}";
-                var remoteMediaPath = AListUploadService.BuildRemotePath(remoteDirectory, mediaFileName);
+                var remoteMediaPath = AListPathHelper.BuildRemotePath(remoteDirectory, mediaFileName);
                 // metadata.json = DownloadedTracks 子集（见 RemoteTrackMetadata）；先传 metadata，再传音视频。
                 var metadata = RemoteTrackMetadata.FromDownloadedTrack(track);
                 metadata.FavoriteFolderNames = await _favoriteService.GetFavoriteFolderNamesForVideoAsync(track.VideoId);
-                var remoteMetadataPath = AListUploadService.BuildRemotePath(remoteDirectory, RemoteTrackMetadata.FileName);
+                var remoteMetadataPath = AListPathHelper.BuildRemotePath(remoteDirectory, RemoteTrackMetadata.FileName);
                 var metadataProgress = new Progress<double>(p =>
                 {
                     UpdateCombinedProgress(taskInfo, 0, p);
@@ -236,7 +236,7 @@ namespace YTMusic.Services
             bool shouldNotify;
             lock (_syncRoot)
             {
-                shouldNotify = Math.Abs(taskInfo.Progress - capped) >= 0.005;
+                shouldNotify = Math.Abs(taskInfo.Progress - capped) >= AppGlobal.Transfers.ProgressNotifyThreshold;
                 taskInfo.Progress = capped;
             }
 
@@ -248,7 +248,7 @@ namespace YTMusic.Services
 
         private static string BuildMusicDirectory(string baseDirectory, string title)
         {
-            return AListUploadService.BuildRemotePath(baseDirectory, BuildMusicDirectoryKey(title));
+            return AListPathHelper.BuildRemotePath(baseDirectory, BuildMusicDirectoryKey(title));
         }
 
         private static string BuildMusicDirectoryKey(string title)

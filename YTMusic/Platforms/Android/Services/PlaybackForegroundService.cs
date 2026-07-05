@@ -368,7 +368,7 @@ namespace YTMusic.Platforms.Android.Services
 
         private void RequestPlaylistNavigation(bool next)
         {
-            var playerService = global::YTMusic.MauiProgram.Services?.GetService<global::YTMusic.Services.MusicPlayerService>();
+            var playerService = global::YTMusic.AppGlobal.Runtime.Services?.GetService<global::YTMusic.Services.MusicPlayerService>();
             if (playerService == null)
             {
                 return;
