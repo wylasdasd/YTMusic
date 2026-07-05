@@ -89,6 +89,7 @@ YTMusic/                 # 主 MAUI Blazor 应用（UI 层）
     Dialogs/             # 弹窗组件
   ViewModels/            # 页面 ViewModel（*VM.cs）
   Adapters/              # BLL Ports 的 MAUI/MudBlazor 实现
+  Infrastructure/        # Proxies/（HTTP 代理）、Storage/（平台路径）
   Services/              # 播放管线、UI 偏好、窗口壳层（非业务编排）
     Abstractions/Playback/ # IPlaybackHost、IPlaybackInstance
     Playback/            # PlaybackSwitcher、PlaybackInstances
@@ -96,8 +97,9 @@ YTMusic/                 # 主 MAUI Blazor 应用（UI 层）
   AppGlobal.cs           # UI 层全局常量与 Runtime.Services
   wwwroot/js/            # audioPlayer.js、ytmLayout.js 等
 YTMusic.BLL/             # 业务逻辑层（YouTube、收藏、下载、AList 等）
-  Abstractions/          # I*Service、I*Repository
+  Abstractions/          # I*Service、I*Repository、IYouTubeApiClient、IFileSystem
   Services/、Models/、Ports/
+  Infrastructure/        # YoutubeExplode、AList HTTP、本地文件系统
   AppGlobal.cs           # BLL 全局常量与运行时状态
 YTMusic.DAL/             # 数据访问层（SQLite + Dapper）
   Repositories/、Infrastructure/

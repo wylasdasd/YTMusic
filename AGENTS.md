@@ -7,12 +7,12 @@
 ```
 YTMusic（UI / MAUI Blazor）
   ├── 引用 YTMusic.BLL、YTMusic.DAL（仅 DI 注册）、CommonHelp
-  ├── ViewModels/、Components/、Adapters/、Services/（播放 + UI 壳层）
+  ├── ViewModels/、Components/、Adapters/、Infrastructure/、Services/（播放 + UI 壳层）
   └── AppGlobal.cs
 
 YTMusic.BLL（业务逻辑层）
   ├── 引用 CommonHelp
-  ├── Abstractions/、Services/、Models/、Ports/
+  ├── Abstractions/、Services/、Models/、Ports/、Infrastructure/
   └── AppGlobal.cs
 
 YTMusic.DAL（数据访问层）
@@ -46,9 +46,12 @@ memory-bank/（决策、进度、播放架构文档）
 | 全局入口 | `AppGlobal.cs`：存储路径、UI 偏好键、播放诊断标识、`Runtime.Services` |
 | ViewModel | 统一放 `ViewModels/`，文件后缀 `*VM.cs`（如 `SearchVM.cs`） |
 | 适配器 | `Adapters/` 实现 BLL `Ports/`（`MauiDatabasePathProvider`、`MudUiNotifier` 等） |
-| 保留在 UI 的 `Services/` | **仅**播放与 UI 壳层：`MusicPlayerService`、`Playback/*`、`UiPreferencesService`、`GlobalStateService`、`WindowChromeService`、`AppResetService`、`StoragePaths`、原生播放 `INative*` |
+| 基础设施 | `Infrastructure/`：播放/平台相关技术实现（非独立类库）；`Proxies/`（`LocalAudioProxy`、`LocalFileProxy`）、`Storage/`（`StoragePaths`） |
+| 保留在 UI 的 `Services/` | **仅**播放与 UI 壳层：`MusicPlayerService`、`Playback/*`、`UiPreferencesService`、`GlobalStateService`、`WindowChromeService`、`AppResetService`、原生播放 `INative*` |
 | 播放接口 | 仍在 `Services/Abstractions/Playback/`（`IPlaybackHost`、`IPlaybackInstance`），**不**迁入 BLL |
 | DI 注册 | `MauiProgram.cs`：先 `AddYTMusicDal()`，再 `AddYTMusicBll()`，再注册 UI 单例与 VM |
+
+**`Adapters` vs `Infrastructure`（UI）：** `Adapters` 实现 BLL 定义的 `Ports` 契约；`Infrastructure` 放 UI/播放专用技术实现（如 `HttpListener` 代理、平台存储路径），无需跨层接口时可直用。
 
 **禁止：** 在 Razor / VM 中新增业务服务实现；绕过 BLL 接口直接操作数据库或 Repository。
 
@@ -61,10 +64,13 @@ memory-bank/（决策、进度、播放架构文档）
 | 全局入口 | `AppGlobal.cs`：数据库文件名、传输阈值、AList/网络常量、`Runtime` 冷却状态 |
 | 接口 | `Abstractions/`：`I*Service`；`Abstractions/Data/`：`I*Repository` |
 | 实现 | `Services/`：`FavoriteService`、`LocalMusicService`、`YouTubeService`、下载/上传/AList 管理等 |
+| 基础设施 | `Infrastructure/`：外部技术实现（非独立类库）；`YouTube/`（`YoutubeExplodeClient`）、`AList/`（HTTP 传输与解析）、`FileSystem/`（`LocalFileSystem`） |
 | 模型 | `Models/`：收藏、下载、AList 等 DTO |
-| 平台抽象 | `Ports/`：`IDatabasePathProvider`、`IPreferencesStore`、`IUiNotifier`、`IFilePickerService` 等（由 UI `Adapters/` 实现） |
+| 平台抽象 | `Ports/`：`IDatabasePathProvider`、`IPreferencesStore`、`IUiNotifier`、`IFileSystem`、`IYouTubeApiClient` 等（MAUI 相关由 UI `Adapters/` 实现） |
 | NuGet | `YoutubeExplode`、`Microsoft.Extensions.DependencyInjection.Abstractions` |
-| DI | `BllServiceCollectionExtensions.AddYTMusicBll()` |
+| DI | `BllServiceCollectionExtensions.AddYTMusicBll()`（含 `IYouTubeApiClient`、`IFileSystem`、`AListFsApiClient` 注册） |
+
+**`Services` vs `Infrastructure`（BLL）：** `Services` 负责业务编排；`Infrastructure` 实现 `Ports` 中的技术契约（YoutubeExplode、AList HTTP、本地文件系统），或承载 AList 内部 HTTP/解析工具类。
 
 **禁止：** 引用 MAUI / Blazor / SQLite / `YTMusic.DAL`；在 BLL 内直接 `new` Repository 或写 SQL。
 
@@ -121,6 +127,7 @@ memory-bank/（决策、进度、播放架构文档）
 - `Components/Dialogs/`：弹窗
 - `ViewModels/`：页面 ViewModel（`*VM.cs`）
 - `Adapters/`：BLL `Ports` 的 MAUI/MudBlazor 实现
+- `Infrastructure/`：UI 层技术实现（`Proxies/` 本地 HTTP 代理、`Storage/` 平台路径）
 - `Services/`：播放管线 + UI 壳层（见上文「保留在 UI 的 Services」）
 - `Services/Abstractions/Playback/`：`IPlaybackInstance`、`IPlaybackHost`
 - `Services/Playback/`：`PlaybackSwitcher`、`PlaybackInstances`、`PlaybackModels`

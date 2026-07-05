@@ -45,6 +45,8 @@
 - [x] UI `Services/` 仅保留播放管线与 UI 壳层。
 - [x] 两层 `AppGlobal.cs` 集中常量与运行时状态。
 - [x] **文档与 AGENTS 对齐**（2026-07-05）：各库职责、依赖约束、AppGlobal 约定。
+- [x] **UI `Infrastructure/`**（2026-07-05）：`Proxies/`、`Storage/` 从 `Services` 迁出。
+- [x] **BLL `Infrastructure/`**（2026-07-05）：`YoutubeExplodeClient`、`AListFsApiClient`、`LocalFileSystem`；`AListUploadService` / `YouTubeService` 瘦身。
 
 ## 进行中
 - [ ] Android 已下载切歌实机回归（列表 + 通知栏）。

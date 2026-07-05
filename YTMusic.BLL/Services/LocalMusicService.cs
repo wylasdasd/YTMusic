@@ -11,15 +11,18 @@ public sealed class LocalMusicService : ILocalMusicService
     private readonly IFavoriteService _favoriteService;
     private readonly IDownloadedTrackRepository _repository;
     private readonly IDownloadMusicDirectoryProvider _downloadMusicDirectoryProvider;
+    private readonly IFileSystem _fileSystem;
 
     public LocalMusicService(
         IFavoriteService favoriteService,
         IDownloadedTrackRepository repository,
-        IDownloadMusicDirectoryProvider downloadMusicDirectoryProvider)
+        IDownloadMusicDirectoryProvider downloadMusicDirectoryProvider,
+        IFileSystem fileSystem)
     {
         _favoriteService = favoriteService;
         _repository = repository;
         _downloadMusicDirectoryProvider = downloadMusicDirectoryProvider;
+        _fileSystem = fileSystem;
     }
 
     public async Task<IReadOnlyList<DownloadedTrack>> GetDownloadedTracksAsync()
@@ -29,7 +32,7 @@ public sealed class LocalMusicService : ILocalMusicService
 
         foreach (var track in tracks)
         {
-            if (File.Exists(track.LocalFilePath))
+            if (_fileSystem.FileExists(track.LocalFilePath))
             {
                 validTracks.Add(track);
             }
@@ -55,7 +58,7 @@ public sealed class LocalMusicService : ILocalMusicService
             return null;
         }
 
-        if (File.Exists(track.LocalFilePath))
+        if (_fileSystem.FileExists(track.LocalFilePath))
         {
             return track;
         }
@@ -77,7 +80,7 @@ public sealed class LocalMusicService : ILocalMusicService
             return null;
         }
 
-        if (File.Exists(track.LocalFilePath))
+        if (_fileSystem.FileExists(track.LocalFilePath))
         {
             return track;
         }
@@ -99,7 +102,7 @@ public sealed class LocalMusicService : ILocalMusicService
             return null;
         }
 
-        if (File.Exists(track.LocalFilePath))
+        if (_fileSystem.FileExists(track.LocalFilePath))
         {
             return track;
         }
@@ -131,12 +134,12 @@ public sealed class LocalMusicService : ILocalMusicService
     public Task<IReadOnlyList<LocalAudioFile>> GetDownloadedAudioFilesAsync()
     {
         var directory = _downloadMusicDirectoryProvider.GetDownloadedMusicDirectory();
-        if (!Directory.Exists(directory))
+        if (!_fileSystem.DirectoryExists(directory))
         {
             return Task.FromResult<IReadOnlyList<LocalAudioFile>>(new List<LocalAudioFile>());
         }
 
-        var files = Directory.GetFiles(directory);
+        var files = _fileSystem.GetFiles(directory);
         var result = files.Select(file =>
         {
             var fileName = Path.GetFileName(file);

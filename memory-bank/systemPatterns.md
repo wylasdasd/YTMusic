@@ -4,9 +4,9 @@
 
 ## 分层架构（BLL / DAL / UI）
 
-- **YTMusic.BLL**：业务服务与模型；定义 `I*Service`、`I*Repository`、`Ports`；`AppGlobal.cs` 集中业务常量。
-- **YTMusic.DAL**：仅 SQLite + Dapper；实现 BLL 仓储接口；表迁移走 `SqliteSchemaMigration`。
-- **YTMusic（UI）**：Blazor 页面、`ViewModels/`、播放管线、`Adapters/` 实现 Ports；`AppGlobal.cs` 集中 UI/播放常量。
+- **YTMusic.BLL**：业务服务与模型；`Services/` 编排业务；`Infrastructure/` 实现 YoutubeExplode、AList HTTP、`IFileSystem`。
+- **YTMusic.DAL**：仅 SQLite + Dapper；实现 BLL 仓储接口；`Infrastructure/` 放连接与迁移。
+- **YTMusic（UI）**：Blazor 页面、`ViewModels/`、播放管线；`Adapters/` 实现 BLL Ports；`Infrastructure/` 放播放代理与平台存储路径。
 - **依赖**：UI → BLL；DAL → BLL；BLL 不引用 DAL；UI 除 `MauiProgram.AddYTMusicDal()` 外不引用 DAL 类型。
 - **DI 顺序**：`AddYTMusicDal()` → `AddYTMusicBll()` → UI 单例与 VM。
 
@@ -18,7 +18,7 @@
 - **服务导向**: 核心逻辑封装在服务类中（例如 `MusicPlayerService`）。
 
 ## 关键技术模式
-- **音频代理**: `LocalAudioProxy` 和 `LocalFileProxy` 使用 `HttpListener` 为 HTML5 `<audio>` 标签提供流服务，从而绕过 CORS 限制或直接文件访问限制。
+- **音频代理**: `Infrastructure/Proxies/LocalAudioProxy` 和 `LocalFileProxy` 使用 `HttpListener` 为 HTML5 `<audio>` 标签提供流服务，从而绕过 CORS 限制或直接文件访问限制。
 - **JS 互操作**: 广泛使用 `IJSRuntime` 来控制音频元素（播放/暂停、进度跳转、事件监听）。
 - **播放器进度条（高频 UI 不进 Blazor）**:
   - `audioPlayer.js` 在 `PlayerAudio` / `PlayerVideo` 容器内 `mountProgressBar`，类名 `ytm-player-progress`。
@@ -84,6 +84,6 @@
 
 ## 数据持久化
 - **SQLite（DAL）**：`FavoriteRepository`、`DownloadedTrackRepository`；UI 经 BLL `IFavoriteService` / `ILocalMusicService` 访问。
-- **下载库**：`LocalMusicService` + `YTMusicDownloads.db3`；文件本体位于 `StoragePaths`（目录名 `AppGlobal.Storage.DownloadedMusicFolderName`）。
+- **下载库**：`LocalMusicService` + `YTMusicDownloads.db3`；文件本体位于 `Infrastructure/Storage/StoragePaths`（目录名 `AppGlobal.Storage.DownloadedMusicFolderName`）。
 - **Preferences**：主题与 AList 键名见 UI/BLL 各自 `AppGlobal`；`MauiPreferencesStore` 适配 `IPreferencesStore`。
 - **播放历史**：当前为 `MusicPlayerService` 运行期内存列表，尚未落库。

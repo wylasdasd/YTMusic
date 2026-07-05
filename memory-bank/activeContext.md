@@ -5,6 +5,8 @@
 ## 当前焦点
 
 - **分层架构**：`YTMusic`（UI）/ `YTMusic.BLL` / `YTMusic.DAL` / `CommonHelp`；约束见 [`../AGENTS.md`](../AGENTS.md)。
+- **UI Infrastructure**：`Proxies/`、`Storage/` 已从 `Services` 迁出。
+- **BLL Infrastructure**：`YouTube/`、`AList/`、`FileSystem/`；`IYouTubeApiClient`、`IFileSystem` 经 DI 注入。
 - **AppGlobal**：BLL 与 UI 各一份，集中常量与 `Runtime` 状态；成员需 `///` 注释。
 - **播放架构**：`MusicPlayerService` + `PlaybackSwitcher` + 五种 `IPlaybackInstance`；详见 [playbackArchitecture.md](./playbackArchitecture.md)。
 - **Android**：在线视频 `NativeVideo` + ExoPlayer；音频 `PlaybackForegroundService`。

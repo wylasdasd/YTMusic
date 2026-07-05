@@ -15,11 +15,12 @@
 | `YTMusic/Components/` | UI、布局、页面、弹窗 |
 | `YTMusic/ViewModels/` | 页面 VM（`*VM.cs`），注入 BLL `I*Service` |
 | `YTMusic/Adapters/` | BLL `Ports` 的 MAUI 实现 |
+| `YTMusic/Infrastructure/` | UI 技术实现：`Proxies/`、`Storage/` |
 | `YTMusic/Services/` | 播放管线 + UI 壳层（非业务编排） |
 | `YTMusic/Services/Abstractions/Playback/` | `IPlaybackHost`、`IPlaybackInstance` |
 | `YTMusic/Services/Playback/` | `PlaybackSwitcher`、`PlaybackInstances` |
 | `YTMusic/AppGlobal.cs` | UI 全局常量与 `Runtime.Services` |
-| `YTMusic.BLL/` | 业务服务、模型、仓储接口、Ports |
+| `YTMusic.BLL/` | 业务服务、`Ports`、`Infrastructure/`（YoutubeExplode、AList HTTP、文件系统） |
 | `YTMusic.DAL/` | SQLite 仓储实现与迁移 |
 | `CommonHelp/` | 文件、字符串、网络、时间等工具 |
 | `memory-bank/` | 决策、进度、播放架构 |
@@ -112,8 +113,7 @@ MusicPlayerService (IPlaybackHost)
 
 ### 代理
 
-- `LocalAudioProxy`：远程 YouTube 流 → 本地 HTTP
-- `LocalFileProxy`：本地文件 → HTTP，URL 含 `&f=` 区分文件
+- `LocalAudioProxy` / `LocalFileProxy`（`Infrastructure/Proxies/`）：远程 YouTube 流 / 本地文件 → 本地 HTTP
 
 ## 下载、收藏与本地库
 

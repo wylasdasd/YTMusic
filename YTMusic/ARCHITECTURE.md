@@ -41,6 +41,7 @@ YTMusic 采用 **.NET MAUI Blazor Hybrid** 架构，结合原生系统能力与 
 | ViewModel | `ViewModels/*VM.cs` | 页面状态、命令、与 BLL `I*Service` 交互 |
 | UI Services | `Services/` | 播放管线、UI 偏好、全局 Loading、窗口壳层 |
 | Adapters | `Adapters/` | 实现 BLL `Ports`（数据库路径、Preferences、对话框等） |
+| UI Infrastructure | `Infrastructure/` | `Proxies/`（HTTP 代理）、`Storage/`（平台存储路径） |
 | Platform | `Platforms/` | Android ExoPlayer、Windows 窗口壳层、iOS 原生音频等 |
 
 页面尽量轻量；播放队列、当前曲目、平台分流等全局状态集中在 `MusicPlayerService`。
@@ -83,6 +84,15 @@ NativeAudio | NativeVideo | WebAudio | WebMuxedVideo | Hybrid
 | `IAListUploadSettingsService` | `AListUploadSettingsService` | AList 连接设置（Preferences） |
 | `INetworkErrorService` | `NetworkErrorService` | 播放/搜索失败时的 VPN 提示 |
 
+### BLL Infrastructure（`YTMusic.BLL/Infrastructure/`）
+
+| 组件 | 职责 |
+|------|------|
+| `YoutubeExplodeClient` | 实现 `IYouTubeApiClient`（搜索、流清单、下载） |
+| `AListFsApiClient` | AList 上传/下载 HTTP 传输 |
+| `AListHttpClients` / `AListApiHelpers` / `AListFileHelpers` | AList 共享客户端、响应解析、临时文件 |
+| `LocalFileSystem` | 实现 `IFileSystem` |
+
 ### UI（`YTMusic/Services/`）
 
 | 服务 | 职责 |
@@ -92,7 +102,7 @@ NativeAudio | NativeVideo | WebAudio | WebMuxedVideo | Hybrid
 | `GlobalStateService` | 全局 Loading 遮罩 |
 | `WindowChromeService` | Windows 窗口拖拽与系统按钮 |
 | `AppResetService` | 还原默认设置 |
-| `StoragePaths` | 本地下载目录路径（常量见 `AppGlobal.Storage`） |
+| `StoragePaths` | 本地下载目录（`Infrastructure/Storage/`，常量见 `AppGlobal.Storage`） |
 
 ### DAL（`YTMusic.DAL/Repositories/`）
 
@@ -118,7 +128,7 @@ NativeAudio | NativeVideo | WebAudio | WebMuxedVideo | Hybrid
 
 - **Blazor WebView**：UI 在 MAUI WebView 内渲染。
 - **JS Interop**：`audioPlayer.js` 控制媒体元素；`ytmLayout.js` 处理底栏、滚动缓存、Tab 触摸滑动；`mouseInterop.js` 配合 Windows 拖拽。
-- **本地代理**：`LocalAudioProxy` / `LocalFileProxy`（`HttpListener`）为 WebView 提供可访问的 HTTP 地址，绕过 CORS 与本地文件限制。
+- **本地代理**：`Infrastructure/Proxies/LocalAudioProxy`、`LocalFileProxy`（`HttpListener`）为 WebView 提供可访问的 HTTP 地址，绕过 CORS 与本地文件限制。
 - **Windows 窗口**：`Platforms/Windows/MainWindow.xaml` + `MauiProgram` 生命周期配置 + `MainLayout` 顶栏按钮。
 
 ## 7. 数据持久化
@@ -134,12 +144,14 @@ YTMusic/                 # MAUI Blazor 主应用（UI）
   Components/            Layout、Pages、Dialogs
   ViewModels/            *VM.cs
   Adapters/              BLL Ports 的 MAUI 实现
+  Infrastructure/        Proxies/、Storage/（UI 技术实现）
   Services/              播放 + UI 壳层
   AppGlobal.cs
 YTMusic.BLL/             # 业务逻辑
   Abstractions/          I*Service、I*Repository
   Services/              业务实现
   Models/、Ports/
+  Infrastructure/        YouTube/、AList/、FileSystem/
   AppGlobal.cs
 YTMusic.DAL/             # 数据访问
   Repositories/

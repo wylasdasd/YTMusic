@@ -35,7 +35,7 @@
 **核心代码：**
 - `Components/Layout/GlobalAudioPlayer.razor`
 - `wwwroot/js/audioPlayer.js`
-- `MusicPlayerService.cs` 内 `LocalAudioProxy`、`LocalFileProxy`
+- `Infrastructure/Proxies/LocalAudioProxy.cs`、`LocalFileProxy.cs`
 
 ## 3. YouTube 流媒体地址解析
 
@@ -78,7 +78,7 @@
 - 各 OS 沙盒路径与权限不同；标题含非法文件名字符。
 
 **解决逻辑：**
-- 统一下载目录：`StoragePaths.GetDownloadedMusicDirectory()`（基于 `LocalApplicationData`）。
+- 统一下载目录：`Infrastructure/Storage/StoragePaths.GetDownloadedMusicDirectory()`（Android 可走外部 Music 目录，其余为 `LocalApplicationData`）。
 - 下载时净化文件名：`Path.GetInvalidFileNameChars()`。
 - 下载记录入 SQLite（`LocalMusicService` / `DownloadedTracks`）。
 
