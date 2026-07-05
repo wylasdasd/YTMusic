@@ -8,6 +8,7 @@ using YTMusic.BLL.Ports;
 using YTMusic.DAL;
 using YTMusic.ViewModels;
 using YTMusic.Services;
+using YTMusic.Services.Playback;
 using YTMusic.Services.Abstractions;
 
 #if WINDOWS
@@ -78,6 +79,8 @@ namespace YTMusic
             builder.Services.AddYTMusicDal();
             builder.Services.AddYTMusicBll();
 
+            builder.Services.AddSingleton<PlaybackProxyCoordinator>();
+            builder.Services.AddSingleton<PlaybackStreamResolver>();
             builder.Services.AddSingleton<GlobalStateService>();
             builder.Services.AddSingleton<UiPreferencesService>();
             builder.Services.AddSingleton<AppResetService>();
@@ -99,6 +102,9 @@ namespace YTMusic
             builder.Services.AddScoped<FavoritesVM>();
             builder.Services.AddScoped<FavoritesFolderVM>();
             builder.Services.AddScoped<UploadVM>();
+            builder.Services.AddScoped<HistoryVM>();
+            builder.Services.AddScoped<PlayerVM>();
+            builder.Services.AddScoped<MainLayoutVM>();
 
 #if DEBUG
             builder.Services.AddBlazorWebViewDeveloperTools();

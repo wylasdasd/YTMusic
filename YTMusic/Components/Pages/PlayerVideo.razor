@@ -1,12 +1,10 @@
 @page "/player/video"
+@using YTMusic.BLL.Ports
 @using YTMusic.Services
+@using YTMusic.ViewModels
 @using MudBlazor
-@using YTMusic.Components.Dialogs
 @inject MusicPlayerService PlayerService
-@inject IDialogService DialogService
-@inject IFavoriteService FavoriteService
-@inject IDownloadManagerService DownloadManager
-@inject ISnackbar Snackbar
+@inject PlayerVM ViewModel
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime
 @implements IDisposable
@@ -76,8 +74,8 @@
                                        Disabled="@PlayerService.IsSwitchingTrack"
                                        aria-label="Switch to audio" />
                         <MudIconButton
-                            Icon="@(IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
-                            Color="@(IsFavorite ? Color.Error : Color.Default)"
+                            Icon="@(ViewModel.IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                            Color="@(ViewModel.IsFavorite ? Color.Error : Color.Default)"
                             OnClick="OpenFavoriteDialogAsync"
                             aria-label="Toggle Favorite" />
                         <MudMenu Icon="@Icons.Material.Filled.Download"
@@ -90,7 +88,7 @@
                         </MudMenu>
                     </div>
 
-                    <MudIconButton Icon="@GetPlaybackModeIcon(PlayerService.CurrentMode)"
+                    <MudIconButton Icon="@PlayerVM.GetPlaybackModeIcon(PlayerService.CurrentMode)"
                                    Color="Color.Default"
                                    Size="Size.Medium"
                                    OnClick="TogglePlaybackMode"
@@ -136,8 +134,6 @@
 </PageListScroll>
 
 @code {
-    private bool IsFavorite = false;
-    private string? _currentCheckedVideoId;
     private string? _currentCheckedVideoSourceId;
     private ElementReference _videoFrame;
     private bool _videoAttached;
@@ -157,8 +153,9 @@
             return;
         }
 
+        ViewModel.StateHasChanged = StateHasChanged;
         PlayerService.OnChange += OnStateChanged;
-        _ = CheckFavoriteStatusAsync();
+        _ = ViewModel.RefreshFavoriteStatusAsync(PlayerService.CurrentVideo);
         _ = CheckVideoAvailabilityAsync();
     }
 
@@ -205,7 +202,7 @@
             return;
         }
 
-        _ = CheckFavoriteStatusAsync();
+        _ = ViewModel.RefreshFavoriteStatusAsync(PlayerService.CurrentVideo);
         _ = CheckVideoAvailabilityAsync();
         _ = AttachVideoIfNeededAsync();
         _ = SyncWebVideoFromServiceAsync();
@@ -336,38 +333,6 @@
         }
     }
 
-    private async Task CheckFavoriteStatusAsync()
-    {
-        var currentVideo = PlayerService.CurrentVideo;
-        if (currentVideo == null)
-        {
-            IsFavorite = false;
-            _currentCheckedVideoId = null;
-            return;
-        }
-
-        var trackingId = !string.IsNullOrEmpty(currentVideo.LocalFilePath) ? currentVideo.LocalFilePath : currentVideo.VideoId;
-        if (_currentCheckedVideoId == trackingId)
-        {
-            return;
-        }
-
-        _currentCheckedVideoId = trackingId;
-
-        if (!string.IsNullOrEmpty(currentVideo.LocalFilePath))
-        {
-            var track = await FavoriteService.GetTrackByFilePathAsync(currentVideo.LocalFilePath);
-            IsFavorite = track != null;
-        }
-        else
-        {
-            var folders = await FavoriteService.GetFavoriteFolderIdsForVideoAsync(currentVideo.VideoId);
-            IsFavorite = folders.Any();
-        }
-
-        await InvokeAsync(StateHasChanged);
-    }
-
     private async Task CheckVideoAvailabilityAsync()
     {
         var currentVideo = PlayerService.CurrentVideo;
@@ -392,36 +357,6 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task OpenFavoriteDialogAsync()
-    {
-        var currentVideo = PlayerService.CurrentVideo;
-        if (currentVideo == null) return;
-
-        string videoId = currentVideo.VideoId;
-
-        if (!string.IsNullOrEmpty(currentVideo.LocalFilePath))
-        {
-            var existingTrack = await FavoriteService.GetTrackByFilePathAsync(currentVideo.LocalFilePath);
-            videoId = existingTrack?.VideoId ?? Guid.NewGuid().ToString("N").Substring(0, 11);
-        }
-
-        var parameters = new DialogParameters
-        {
-            { "VideoId", videoId },
-            { "Title", currentVideo.Title },
-            { "Author", currentVideo.Author },
-            { "ThumbnailUrl", currentVideo.ThumbnailUrl },
-            { "LocalFilePath", currentVideo.LocalFilePath }
-        };
-
-        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
-        var dialog = await DialogService.ShowAsync<FavoriteFolderDialog>("Add to Favorite Folder", parameters, options);
-        await dialog.Result;
-
-        _currentCheckedVideoId = null;
-        await CheckFavoriteStatusAsync();
-    }
-
     private async Task TogglePlay()
     {
         if (PlayerService.IsPlaying)
@@ -432,6 +367,17 @@
         {
             await PlayerService.ResumeAsync();
         }
+    }
+
+    private async Task OpenFavoriteDialogAsync()
+    {
+        var currentVideo = PlayerService.CurrentVideo;
+        if (currentVideo == null)
+        {
+            return;
+        }
+
+        await ViewModel.OpenFavoriteDialogAsync(currentVideo);
     }
 
     private async Task PlayNextTrack()
@@ -448,17 +394,6 @@
     {
         PlayerService.TogglePlaybackMode();
         StateHasChanged();
-    }
-
-    private string GetPlaybackModeIcon(MusicPlayerService.PlaybackMode mode)
-    {
-        return mode switch
-        {
-            MusicPlayerService.PlaybackMode.Sequential => Icons.Material.Filled.Repeat,
-            MusicPlayerService.PlaybackMode.Random => Icons.Material.Filled.Shuffle,
-            MusicPlayerService.PlaybackMode.SingleLoop => Icons.Material.Filled.RepeatOne,
-            _ => Icons.Material.Filled.Repeat
-        };
     }
 
     private async Task AttachVideoFrameAsync()
@@ -508,16 +443,12 @@
     private void Download(bool isVideo)
     {
         var currentVideo = PlayerService.CurrentVideo;
-        if (currentVideo == null) return;
-
-        if (currentVideo.VideoId == "local")
+        if (currentVideo == null)
         {
-            Snackbar.Add("This file is already downloaded.", Severity.Warning);
             return;
         }
 
-        DownloadManager.StartDownload(currentVideo.VideoId, currentVideo.Title, isVideo);
-        Snackbar.Add($"Started downloading: {currentVideo.Title}", Severity.Success);
+        ViewModel.Download(currentVideo, isVideo);
     }
 
     public void Dispose()

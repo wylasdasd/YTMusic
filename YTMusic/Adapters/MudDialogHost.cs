@@ -82,4 +82,36 @@ public sealed class MudDialogHost(IDialogService dialogService) : IDialogHost
         var result = await dialog.Result;
         return result is { Canceled: false };
     }
+
+    public async Task<bool> ConfirmAppResetAsync()
+    {
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.ExtraSmall,
+            FullWidth = true
+        };
+
+        var dialog = await dialogService.ShowAsync<ConfirmResetDialog>("还原默认", options);
+        var result = await dialog.Result;
+        return result is { Canceled: false };
+    }
+
+    public async Task<bool> ConfirmRemoteVideoPlayAsync(string trackTitle)
+    {
+        var parameters = new DialogParameters<RemoteVideoConfirmDialog>
+        {
+            { x => x.TrackTitle, trackTitle }
+        };
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await dialogService.ShowAsync<RemoteVideoConfirmDialog>("播放视频", parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false };
+    }
 }

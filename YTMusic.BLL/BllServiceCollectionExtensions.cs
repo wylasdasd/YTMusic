@@ -16,6 +16,7 @@ public static class BllServiceCollectionExtensions
         services.AddSingleton<IFileSystem, LocalFileSystem>();
         services.AddSingleton<AListFsApiClient>();
 
+        services.AddSingleton<IPlaybackHistoryService, PlaybackHistoryService>();
         services.AddSingleton<INetworkErrorService, NetworkErrorService>();
         services.AddSingleton<IYouTubeService, YouTubeService>();
         services.AddSingleton<IAListUploadSettingsService, AListUploadSettingsService>();

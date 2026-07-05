@@ -125,12 +125,12 @@ memory-bank/（决策、进度、播放架构文档）
 - `Components/Layout/`：全局布局（`MainLayout.razor`、`GlobalAudioPlayer.razor`）
 - `Components/Pages/`：页面组件（`.razor` + 可选 `.razor.css`）
 - `Components/Dialogs/`：弹窗
-- `ViewModels/`：页面 ViewModel（`*VM.cs`）
+- `ViewModels/`：页面 ViewModel（`*VM.cs`）；含 `SearchVM`、`FavoritesVM`、`HistoryVM`、`PlayerVM`、`MainLayoutVM`、`ThemePresets`
 - `Adapters/`：BLL `Ports` 的 MAUI/MudBlazor 实现
 - `Infrastructure/`：UI 层技术实现（`Proxies/` 本地 HTTP 代理、`Storage/` 平台路径）
 - `Services/`：播放管线 + UI 壳层（见上文「保留在 UI 的 Services」）
 - `Services/Abstractions/Playback/`：`IPlaybackInstance`、`IPlaybackHost`
-- `Services/Playback/`：`PlaybackSwitcher`、`PlaybackInstances`、`PlaybackModels`
+- `Services/Playback/`：`PlaybackSwitcher`、`PlaybackInstances`、`PlaybackProxyCoordinator`、`PlaybackStreamResolver`、`PlaybackItemModels`
 - `Platforms/Android/Services/`：ExoPlayer 前台服务、全屏视频 Activity
 - `wwwroot/js/`：`ytmLayout.js`、`audioPlayer.js`、`mouseInterop.js`
 
@@ -159,6 +159,8 @@ memory-bank/（决策、进度、播放架构文档）
 ## 播放架构（改代码必读）
 
 - 状态源：`MusicPlayerService` 实现 `IPlaybackHost`；切换走 `PlaybackSwitcher.SwitchAsync`（`SemaphoreSlim` 串行）。
+- 流解析与本地代理：`PlaybackStreamResolver`（`IYouTubeApiClient`）、`PlaybackProxyCoordinator`；`MusicPlayerService` 不再内嵌 `YoutubeClient` 或代理实现。
+- 播放历史：`IPlaybackHistoryService`（BLL）+ `PlaybackHistoryRepository`（DAL，`PlaybackHistory` 表）；`MusicPlayerService` 仅调用 `RecordPlayAsync`，History 页走 `HistoryVM`。
 - 五种 `PlaybackKind`：`NativeAudio`、`NativeVideo`、`WebAudio`、`WebMuxedVideo`、`Hybrid`。
 - 任意时刻仅一条活跃管线；切歌 / 切模式必须先 `Detach` 旧 `IPlaybackInstance`。
 - Android 在线视频走 `NativeVideo`（ExoPlayer 全屏），**不要**回退到 WebView 主路径。

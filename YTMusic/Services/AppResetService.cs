@@ -11,17 +11,20 @@ namespace YTMusic.Services
         private readonly IFavoriteService _favoriteService;
         private readonly ILocalMusicService _localMusicService;
         private readonly UiPreferencesService _uiPreferencesService;
+        private readonly IPlaybackHistoryService _playbackHistoryService;
         private readonly MusicPlayerService _musicPlayerService;
 
         public AppResetService(
             IFavoriteService favoriteService,
             ILocalMusicService localMusicService,
             UiPreferencesService uiPreferencesService,
+            IPlaybackHistoryService playbackHistoryService,
             MusicPlayerService musicPlayerService)
         {
             _favoriteService = favoriteService;
             _localMusicService = localMusicService;
             _uiPreferencesService = uiPreferencesService;
+            _playbackHistoryService = playbackHistoryService;
             _musicPlayerService = musicPlayerService;
         }
 
@@ -30,6 +33,7 @@ namespace YTMusic.Services
             await _musicPlayerService.ResetStateAsync();
             await _favoriteService.ResetAllAsync();
             await _localMusicService.ResetAllAsync();
+            await _playbackHistoryService.ClearAsync();
             ClearDownloadedMediaDirectory();
             _uiPreferencesService.ResetToDefaults();
         }

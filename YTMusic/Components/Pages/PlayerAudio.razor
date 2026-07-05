@@ -1,12 +1,11 @@
 @page "/player/audio"
+@using YTMusic.BLL.Ports
 @using YTMusic.Services
+@using YTMusic.ViewModels
 @using MudBlazor
-@using YTMusic.Components.Dialogs
 @inject MusicPlayerService PlayerService
-@inject IDialogService DialogService
-@inject IFavoriteService FavoriteService
-@inject IDownloadManagerService DownloadManager
-@inject ISnackbar Snackbar
+@inject PlayerVM ViewModel
+@inject IUiNotifier Notifier
 @inject NavigationManager NavigationManager
 @inject GlobalStateService GlobalState
 @inject IJSRuntime JSRuntime
@@ -66,8 +65,8 @@
                                            aria-label="Play video" />
                         }
                         <MudIconButton
-                            Icon="@(IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
-                            Color="@(IsFavorite ? Color.Error : Color.Default)"
+                            Icon="@(ViewModel.IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                            Color="@(ViewModel.IsFavorite ? Color.Error : Color.Default)"
                             OnClick="OpenFavoriteDialogAsync"
                             aria-label="Toggle Favorite" />
                         <MudMenu Icon="@Icons.Material.Filled.Download"
@@ -80,7 +79,7 @@
                         </MudMenu>
                     </div>
 
-                    <MudIconButton Icon="@GetPlaybackModeIcon(PlayerService.CurrentMode)"
+                    <MudIconButton Icon="@PlayerVM.GetPlaybackModeIcon(PlayerService.CurrentMode)"
                                    Color="Color.Default"
                                    Size="Size.Medium"
                                    OnClick="TogglePlaybackMode"
@@ -130,8 +129,6 @@
 </PageListScroll>
 
 @code {
-    private bool IsFavorite = false;
-    private string? _currentCheckedVideoId;
     private ElementReference _progressHost;
     private bool _progressMounted;
     private string? _progressTrackKey;
@@ -139,8 +136,9 @@
 
     protected override void OnInitialized()
     {
+        ViewModel.StateHasChanged = StateHasChanged;
         PlayerService.OnChange += OnStateChanged;
-        _ = CheckFavoriteStatusAsync();
+        _ = ViewModel.RefreshFavoriteStatusAsync(PlayerService.CurrentVideo);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -162,7 +160,7 @@
             return;
         }
 
-        _ = CheckFavoriteStatusAsync();
+        _ = ViewModel.RefreshFavoriteStatusAsync(PlayerService.CurrentVideo);
         _ = SyncPlayerChromeAsync();
         InvokeAsync(StateHasChanged);
     }
@@ -228,66 +226,15 @@
         await JSRuntime.InvokeVoidAsync("audioPlayer.setNativeProgressMode", native);
     }
 
-    private async Task CheckFavoriteStatusAsync()
+    private async Task OpenFavoriteDialogAsync()
     {
         var currentVideo = PlayerService.CurrentVideo;
         if (currentVideo == null)
         {
-            IsFavorite = false;
-            _currentCheckedVideoId = null;
             return;
         }
 
-        var trackingId = !string.IsNullOrEmpty(currentVideo.LocalFilePath) ? currentVideo.LocalFilePath : currentVideo.VideoId;
-        if (_currentCheckedVideoId == trackingId)
-        {
-            return;
-        }
-
-        _currentCheckedVideoId = trackingId;
-
-        if (!string.IsNullOrEmpty(currentVideo.LocalFilePath))
-        {
-            var track = await FavoriteService.GetTrackByFilePathAsync(currentVideo.LocalFilePath);
-            IsFavorite = track != null;
-        }
-        else
-        {
-            var folders = await FavoriteService.GetFavoriteFolderIdsForVideoAsync(currentVideo.VideoId);
-            IsFavorite = folders.Any();
-        }
-
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task OpenFavoriteDialogAsync()
-    {
-        var currentVideo = PlayerService.CurrentVideo;
-        if (currentVideo == null) return;
-
-        string videoId = currentVideo.VideoId;
-
-        if (!string.IsNullOrEmpty(currentVideo.LocalFilePath))
-        {
-            var existingTrack = await FavoriteService.GetTrackByFilePathAsync(currentVideo.LocalFilePath);
-            videoId = existingTrack?.VideoId ?? Guid.NewGuid().ToString("N").Substring(0, 11);
-        }
-
-        var parameters = new DialogParameters
-        {
-            { "VideoId", videoId },
-            { "Title", currentVideo.Title },
-            { "Author", currentVideo.Author },
-            { "ThumbnailUrl", currentVideo.ThumbnailUrl },
-            { "LocalFilePath", currentVideo.LocalFilePath }
-        };
-
-        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
-        var dialog = await DialogService.ShowAsync<FavoriteFolderDialog>("Add to Favorite Folder", parameters, options);
-        await dialog.Result;
-
-        _currentCheckedVideoId = null;
-        await CheckFavoriteStatusAsync();
+        await ViewModel.OpenFavoriteDialogAsync(currentVideo);
     }
 
     private async Task TogglePlay()
@@ -319,15 +266,11 @@
 
         if (string.IsNullOrWhiteSpace(currentVideo.VideoId) || currentVideo.VideoId == "local")
         {
-            Snackbar.Add("当前曲目没有可用的视频 ID，无法在线播放视频。", Severity.Warning);
+            Notifier.Warning("当前曲目没有可用的视频 ID，无法在线播放视频。");
             return;
         }
 
-        var parameters = new DialogParameters { { "TrackTitle", currentVideo.Title } };
-        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
-        var dialog = await DialogService.ShowAsync<RemoteVideoConfirmDialog>("播放视频", parameters, options);
-        var result = await dialog.Result;
-        if (result == null || result.Canceled)
+        if (!await ViewModel.ConfirmRemoteVideoPlayAsync(currentVideo.Title))
         {
             return;
         }
@@ -344,7 +287,7 @@
             {
                 PlaybackDiagnostics.LogError(
                     $"PlayerAudio.PlayVideo navigate failed playOk={playOk} isVideo={PlayerService.IsCurrentStreamVideo}");
-                Snackbar.Add("在线视频播放失败，视频可能不可用或网络异常。", Severity.Error);
+                Notifier.Error("在线视频播放失败，视频可能不可用或网络异常。");
             }
         }
         finally
@@ -391,7 +334,7 @@
         }
         else
         {
-            Snackbar.Add("无法切换到音频播放。", Severity.Warning);
+            Notifier.Warning("无法切换到音频播放。");
         }
     }
 
@@ -411,30 +354,15 @@
         StateHasChanged();
     }
 
-    private string GetPlaybackModeIcon(MusicPlayerService.PlaybackMode mode)
-    {
-        return mode switch
-        {
-            MusicPlayerService.PlaybackMode.Sequential => Icons.Material.Filled.Repeat,
-            MusicPlayerService.PlaybackMode.Random => Icons.Material.Filled.Shuffle,
-            MusicPlayerService.PlaybackMode.SingleLoop => Icons.Material.Filled.RepeatOne,
-            _ => Icons.Material.Filled.Repeat
-        };
-    }
-
     private void Download(bool isVideo)
     {
         var currentVideo = PlayerService.CurrentVideo;
-        if (currentVideo == null) return;
-
-        if (currentVideo.VideoId == "local")
+        if (currentVideo == null)
         {
-            Snackbar.Add("This file is already downloaded.", Severity.Warning);
             return;
         }
 
-        DownloadManager.StartDownload(currentVideo.VideoId, currentVideo.Title, isVideo);
-        Snackbar.Add($"Started downloading: {currentVideo.Title}", Severity.Success);
+        ViewModel.Download(currentVideo, isVideo);
     }
 
     public void Dispose()

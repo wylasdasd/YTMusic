@@ -8,6 +8,7 @@ public static class DalServiceCollectionExtensions
 {
     public static IServiceCollection AddYTMusicDal(this IServiceCollection services)
     {
+        services.AddSingleton<IPlaybackHistoryRepository, PlaybackHistoryRepository>();
         services.AddSingleton<IFavoriteRepository, FavoriteRepository>();
         services.AddSingleton<IDownloadedTrackRepository, DownloadedTrackRepository>();
         return services;

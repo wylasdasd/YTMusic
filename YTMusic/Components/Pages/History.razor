@@ -1,7 +1,8 @@
 @page "/history"
-@using YTMusic.Services
-@inject MusicPlayerService PlayerService
+@using YTMusic.ViewModels
+@inject HistoryVM ViewModel
 @inject NavigationManager NavigationManager
+@implements IDisposable
 
 <PageListScroll PageKey="history" ScrollId="history-page-scroll">
     <Header>
@@ -9,21 +10,21 @@
             <MudText Typo="Typo.h6">历史播放列表</MudText>
             <MudButton Variant="Variant.Text"
                        Color="Color.Default"
-                       Disabled="@(PlayerService.PlaybackHistory.Count == 0)"
-                       OnClick="ClearHistory">
+                       Disabled="@(ViewModel.History.Count == 0)"
+                       OnClick="ClearHistoryAsync">
                 清空
             </MudButton>
         </div>
     </Header>
     <ChildContent>
-        @if (PlayerService.PlaybackHistory.Count == 0)
+        @if (ViewModel.History.Count == 0)
         {
             <MudAlert Severity="Severity.Info">还没有播放记录。</MudAlert>
         }
         else
         {
             <div class="d-flex flex-column gap-3">
-                @foreach (var item in PlayerService.PlaybackHistory)
+                @foreach (var item in ViewModel.History)
                 {
                     <MudPaper Elevation="2"
                               Class="pa-3 d-flex align-center justify-space-between"
@@ -36,7 +37,7 @@
                             }
                             else
                             {
-                                <MudIcon Icon="@(item.IsVideo == true ? Icons.Material.Filled.OndemandVideo : Icons.Material.Filled.MusicNote)"
+                                <MudIcon Icon="@(item.IsVideo ? Icons.Material.Filled.OndemandVideo : Icons.Material.Filled.MusicNote)"
                                          Color="Color.Primary"
                                          Size="Size.Large" />
                             }
@@ -46,7 +47,7 @@
                                     @item.Author
                                 </MudText>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    @(item.IsVideo == true ? "Video" : "Audio") · @item.PlayedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                                    @(item.IsVideo ? "Video" : "Audio") · @item.PlayedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
                                 </MudText>
                             </div>
                         </div>
@@ -60,25 +61,26 @@
 </PageListScroll>
 
 @code {
-    private async Task PlayHistoryItemAsync(PlaybackHistoryItem item)
+    protected override async Task OnInitializedAsync()
     {
-        if (await PlayerService.PlayAsync(new PlayingItem
-        {
-            VideoId = item.VideoId,
-            Title = item.Title,
-            Author = item.Author,
-            ThumbnailUrl = item.ThumbnailUrl,
-            LocalFilePath = item.LocalFilePath,
-            IsVideo = item.IsVideo,
-            DurationSeconds = item.DurationSeconds
-        }))
+        ViewModel.StateHasChanged = StateHasChanged;
+        await ViewModel.LoadAsync();
+    }
+
+    private async Task PlayHistoryItemAsync(YTMusic.BLL.Models.PlaybackHistoryRecord item)
+    {
+        if (await ViewModel.PlayItemAsync(item))
         {
             NavigationManager.NavigateTo("/player");
         }
     }
 
-    private void ClearHistory()
+    private async Task ClearHistoryAsync()
     {
-        PlayerService.ClearPlaybackHistory();
+        await ViewModel.ClearAsync();
+    }
+
+    public void Dispose()
+    {
     }
 }
