@@ -44,7 +44,7 @@ memory-bank/（决策、进度、播放架构文档）
 | TFM | `net10.0-android` / `ios` / `maccatalyst` / `windows10.0.19041.0` |
 | 职责 | Blazor 页面、ViewModel、平台适配器、播放管线、UI 偏好与窗口壳层 |
 | 全局入口 | `AppGlobal.cs`：存储路径、UI 偏好键、播放诊断标识、`Runtime.Services` |
-| ViewLogic（*VM.cs） | 与对应 `.razor` 同目录（`Components/Pages/` 或 `Components/Layout/`）；**共享** VM 放 `ViewModels.Shared/`（如 `PlayerVM`、`ViewModelBase`、`ThemePresets`） |
+| ViewLogic（*VM.cs） | 与对应 `.razor` 同目录（`Components/Pages/` 或 `Components/Layout/`）；**共享** VM 放 `ViewModels.Shared/`（如 `PlayerVM`、`ViewModelBase`、`ThemePresets`）；继承 `ViewModelBase`（`ObservableObject` + Blazor `StateHasChanged` 桥接）；命令用 **CommunityToolkit.Mvvm** `[RelayCommand]` / `[ObservableProperty]` |
 | 适配器 | `Adapters/` 实现 BLL `Ports/`（`MauiDatabasePathProvider`、`MudUiNotifier` 等） |
 | 基础设施 | `Infrastructure/`：播放/平台相关技术实现（非独立类库）；`Proxies/`（`LocalAudioProxy`、`LocalFileProxy`）、`Storage/`（`StoragePaths`） |
 | 保留在 UI 的 `Services/` | **仅**播放与 UI 壳层：`MusicPlayerService`、`Playback/*`、`UiPreferencesService`、`GlobalStateService`、`WindowChromeService`、`AppResetService`、原生播放 `INative*` |

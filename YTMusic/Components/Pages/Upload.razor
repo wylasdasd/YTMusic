@@ -15,7 +15,7 @@
 
         <MudTabPanel Text="Local"
                      Icon="@Icons.Material.Filled.Upload"
-                     BadgeData="@GetUploadLocalTabBadgeData()"
+                     BadgeData="@ViewModel.GetUploadLocalTabBadgeData()"
                      BadgeColor="Color.Error"
                      data-page="upload-local">
             <MudPaper Elevation="2" Class="pa-4 mb-4">
@@ -82,7 +82,7 @@
                                         {
                                             <MudChip T="string"
                                                      Size="Size.Small"
-                                                     Color="@GetStatusColor(uploadTask.Status)"
+                                                     Color="@UploadVM.GetStatusColor(uploadTask.Status)"
                                                      Variant="Variant.Outlined">
                                                 Upload - @uploadTask.Status
                                             </MudChip>
@@ -112,7 +112,7 @@
 
         <MudTabPanel Text="Remote"
                      Icon="@Icons.Material.Filled.Cloud"
-                     BadgeData="@GetRemoteTabBadgeData()"
+                     BadgeData="@ViewModel.GetRemoteTabBadgeData()"
                      BadgeColor="Color.Info"
                      data-page="upload-remote">
             <MudPaper Elevation="2" Class="pa-4 mb-4">
@@ -190,7 +190,7 @@
                                         {
                                             <MudChip T="string"
                                                      Size="Size.Small"
-                                                     Color="@GetStatusColor(downloadTask.Status)"
+                                                     Color="@UploadVM.GetStatusColor(downloadTask.Status)"
                                                      Variant="Variant.Outlined">
                                                 Download - @downloadTask.Status
                                             </MudChip>
@@ -312,39 +312,5 @@
     public void Dispose()
     {
         ViewModel.Dispose();
-    }
-
-    private string? GetUploadLocalTabBadgeData()
-        => ViewModel.HasSelection ? $"{ViewModel.SelectedFilePaths.Count}" : null;
-
-    private string? GetRemoteTabBadgeData()
-        => ViewModel.HasRemoteSelection ? $"{ViewModel.SelectedRemotePaths.Count}" : null;
-
-    private static Color GetStatusColor(DownloadStatus status) => status switch
-    {
-        DownloadStatus.Pending => Color.Default,
-        DownloadStatus.Downloading => Color.Info,
-        DownloadStatus.Completed => Color.Success,
-        DownloadStatus.Failed => Color.Error,
-        _ => Color.Default
-    };
-
-    private static string FormatSize(long size)
-    {
-        if (size <= 0)
-        {
-            return "Unknown size";
-        }
-
-        string[] units = ["B", "KB", "MB", "GB"];
-        double value = size;
-        var unitIndex = 0;
-        while (value >= 1024 && unitIndex < units.Length - 1)
-        {
-            value /= 1024;
-            unitIndex++;
-        }
-
-        return $"{value:F1} {units[unitIndex]}";
     }
 }

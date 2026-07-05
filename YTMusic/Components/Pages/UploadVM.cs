@@ -1,3 +1,4 @@
+using CommunityToolkit.Mvvm.ComponentModel;
 using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Models;
 using YTMusic.BLL.Ports;
@@ -5,7 +6,7 @@ using YTMusic.ViewModels.Shared;
 
 namespace YTMusic.Components.Pages;
 
-public sealed class UploadVM : ViewModelBase, IDisposable
+public sealed partial class UploadVM : ViewModelBase, IDisposable
 {
     private readonly IAListUploadSettingsService _settingsService;
     private readonly IAListUploadService _aListUploadService;
@@ -585,5 +586,39 @@ public sealed class UploadVM : ViewModelBase, IDisposable
         _uploadManager.OnUploadsChanged -= HandleStateChanged;
         _remoteDownloadManager.OnRemoteDownloadsChanged -= HandleStateChanged;
         _settingsService.OnChange -= HandleStateChanged;
+    }
+
+    public string? GetUploadLocalTabBadgeData()
+        => HasSelection ? $"{_selectedFilePaths.Count}" : null;
+
+    public string? GetRemoteTabBadgeData()
+        => HasRemoteSelection ? $"{_selectedRemotePaths.Count}" : null;
+
+    public static MudBlazor.Color GetStatusColor(DownloadStatus status) => status switch
+    {
+        DownloadStatus.Pending => MudBlazor.Color.Default,
+        DownloadStatus.Downloading => MudBlazor.Color.Info,
+        DownloadStatus.Completed => MudBlazor.Color.Success,
+        DownloadStatus.Failed => MudBlazor.Color.Error,
+        _ => MudBlazor.Color.Default
+    };
+
+    public static string FormatSize(long size)
+    {
+        if (size <= 0)
+        {
+            return "Unknown size";
+        }
+
+        string[] units = ["B", "KB", "MB", "GB"];
+        double value = size;
+        var unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.Length - 1)
+        {
+            value /= 1024;
+            unitIndex++;
+        }
+
+        return $"{value:F1} {units[unitIndex]}";
     }
 }

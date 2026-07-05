@@ -1,6 +1,5 @@
 @page "/history"
 @inject HistoryVM ViewModel
-@inject NavigationManager NavigationManager
 @implements IDisposable
 
 <PageListScroll PageKey="history" ScrollId="history-page-scroll">
@@ -10,7 +9,7 @@
             <MudButton Variant="Variant.Text"
                        Color="Color.Default"
                        Disabled="@(ViewModel.History.Count == 0)"
-                       OnClick="ClearHistoryAsync">
+                       OnClick="@(async () => await ViewModel.ClearCommand.ExecuteAsync(null))">
                 清空
             </MudButton>
         </div>
@@ -28,7 +27,7 @@
                     <MudPaper Elevation="2"
                               Class="pa-3 d-flex align-center justify-space-between"
                               Style="cursor: pointer;"
-                              @onclick="@(() => PlayHistoryItemAsync(item))">
+                              @onclick="@(() => ViewModel.PlayItemAsync(item))">
                         <div class="d-flex align-center gap-3" style="min-width: 0;">
                             @if (!string.IsNullOrWhiteSpace(item.ThumbnailUrl))
                             {
@@ -66,20 +65,8 @@
         await ViewModel.LoadAsync();
     }
 
-    private async Task PlayHistoryItemAsync(YTMusic.BLL.Models.PlaybackHistoryRecord item)
-    {
-        if (await ViewModel.PlayItemAsync(item))
-        {
-            NavigationManager.NavigateTo("/player");
-        }
-    }
-
-    private async Task ClearHistoryAsync()
-    {
-        await ViewModel.ClearAsync();
-    }
-
     public void Dispose()
     {
+        ViewModel.StateHasChanged = null;
     }
 }

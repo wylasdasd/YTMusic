@@ -7,7 +7,7 @@
         <div class="favorites-track-toolbar">
             <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
                            Color="Color.Default"
-                           OnClick="BackToFolderList"
+                           OnClick="ViewModel.NavigateBackToFolderList"
                            aria-label="返回收藏夹列表" />
             <MudText Typo="Typo.h6" Class="favorites-track-toolbar__title">
                 @(ViewModel.FolderName ?? "收藏夹")
@@ -57,7 +57,7 @@
                 {
                     <MudItem xs="12" sm="6" md="4" lg="3">
                         <MudCard Elevation="2" Style="height: 100%; display: flex; flex-direction: column; cursor: pointer;"
-                                 @onclick="@(() => PlayTrack(track))">
+                                 @onclick="@(() => ViewModel.PlayTrackAsync(track))">
                             @if (UiPreferences.ShowFavoriteCardImages)
                             {
                                 <MudCardMedia Image="@track.ThumbnailUrl" Height="160" />
@@ -82,7 +82,7 @@
                                     <div @onclick:stopPropagation="true">
                                         <MudIconButton Icon="@Icons.Material.Filled.OndemandVideo"
                                                        Color="Color.Secondary"
-                                                       OnClick="@(async (e) => await PlayLocalVideoAsync(track))"
+                                                       OnClick="@(async () => await ViewModel.PlayLocalVideoAsync(track))"
                                                        aria-label="Play local video" />
                                     </div>
                                 }
@@ -90,7 +90,7 @@
                                     <MudIconButton
                                         Icon="@(ViewModel.IsTrackFavoritedAnywhere(track) ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
                                         Color="@(ViewModel.IsTrackFavoritedAnywhere(track) ? Color.Error : Color.Default)"
-                                        OnClick="@(async (e) => await ViewModel.OpenFavoriteFolderDialogAsync(track))"
+                                        OnClick="@(async () => await ViewModel.OpenFavoriteFolderDialogAsync(track))"
                                         aria-label="管理收藏夹" />
                                 </div>
                                 @if (ViewModel.IsDownloadedCatalog)
@@ -98,7 +98,7 @@
                                     <div @onclick:stopPropagation="true">
                                         <MudIconButton Icon="@Icons.Material.Filled.Delete"
                                                        Color="Color.Error"
-                                                       OnClick="@(async (e) => await ViewModel.DeleteLocalFileAsync(track))"
+                                                       OnClick="@(async () => await ViewModel.DeleteLocalFileAsync(track))"
                                                        aria-label="删除本地文件" />
                                     </div>
                                 }
@@ -115,9 +115,6 @@
     [Parameter] public int FolderId { get; set; }
 
     [Inject] private FavoritesFolderVM ViewModel { get; set; } = default!;
-    [Inject] private NavigationManager NavigationManager { get; set; } = default!;
-    [Inject] private MusicPlayerService PlayerService { get; set; } = default!;
-    [Inject] private GlobalStateService GlobalState { get; set; } = default!;
     [Inject] private UiPreferencesService UiPreferences { get; set; } = default!;
 
     protected override async Task OnInitializedAsync()
@@ -132,84 +129,6 @@
         if (FolderId != ViewModel.FolderId && FolderId != 0)
         {
             await ViewModel.InitializeAsync(FolderId);
-        }
-    }
-
-    private void BackToFolderList()
-    {
-        NavigationManager.NavigateTo("/favorites");
-    }
-
-    private async Task PlayTrack(FavoriteTrack track)
-    {
-        try
-        {
-            GlobalState.ShowLoading();
-            StateHasChanged();
-
-            if (ViewModel.Tracks.Any())
-            {
-                var playlist = BuildPlaylist(ViewModel.Tracks);
-                int startIndex = ViewModel.Tracks.FindIndex(t =>
-                    t.VideoId == track.VideoId &&
-                    string.Equals(t.LocalFilePath, track.LocalFilePath, StringComparison.OrdinalIgnoreCase));
-                if (startIndex == -1) startIndex = 0;
-
-                string folderName = ViewModel.FolderName ?? "收藏夹";
-
-                if (await PlayerService.PlayPlaylistAsync(playlist, startIndex, folderName, MusicPlayerService.PlaybackMode.Sequential))
-                {
-                    NavigationManager.NavigateTo("/player");
-                }
-            }
-        }
-        finally
-        {
-            GlobalState.HideLoading();
-            StateHasChanged();
-        }
-    }
-
-    private List<PlayingItem> BuildPlaylist(IEnumerable<FavoriteTrack> tracks)
-    {
-        return tracks.Select(t => new PlayingItem
-        {
-            VideoId = t.VideoId,
-            Title = t.Title,
-            Author = t.Author,
-            ThumbnailUrl = t.ThumbnailUrl,
-            LocalFilePath = t.IsDownloaded || ViewModel.IsDownloadedCatalog ? t.LocalFilePath : null,
-            IsVideo = false
-        }).ToList();
-    }
-
-    private async Task PlayLocalVideoAsync(FavoriteTrack track)
-    {
-        if (!track.HasDownloadedVideo || string.IsNullOrWhiteSpace(track.LocalVideoFilePath))
-        {
-            return;
-        }
-
-        try
-        {
-            GlobalState.ShowLoading();
-            StateHasChanged();
-
-            if (await PlayerService.PlayLocalFileAsync(
-                track.LocalVideoFilePath,
-                track.Title,
-                true,
-                track.Author,
-                track.ThumbnailUrl,
-                track.VideoId))
-            {
-                NavigationManager.NavigateTo("/player");
-            }
-        }
-        finally
-        {
-            GlobalState.HideLoading();
-            StateHasChanged();
         }
     }
 

@@ -1,10 +1,12 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Models;
 using YTMusic.ViewModels.Shared;
 
 namespace YTMusic.Components.Pages;
 
-public sealed class TransfersVM : ViewModelBase, IDisposable
+public sealed partial class TransfersVM : ViewModelBase, IDisposable
 {
     private readonly IDownloadManagerService _downloadManager;
     private readonly IUploadManagerService _uploadManager;
@@ -58,6 +60,38 @@ public sealed class TransfersVM : ViewModelBase, IDisposable
 
         CurrentFilter = filter;
         NotifyChanged();
+    }
+
+    public static MudBlazor.Color GetStatusColor(DownloadStatus status) => status switch
+    {
+        DownloadStatus.Pending => MudBlazor.Color.Default,
+        DownloadStatus.Downloading => MudBlazor.Color.Info,
+        DownloadStatus.Completed => MudBlazor.Color.Success,
+        DownloadStatus.Failed => MudBlazor.Color.Error,
+        _ => MudBlazor.Color.Default
+    };
+
+    public static string GetEmptyMessage(TransferFilter filter) => filter switch
+    {
+        TransferFilter.Active => "No active transfers.",
+        TransferFilter.Completed => "No completed transfers yet.",
+        TransferFilter.Failed => "No failed transfers.",
+        _ => "No transfers yet."
+    };
+
+    public static string GetTaskLabel(DownloadTaskInfo task)
+    {
+        if (task.Kind == TransferKind.Upload)
+        {
+            return $"Upload - {task.Status}";
+        }
+
+        if (task.Kind == TransferKind.RemoteDownload)
+        {
+            return $"AList Download - {task.Status}";
+        }
+
+        return $"{(task.IsVideo ? "Video" : "Audio")} Download - {task.Status}";
     }
 
     private void HandleDownloadsChanged()

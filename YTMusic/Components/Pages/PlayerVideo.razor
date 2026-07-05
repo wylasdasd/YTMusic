@@ -75,22 +75,22 @@
                         <MudIconButton
                             Icon="@(ViewModel.IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
                             Color="@(ViewModel.IsFavorite ? Color.Error : Color.Default)"
-                            OnClick="OpenFavoriteDialogAsync"
+                            OnClick="@(async () => await ViewModel.OpenFavoriteDialogCommand.ExecuteAsync(null))"
                             aria-label="Toggle Favorite" />
                         <MudMenu Icon="@Icons.Material.Filled.Download"
                                  Color="Color.Primary"
                                  AnchorOrigin="Origin.BottomRight"
                                  TransformOrigin="Origin.TopRight"
                                  aria-label="Download">
-                            <MudMenuItem OnClick="@(() => Download(false))">Download Audio</MudMenuItem>
-                            <MudMenuItem OnClick="@(() => Download(true))">Download Video</MudMenuItem>
+                            <MudMenuItem OnClick="@(() => ViewModel.Download(false))">Download Audio</MudMenuItem>
+                            <MudMenuItem OnClick="@(() => ViewModel.Download(true))">Download Video</MudMenuItem>
                         </MudMenu>
                     </div>
 
                     <MudIconButton Icon="@PlayerVM.GetPlaybackModeIcon(PlayerService.CurrentMode)"
                                    Color="Color.Default"
                                    Size="Size.Medium"
-                                   OnClick="TogglePlaybackMode"
+                                   OnClick="@(() => ViewModel.TogglePlaybackModeCommand.Execute(null))"
                                    aria-label="Toggle Playback Mode"
                                    Disabled="@(PlayerService.Playlist.Count == 0)" />
                 </div>
@@ -101,7 +101,7 @@
                         <MudIconButton Icon="@Icons.Material.Filled.SkipPrevious"
                                        Size="Size.Large"
                                        Variant="Variant.Text"
-                                       OnClick="PlayPreviousTrack"
+                                       OnClick="@(async () => await ViewModel.PlayPreviousTrackCommand.ExecuteAsync(null))"
                                        Disabled="@(PlayerService.Playlist.Count == 0 || PlayerService.IsSwitchingTrack)" />
 
                         @if (PlayerService.IsLoading)
@@ -113,7 +113,7 @@
                             <MudIconButton Icon="@(PlayerService.IsPlaying ? Icons.Material.Filled.PauseCircle : Icons.Material.Filled.PlayCircle)"
                                            Size="Size.Large"
                                            Color="Color.Primary"
-                                           OnClick="TogglePlay"
+                                           OnClick="@(async () => await ViewModel.TogglePlayCommand.ExecuteAsync(null))"
                                            Disabled="@PlayerService.IsSwitchingTrack"
                                            Class="player-main-button" />
                         }
@@ -121,7 +121,7 @@
                         <MudIconButton Icon="@Icons.Material.Filled.SkipNext"
                                        Size="Size.Large"
                                        Variant="Variant.Text"
-                                       OnClick="PlayNextTrack"
+                                       OnClick="@(async () => await ViewModel.PlayNextTrackCommand.ExecuteAsync(null))"
                                        Disabled="@(PlayerService.Playlist.Count == 0 || PlayerService.IsSwitchingTrack)" />
                     </div>
                 }
@@ -356,45 +356,6 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task TogglePlay()
-    {
-        if (PlayerService.IsPlaying)
-        {
-            await PlayerService.PauseAsync();
-        }
-        else
-        {
-            await PlayerService.ResumeAsync();
-        }
-    }
-
-    private async Task OpenFavoriteDialogAsync()
-    {
-        var currentVideo = PlayerService.CurrentVideo;
-        if (currentVideo == null)
-        {
-            return;
-        }
-
-        await ViewModel.OpenFavoriteDialogAsync(currentVideo);
-    }
-
-    private async Task PlayNextTrack()
-    {
-        await PlayerService.PlayNextAsync();
-    }
-
-    private async Task PlayPreviousTrack()
-    {
-        await PlayerService.PlayPreviousAsync();
-    }
-
-    private void TogglePlaybackMode()
-    {
-        PlayerService.TogglePlaybackMode();
-        StateHasChanged();
-    }
-
     private async Task AttachVideoFrameAsync()
     {
         _fullscreenObjRef ??= DotNetObjectReference.Create(this);
@@ -437,17 +398,6 @@
             _videoAttached = false;
             NavigationManager.NavigateTo("/player/audio", replace: true);
         }
-    }
-
-    private void Download(bool isVideo)
-    {
-        var currentVideo = PlayerService.CurrentVideo;
-        if (currentVideo == null)
-        {
-            return;
-        }
-
-        ViewModel.Download(currentVideo, isVideo);
     }
 
     public void Dispose()

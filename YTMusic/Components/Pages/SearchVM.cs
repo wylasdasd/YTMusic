@@ -1,11 +1,15 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Microsoft.AspNetCore.Components;
 using YoutubeExplode.Search;
 using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Ports;
+using YTMusic.Services;
 using YTMusic.ViewModels.Shared;
 
 namespace YTMusic.Components.Pages;
 
-public sealed class SearchVM : ViewModelBase, IDisposable
+public sealed partial class SearchVM : ViewModelBase, IDisposable
 {
     private readonly IYouTubeService _youTubeService;
     private readonly IUiNotifier _notifier;
@@ -13,15 +17,22 @@ public sealed class SearchVM : ViewModelBase, IDisposable
     private readonly IFavoriteService _favoriteService;
     private readonly IDialogHost _dialogHost;
     private readonly INetworkErrorService _networkErrorService;
+    private readonly MusicPlayerService _playerService;
+    private readonly NavigationManager _navigation;
+    private readonly GlobalStateService _globalState;
 
     public string Query { get; set; } = string.Empty;
-    public bool IsSearching { get; private set; }
+
+    [ObservableProperty]
+    private bool _isSearching;
 
     public List<VideoSearchResult> Videos { get; } = new();
     public HashSet<string> FavoriteVideoIds { get; } = new();
 
     private IAsyncEnumerator<VideoSearchResult>? _searchEnumerator;
-    public bool HasMore { get; private set; }
+
+    [ObservableProperty]
+    private bool _hasMore;
 
     public SearchVM(
         IYouTubeService youTubeService,
@@ -29,7 +40,10 @@ public sealed class SearchVM : ViewModelBase, IDisposable
         IDownloadManagerService downloadManager,
         IFavoriteService favoriteService,
         IDialogHost dialogHost,
-        INetworkErrorService networkErrorService)
+        INetworkErrorService networkErrorService,
+        MusicPlayerService playerService,
+        NavigationManager navigation,
+        GlobalStateService globalState)
     {
         _youTubeService = youTubeService;
         _notifier = notifier;
@@ -37,9 +51,13 @@ public sealed class SearchVM : ViewModelBase, IDisposable
         _favoriteService = favoriteService;
         _dialogHost = dialogHost;
         _networkErrorService = networkErrorService;
+        _playerService = playerService;
+        _navigation = navigation;
+        _globalState = globalState;
     }
 
-    public async Task SearchAsync()
+    [RelayCommand]
+    private async Task SearchAsync()
     {
         if (string.IsNullOrWhiteSpace(Query))
         {
@@ -60,7 +78,8 @@ public sealed class SearchVM : ViewModelBase, IDisposable
         await LoadNextPageAsync();
     }
 
-    public async Task LoadNextPageAsync()
+    [RelayCommand]
+    private async Task LoadNextPageAsync()
     {
         if (_searchEnumerator == null)
         {
@@ -108,6 +127,25 @@ public sealed class SearchVM : ViewModelBase, IDisposable
         finally
         {
             IsSearching = false;
+            NotifyChanged();
+        }
+    }
+
+    public async Task PlayAndNavigateAsync(VideoSearchResult video)
+    {
+        try
+        {
+            _globalState.ShowLoading();
+            NotifyChanged();
+
+            if (await _playerService.PlayAsync(video))
+            {
+                _navigation.NavigateTo("/player");
+            }
+        }
+        finally
+        {
+            _globalState.HideLoading();
             NotifyChanged();
         }
     }

@@ -1,12 +1,8 @@
 @page "/player/audio"
-@using YTMusic.BLL.Ports
 @using YTMusic.Services
 @using MudBlazor
 @inject MusicPlayerService PlayerService
 @inject PlayerVM ViewModel
-@inject IUiNotifier Notifier
-@inject NavigationManager NavigationManager
-@inject GlobalStateService GlobalState
 @inject IJSRuntime JSRuntime
 @implements IDisposable
 
@@ -51,7 +47,7 @@
                         {
                             <MudIconButton Icon="@Icons.Material.Filled.MusicNote"
                                            Color="Color.Secondary"
-                                           OnClick="PlayAudioAsync"
+                                           OnClick="@(async () => await ViewModel.PlayAudioCommand.ExecuteAsync(null))"
                                            Disabled="@PlayerService.IsSwitchingTrack"
                                            aria-label="Switch to audio" />
                         }
@@ -59,29 +55,29 @@
                         {
                             <MudIconButton Icon="@Icons.Material.Filled.OndemandVideo"
                                            Color="Color.Secondary"
-                                           OnClick="PlayVideoAsync"
+                                           OnClick="@(async () => await ViewModel.PlayVideoCommand.ExecuteAsync(null))"
                                            Disabled="@PlayerService.IsSwitchingTrack"
                                            aria-label="Play video" />
                         }
                         <MudIconButton
                             Icon="@(ViewModel.IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
                             Color="@(ViewModel.IsFavorite ? Color.Error : Color.Default)"
-                            OnClick="OpenFavoriteDialogAsync"
+                            OnClick="@(async () => await ViewModel.OpenFavoriteDialogCommand.ExecuteAsync(null))"
                             aria-label="Toggle Favorite" />
                         <MudMenu Icon="@Icons.Material.Filled.Download"
                                  Color="Color.Primary"
                                  AnchorOrigin="Origin.BottomRight"
                                  TransformOrigin="Origin.TopRight"
                                  aria-label="Download">
-                            <MudMenuItem OnClick="@(() => Download(false))">Download Audio</MudMenuItem>
-                            <MudMenuItem OnClick="@(() => Download(true))">Download Video</MudMenuItem>
+                            <MudMenuItem OnClick="@(() => ViewModel.Download(false))">Download Audio</MudMenuItem>
+                            <MudMenuItem OnClick="@(() => ViewModel.Download(true))">Download Video</MudMenuItem>
                         </MudMenu>
                     </div>
 
                     <MudIconButton Icon="@PlayerVM.GetPlaybackModeIcon(PlayerService.CurrentMode)"
                                    Color="Color.Default"
                                    Size="Size.Medium"
-                                   OnClick="TogglePlaybackMode"
+                                   OnClick="@(() => ViewModel.TogglePlaybackModeCommand.Execute(null))"
                                    aria-label="Toggle Playback Mode"
                                    Disabled="@(PlayerService.Playlist.Count == 0)" />
                 </div>
@@ -90,7 +86,7 @@
                     <MudIconButton Icon="@Icons.Material.Filled.SkipPrevious"
                                    Size="Size.Large"
                                    Variant="Variant.Text"
-                                   OnClick="PlayPreviousTrack"
+                                   OnClick="@(async () => await ViewModel.PlayPreviousTrackCommand.ExecuteAsync(null))"
                                    Disabled="@(PlayerService.Playlist.Count == 0 || PlayerService.IsSwitchingTrack)" />
 
                     @if (PlayerService.IsLoading)
@@ -102,7 +98,7 @@
                         <MudIconButton Icon="@(PlayerService.IsPlaying ? Icons.Material.Filled.PauseCircle : Icons.Material.Filled.PlayCircle)"
                                        Size="Size.Large"
                                        Color="Color.Primary"
-                                       OnClick="TogglePlay"
+                                       OnClick="@(async () => await ViewModel.TogglePlayCommand.ExecuteAsync(null))"
                                        Disabled="@PlayerService.IsSwitchingTrack"
                                        Class="player-main-button" />
                     }
@@ -110,7 +106,7 @@
                     <MudIconButton Icon="@Icons.Material.Filled.SkipNext"
                                    Size="Size.Large"
                                    Variant="Variant.Text"
-                                   OnClick="PlayNextTrack"
+                                   OnClick="@(async () => await ViewModel.PlayNextTrackCommand.ExecuteAsync(null))"
                                    Disabled="@(PlayerService.Playlist.Count == 0 || PlayerService.IsSwitchingTrack)" />
                 </div>
             </div>
@@ -150,18 +146,17 @@
 
     private void OnStateChanged()
     {
-        if (PlayerService.IsCurrentStreamVideo)
-        {
-            if (!(OperatingSystem.IsAndroid() && PlayerService.UseNativeVideoPlayback))
-            {
-                NavigationManager.NavigateTo("/player/video", replace: true);
-            }
-            return;
-        }
+        _ = HandleStateChangedAsync();
+    }
 
-        _ = ViewModel.RefreshFavoriteStatusAsync(PlayerService.CurrentVideo);
-        _ = SyncPlayerChromeAsync();
-        InvokeAsync(StateHasChanged);
+    private async Task HandleStateChangedAsync()
+    {
+        await ViewModel.OnPlayerStateChangedAsync();
+        if (!PlayerService.IsCurrentStreamVideo)
+        {
+            await SyncPlayerChromeAsync();
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private string? GetProgressTrackKey()
@@ -223,145 +218,6 @@
     {
         var native = PlayerService.IsUsingNativePlayback || PlayerService.IsUsingNativeVideoPlayback;
         await JSRuntime.InvokeVoidAsync("audioPlayer.setNativeProgressMode", native);
-    }
-
-    private async Task OpenFavoriteDialogAsync()
-    {
-        var currentVideo = PlayerService.CurrentVideo;
-        if (currentVideo == null)
-        {
-            return;
-        }
-
-        await ViewModel.OpenFavoriteDialogAsync(currentVideo);
-    }
-
-    private async Task TogglePlay()
-    {
-        if (PlayerService.IsPlaying)
-            await PlayerService.PauseAsync();
-        else
-            await PlayerService.ResumeAsync();
-    }
-
-    private async Task PlayVideoAsync()
-    {
-        if (!PlayerService.CanShowVideoToggle() || PlayerService.IsSwitchingTrack)
-        {
-            return;
-        }
-
-        var currentVideo = PlayerService.CurrentVideo;
-        if (currentVideo == null)
-        {
-            return;
-        }
-
-        if (await PlayerService.CanPlayLocalVideoForCurrentAsync())
-        {
-            await NavigateToVideoIfSwitchedAsync(await PlayerService.PlayCurrentAsVideoAsync());
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(currentVideo.VideoId) || currentVideo.VideoId == "local")
-        {
-            Notifier.Warning("当前曲目没有可用的视频 ID，无法在线播放视频。");
-            return;
-        }
-
-        if (!await ViewModel.ConfirmRemoteVideoPlayAsync(currentVideo.Title))
-        {
-            return;
-        }
-
-        try
-        {
-            GlobalState.ShowLoading();
-            StateHasChanged();
-
-            var playOk = await PlayerService.PlayRemoteVideoForCurrentAsync();
-            PlaybackDiagnostics.Log(
-                $"PlayerAudio.PlayVideo playOk={playOk} isVideo={PlayerService.IsCurrentStreamVideo} hybrid={PlayerService.IsUsingHybridWebVideo} url={PlaybackDiagnostics.DescribeUrl(PlayerService.CurrentStreamUrl)}");
-            if (!await NavigateToVideoIfSwitchedAsync(playOk))
-            {
-                PlaybackDiagnostics.LogError(
-                    $"PlayerAudio.PlayVideo navigate failed playOk={playOk} isVideo={PlayerService.IsCurrentStreamVideo}");
-                Notifier.Error("在线视频播放失败，视频可能不可用或网络异常。");
-            }
-        }
-        finally
-        {
-            GlobalState.HideLoading();
-            StateHasChanged();
-        }
-    }
-
-    private Task<bool> NavigateToVideoIfSwitchedAsync(bool switched)
-    {
-        if (!switched)
-        {
-            PlaybackDiagnostics.Log("NavigateToVideo skipped: play returned false");
-            return Task.FromResult(false);
-        }
-
-        if (!PlayerService.IsCurrentStreamVideo)
-        {
-            PlaybackDiagnostics.Log(
-                $"NavigateToVideo skipped: IsCurrentStreamVideo=false hybrid={PlayerService.IsUsingHybridWebVideo}");
-            return Task.FromResult(false);
-        }
-
-        if (!(OperatingSystem.IsAndroid() && PlayerService.UseNativeVideoPlayback))
-        {
-            PlaybackDiagnostics.Log("NavigateToVideo -> /player/video");
-            NavigationManager.NavigateTo("/player/video");
-        }
-
-        return Task.FromResult(true);
-    }
-
-    private async Task PlayAudioAsync()
-    {
-        if (PlayerService.IsSwitchingTrack)
-        {
-            return;
-        }
-
-        if (await PlayerService.PlayCurrentAsAudioAsync())
-        {
-            NavigationManager.NavigateTo("/player/audio", replace: true);
-        }
-        else
-        {
-            Notifier.Warning("无法切换到音频播放。");
-        }
-    }
-
-    private async Task PlayNextTrack()
-    {
-        await PlayerService.PlayNextAsync();
-    }
-
-    private async Task PlayPreviousTrack()
-    {
-        await PlayerService.PlayPreviousAsync();
-    }
-
-    private void TogglePlaybackMode()
-    {
-        PlayerService.TogglePlaybackMode();
-        StateHasChanged();
-    }
-
-    private void Download(bool isVideo)
-    {
-        var currentVideo = PlayerService.CurrentVideo;
-        if (currentVideo == null)
-        {
-            return;
-        }
-
-        ViewModel.Download(currentVideo, isVideo);
     }
 
     public void Dispose()

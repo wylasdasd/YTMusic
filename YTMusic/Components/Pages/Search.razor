@@ -14,8 +14,8 @@
                           FullWidth="true"
                           Adornment="Adornment.Start"
                           AdornmentIcon="@Icons.Material.Filled.Search"
-                          OnAdornmentClick="ViewModel.SearchAsync"
-                          OnKeyUp="@(async e => { if (e.Key == "Enter") await ViewModel.SearchAsync(); })" />
+                          OnAdornmentClick="@(async () => await ViewModel.SearchCommand.ExecuteAsync(null))"
+                          OnKeyUp="@(async e => { if (e.Key == "Enter") await ViewModel.SearchCommand.ExecuteAsync(null); })" />
         </section>
     </Header>
     <ChildContent>
@@ -25,7 +25,7 @@
                 @foreach (var video in ViewModel.Videos)
                 {
                     <MudItem xs="12" sm="6" md="4" lg="3">
-                        <MudCard Elevation="0" Class="ytm-card" @onclick="@(() => PlayAndNavigate(video))">
+                        <MudCard Elevation="0" Class="ytm-card" @onclick="@(() => ViewModel.PlayAndNavigateAsync(video))">
                             <div class="ytm-card__media-wrap">
                                 <MudCardMedia Image="@video.Thumbnails.FirstOrDefault()?.Url" Height="176" />
                                 <div class="ytm-card__media-mask"></div>
@@ -61,7 +61,7 @@
             @if (ViewModel.HasMore)
             {
                 <div class="d-flex justify-center mt-6 mb-4">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ViewModel.LoadNextPageAsync"
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(async () => await ViewModel.LoadNextPageCommand.ExecuteAsync(null))"
                                Disabled="ViewModel.IsSearching" Class="search-load-more">
                         @if (ViewModel.IsSearching)
                         {
@@ -93,35 +93,15 @@
 
 @code {
     [Inject] private SearchVM ViewModel { get; set; } = default!;
-    [Inject] private NavigationManager NavigationManager { get; set; } = default!;
-    [Inject] private MusicPlayerService PlayerService { get; set; } = default!;
-    [Inject] private GlobalStateService GlobalState { get; set; } = default!;
 
     protected override void OnInitialized()
     {
         ViewModel.StateHasChanged = StateHasChanged;
     }
 
-    private async Task PlayAndNavigate(YoutubeExplode.Search.VideoSearchResult video)
-    {
-        try
-        {
-            GlobalState.ShowLoading();
-            StateHasChanged();
-
-            if (await PlayerService.PlayAsync(video))
-            {
-                NavigationManager.NavigateTo("/player");
-            }
-        }
-        finally
-        {
-            GlobalState.HideLoading();
-            StateHasChanged();
-        }
-    }
-
     public void Dispose()
     {
+        ViewModel.Dispose();
+        ViewModel.StateHasChanged = null;
     }
 }

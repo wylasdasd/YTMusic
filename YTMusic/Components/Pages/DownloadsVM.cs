@@ -1,31 +1,42 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.AspNetCore.Components;
 using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Models;
 using YTMusic.BLL.Ports;
+using YTMusic.Services;
 using YTMusic.ViewModels.Shared;
 
 namespace YTMusic.Components.Pages;
 
-public sealed class DownloadsVM : ViewModelBase
+public sealed partial class DownloadsVM : ViewModelBase
 {
     private readonly ILocalMusicService _localMusicService;
     private readonly IUiNotifier _notifier;
     private readonly IFavoriteService _favoriteService;
     private readonly IDialogHost _dialogHost;
+    private readonly MusicPlayerService _playerService;
+    private readonly NavigationManager _navigation;
 
     public List<DownloadedTrack> Files { get; private set; } = new();
     public HashSet<string> FavoriteFilePaths { get; } = new(StringComparer.OrdinalIgnoreCase);
-    public bool IsLoading { get; private set; } = true;
+
+    [ObservableProperty]
+    private bool _isLoading = true;
 
     public DownloadsVM(
         ILocalMusicService localMusicService,
         IUiNotifier notifier,
         IFavoriteService favoriteService,
-        IDialogHost dialogHost)
+        IDialogHost dialogHost,
+        MusicPlayerService playerService,
+        NavigationManager navigation)
     {
         _localMusicService = localMusicService;
         _notifier = notifier;
         _favoriteService = favoriteService;
         _dialogHost = dialogHost;
+        _playerService = playerService;
+        _navigation = navigation;
     }
 
     public async Task LoadFilesAsync()
@@ -114,6 +125,22 @@ public sealed class DownloadsVM : ViewModelBase
         catch (Exception ex)
         {
             _notifier.Error($"Failed to open favorites: {ex.Message}");
+        }
+    }
+
+    public async Task PlayLocalAudioFileAsync(DownloadedTrack file)
+    {
+        if (await _playerService.PlayLocalFileAsync(file.LocalFilePath, file.Title, false, file.Author, file.ThumbnailUrl, file.VideoId))
+        {
+            _navigation.NavigateTo("/player");
+        }
+    }
+
+    public async Task PlayLocalVideoFileAsync(DownloadedTrack file)
+    {
+        if (await _playerService.PlayLocalFileAsync(file.LocalFilePath, file.Title, true, file.Author, file.ThumbnailUrl, file.VideoId))
+        {
+            _navigation.NavigateTo("/player");
         }
     }
 }

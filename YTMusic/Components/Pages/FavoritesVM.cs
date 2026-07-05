@@ -1,16 +1,23 @@
+using CommunityToolkit.Mvvm.Input;
+using Microsoft.AspNetCore.Components;
 using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Models;
 using YTMusic.BLL.Ports;
+using YTMusic.Services;
+using YTMusic.Services.Playback;
 using YTMusic.ViewModels.Shared;
 
 namespace YTMusic.Components.Pages;
 
-public sealed class FavoritesVM : ViewModelBase
+public sealed partial class FavoritesVM : ViewModelBase
 {
     private readonly IFavoriteService _favoriteService;
     private readonly ILocalMusicService _localMusicService;
     private readonly IUiNotifier _notifier;
     private readonly IDialogHost _dialogHost;
+    private readonly MusicPlayerService _playerService;
+    private readonly NavigationManager _navigation;
+    private readonly GlobalStateService _globalState;
 
     public List<FavoriteFolder> Folders { get; private set; } = new();
     public Dictionary<int, int> FolderTrackCounts { get; private set; } = new();
@@ -21,12 +28,18 @@ public sealed class FavoritesVM : ViewModelBase
         IFavoriteService favoriteService,
         ILocalMusicService localMusicService,
         IUiNotifier notifier,
-        IDialogHost dialogHost)
+        IDialogHost dialogHost,
+        MusicPlayerService playerService,
+        NavigationManager navigation,
+        GlobalStateService globalState)
     {
         _favoriteService = favoriteService;
         _localMusicService = localMusicService;
         _notifier = notifier;
         _dialogHost = dialogHost;
+        _playerService = playerService;
+        _navigation = navigation;
+        _globalState = globalState;
     }
 
     public async Task InitializeAsync()
@@ -34,7 +47,8 @@ public sealed class FavoritesVM : ViewModelBase
         await LoadFoldersAsync();
     }
 
-    public async Task OpenCreateFolderDialogAsync()
+    [RelayCommand]
+    private async Task OpenCreateFolderDialogAsync()
     {
         var name = await _dialogHost.PromptCreateFolderNameAsync();
         if (string.IsNullOrWhiteSpace(name))
@@ -190,6 +204,48 @@ public sealed class FavoritesVM : ViewModelBase
         catch (Exception ex)
         {
             _notifier.Error($"删除收藏夹失败: {ex.Message}");
+        }
+    }
+
+    public void NavigateToFolder(int folderId)
+    {
+        _navigation.NavigateTo($"/favorites/folder/{folderId}");
+    }
+
+    public async Task PlayFolderAsync(int folderId, MusicPlayerService.PlaybackMode mode)
+    {
+        try
+        {
+            _globalState.ShowLoading();
+            NotifyChanged();
+
+            var tracks = await LoadTracksForFolderAsync(folderId);
+            if (!tracks.Any())
+            {
+                return;
+            }
+
+            var folderName = Folders.FirstOrDefault(f => f.Id == folderId)?.Name ?? "收藏夹";
+            var isDownloadedCatalog = FavoriteFolderIds.IsDownloadedCatalog(folderId);
+            var playlist = tracks.Select(t => new PlayingItem
+            {
+                VideoId = t.VideoId,
+                Title = t.Title,
+                Author = t.Author,
+                ThumbnailUrl = t.ThumbnailUrl,
+                LocalFilePath = t.IsDownloaded || isDownloadedCatalog ? t.LocalFilePath : null,
+                IsVideo = false
+            }).ToList();
+
+            if (await _playerService.PlayPlaylistAsync(playlist, 0, folderName, mode))
+            {
+                _navigation.NavigateTo("/player");
+            }
+        }
+        finally
+        {
+            _globalState.HideLoading();
+            NotifyChanged();
         }
     }
 }

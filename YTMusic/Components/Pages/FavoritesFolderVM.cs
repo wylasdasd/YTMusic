@@ -1,6 +1,10 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.AspNetCore.Components;
 using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Models;
 using YTMusic.BLL.Ports;
+using YTMusic.Services;
+using YTMusic.Services.Playback;
 using YTMusic.ViewModels.Shared;
 
 namespace YTMusic.Components.Pages;
@@ -13,12 +17,15 @@ public enum FavoriteTrackSortMode
     NotDownloaded = 3
 }
 
-public sealed class FavoritesFolderVM : ViewModelBase
+public sealed partial class FavoritesFolderVM : ViewModelBase
 {
     private readonly IFavoriteService _favoriteService;
     private readonly ILocalMusicService _localMusicService;
     private readonly IUiNotifier _notifier;
     private readonly IDialogHost _dialogHost;
+    private readonly MusicPlayerService _playerService;
+    private readonly NavigationManager _navigation;
+    private readonly GlobalStateService _globalState;
     private List<FavoriteTrack> _rawTracks = new();
 
     public int FolderId { get; private set; }
@@ -34,12 +41,18 @@ public sealed class FavoritesFolderVM : ViewModelBase
         IFavoriteService favoriteService,
         ILocalMusicService localMusicService,
         IUiNotifier notifier,
-        IDialogHost dialogHost)
+        IDialogHost dialogHost,
+        MusicPlayerService playerService,
+        NavigationManager navigation,
+        GlobalStateService globalState)
     {
         _favoriteService = favoriteService;
         _localMusicService = localMusicService;
         _notifier = notifier;
         _dialogHost = dialogHost;
+        _playerService = playerService;
+        _navigation = navigation;
+        _globalState = globalState;
     }
 
     public async Task InitializeAsync(int folderId)
@@ -248,4 +261,94 @@ public sealed class FavoritesFolderVM : ViewModelBase
 
         NotifyChanged();
     }
+
+    public void NavigateBackToFolderList()
+    {
+        _navigation.NavigateTo("/favorites");
+    }
+
+    public async Task PlayTrackAsync(FavoriteTrack track)
+    {
+        try
+        {
+            _globalState.ShowLoading();
+            NotifyChanged();
+
+            if (!Tracks.Any())
+            {
+                return;
+            }
+
+            var playlist = BuildPlaylist(Tracks);
+            var startIndex = Tracks.FindIndex(t =>
+                t.VideoId == track.VideoId &&
+                string.Equals(t.LocalFilePath, track.LocalFilePath, StringComparison.OrdinalIgnoreCase));
+            if (startIndex == -1)
+            {
+                startIndex = 0;
+            }
+
+            var folderName = FolderName ?? "收藏夹";
+
+            if (await _playerService.PlayPlaylistAsync(
+                    playlist,
+                    startIndex,
+                    folderName,
+                    MusicPlayerService.PlaybackMode.Sequential))
+            {
+                _navigation.NavigateTo("/player");
+            }
+        }
+        finally
+        {
+            _globalState.HideLoading();
+            NotifyChanged();
+        }
+    }
+
+    public async Task PlayLocalVideoAsync(FavoriteTrack track)
+    {
+        if (!track.HasDownloadedVideo || string.IsNullOrWhiteSpace(track.LocalVideoFilePath))
+        {
+            return;
+        }
+
+        try
+        {
+            _globalState.ShowLoading();
+            NotifyChanged();
+
+            if (await _playerService.PlayLocalFileAsync(
+                    track.LocalVideoFilePath,
+                    track.Title,
+                    true,
+                    track.Author,
+                    track.ThumbnailUrl,
+                    track.VideoId))
+            {
+                _navigation.NavigateTo("/player");
+            }
+        }
+        finally
+        {
+            _globalState.HideLoading();
+            NotifyChanged();
+        }
+    }
+
+    private static List<PlayingItem> BuildPlaylist(IEnumerable<FavoriteTrack> tracks, bool isDownloadedCatalog)
+    {
+        return tracks.Select(t => new PlayingItem
+        {
+            VideoId = t.VideoId,
+            Title = t.Title,
+            Author = t.Author,
+            ThumbnailUrl = t.ThumbnailUrl,
+            LocalFilePath = t.IsDownloaded || isDownloadedCatalog ? t.LocalFilePath : null,
+            IsVideo = false
+        }).ToList();
+    }
+
+    private List<PlayingItem> BuildPlaylist(IEnumerable<FavoriteTrack> tracks)
+        => BuildPlaylist(tracks, IsDownloadedCatalog);
 }

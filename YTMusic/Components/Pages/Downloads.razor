@@ -18,7 +18,7 @@
             <div class="d-flex flex-column gap-4 mt-2">
                 @foreach (var file in ViewModel.Files)
                 {
-                    <MudPaper Elevation="2" Class="pa-4 d-flex align-center" Style="cursor: pointer;" @onclick="@(() => PlayLocalAudioFile(file))">
+                    <MudPaper Elevation="2" Class="pa-4 d-flex align-center" Style="cursor: pointer;" @onclick="@(() => ViewModel.PlayLocalAudioFileAsync(file))">
                         @if (!string.IsNullOrEmpty(file.ThumbnailUrl))
                         {
                             <MudImage Src="@file.ThumbnailUrl" Width="60" Height="60" ObjectFit="ObjectFit.Cover" Class="rounded mr-4" />
@@ -37,7 +37,7 @@
                             <div @onclick:stopPropagation="true">
                                 <MudIconButton Icon="@Icons.Material.Filled.OndemandVideo"
                                                Color="Color.Secondary"
-                                               OnClick="@(() => PlayLocalVideoFile(file))"
+                                               OnClick="@(() => ViewModel.PlayLocalVideoFileAsync(file))"
                                                aria-label="Play video" />
                             </div>
                         }
@@ -52,7 +52,7 @@
                         <div @onclick:stopPropagation="true">
                             <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
                                            Color="Color.Primary"
-                                           OnClick="@(() => PlayLocalAudioFile(file))"
+                                           OnClick="@(() => ViewModel.PlayLocalAudioFileAsync(file))"
                                            aria-label="Play audio" />
                         </div>
                         <div @onclick:stopPropagation="true">
@@ -70,28 +70,10 @@
 
 @code {
     [Inject] private DownloadsVM ViewModel { get; set; } = default!;
-    [Inject] private MusicPlayerService PlayerService { get; set; } = default!;
-    [Inject] private NavigationManager NavigationManager { get; set; } = default!;
 
     protected override async Task OnInitializedAsync()
     {
         ViewModel.StateHasChanged = StateHasChanged;
         await ViewModel.LoadFilesAsync();
-    }
-
-    private async Task PlayLocalAudioFile(DownloadedTrack file)
-    {
-        if (await PlayerService.PlayLocalFileAsync(file.LocalFilePath, file.Title, false, file.Author, file.ThumbnailUrl, file.VideoId))
-        {
-            NavigationManager.NavigateTo("/player");
-        }
-    }
-
-    private async Task PlayLocalVideoFile(DownloadedTrack file)
-    {
-        if (await PlayerService.PlayLocalFileAsync(file.LocalFilePath, file.Title, true, file.Author, file.ThumbnailUrl, file.VideoId))
-        {
-            NavigationManager.NavigateTo("/player");
-        }
     }
 }

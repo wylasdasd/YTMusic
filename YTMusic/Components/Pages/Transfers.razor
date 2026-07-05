@@ -35,7 +35,7 @@
     <ChildContent>
         @if (!ViewModel.FilteredTransfers.Any())
         {
-            <MudAlert Severity="Severity.Info" Class="mt-2">@GetEmptyMessage()</MudAlert>
+            <MudAlert Severity="Severity.Info" Class="mt-2">@TransfersVM.GetEmptyMessage(ViewModel.CurrentFilter)</MudAlert>
         }
         else
         {
@@ -47,8 +47,8 @@
                             <MediaTitle Text="@task.Title"
                                         Typo="Typo.subtitle1"
                                         WrapperStyle="max-width: 70%; flex: 1; min-width: 0;" />
-                            <MudChip Size="Size.Small" Color="GetStatusColor(task.Status)" T="string">
-                                @GetTaskLabel(task)
+                            <MudChip Size="Size.Small" Color="@TransfersVM.GetStatusColor(task.Status)" T="string">
+                                @TransfersVM.GetTaskLabel(task)
                             </MudChip>
                         </div>
 
@@ -83,37 +83,5 @@
     public void Dispose()
     {
         ViewModel.Dispose();
-    }
-
-    private Color GetStatusColor(DownloadStatus status) => status switch
-    {
-        DownloadStatus.Pending => Color.Default,
-        DownloadStatus.Downloading => Color.Info,
-        DownloadStatus.Completed => Color.Success,
-        DownloadStatus.Failed => Color.Error,
-        _ => Color.Default
-    };
-
-    private string GetEmptyMessage() => ViewModel.CurrentFilter switch
-    {
-        TransfersVM.TransferFilter.Active => "No active transfers.",
-        TransfersVM.TransferFilter.Completed => "No completed transfers yet.",
-        TransfersVM.TransferFilter.Failed => "No failed transfers.",
-        _ => "No transfers yet."
-    };
-
-    private string GetTaskLabel(DownloadTaskInfo task)
-    {
-        if (task.Kind == TransferKind.Upload)
-        {
-            return $"Upload - {task.Status}";
-        }
-
-        if (task.Kind == TransferKind.RemoteDownload)
-        {
-            return $"AList Download - {task.Status}";
-        }
-
-        return $"{(task.IsVideo ? "Video" : "Audio")} Download - {task.Status}";
     }
 }

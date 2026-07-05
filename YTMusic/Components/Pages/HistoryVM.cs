@@ -1,23 +1,29 @@
+using CommunityToolkit.Mvvm.Input;
+using Microsoft.AspNetCore.Components;
 using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Models;
-using YTMusic.BLL.Ports;
 using YTMusic.Services;
 using YTMusic.Services.Playback;
 using YTMusic.ViewModels.Shared;
 
 namespace YTMusic.Components.Pages;
 
-public sealed class HistoryVM : ViewModelBase
+public sealed partial class HistoryVM : ViewModelBase
 {
     private readonly IPlaybackHistoryService _historyService;
     private readonly MusicPlayerService _playerService;
+    private readonly NavigationManager _navigation;
 
     public IReadOnlyList<PlaybackHistoryRecord> History { get; private set; } = Array.Empty<PlaybackHistoryRecord>();
 
-    public HistoryVM(IPlaybackHistoryService historyService, MusicPlayerService playerService)
+    public HistoryVM(
+        IPlaybackHistoryService historyService,
+        MusicPlayerService playerService,
+        NavigationManager navigation)
     {
         _historyService = historyService;
         _playerService = playerService;
+        _navigation = navigation;
     }
 
     public async Task LoadAsync()
@@ -26,9 +32,9 @@ public sealed class HistoryVM : ViewModelBase
         NotifyChanged();
     }
 
-    public async Task<bool> PlayItemAsync(PlaybackHistoryRecord item)
+    public async Task PlayItemAsync(PlaybackHistoryRecord item)
     {
-        return await _playerService.PlayAsync(new PlayingItem
+        if (await _playerService.PlayAsync(new PlayingItem
         {
             VideoId = item.VideoId,
             Title = item.Title,
@@ -37,10 +43,14 @@ public sealed class HistoryVM : ViewModelBase
             LocalFilePath = item.LocalFilePath,
             IsVideo = item.IsVideo,
             DurationSeconds = item.DurationSeconds
-        });
+        }))
+        {
+            _navigation.NavigateTo("/player");
+        }
     }
 
-    public async Task ClearAsync()
+    [RelayCommand]
+    private async Task ClearAsync()
     {
         await _historyService.ClearAsync();
         History = Array.Empty<PlaybackHistoryRecord>();

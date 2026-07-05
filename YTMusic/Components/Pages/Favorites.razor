@@ -21,7 +21,7 @@
                     var coverUrl = ViewModel.FolderCoverUrls.GetValueOrDefault(folder.Id);
                     <MudPaper Elevation="2"
                               Class="favorites-folder-row pa-3 d-flex align-center"
-                              @onclick="() => NavigateToFolder(folder.Id)">
+                              @onclick="() => ViewModel.NavigateToFolder(folder.Id)">
                         @if (!string.IsNullOrWhiteSpace(coverUrl))
                         {
                             <MudImage Src="@coverUrl"
@@ -48,14 +48,14 @@
                             <MudIconButton Icon="@Icons.Material.Filled.Shuffle"
                                            Color="Color.Error"
                                            Disabled="@(trackCount == 0)"
-                                           OnClick="@(() => PlayFolderAsync(folder.Id, MusicPlayerService.PlaybackMode.Random))"
+                                           OnClick="@(() => ViewModel.PlayFolderAsync(folder.Id, MusicPlayerService.PlaybackMode.Random))"
                                            aria-label="随机播放" />
                         </div>
                         <div @onclick:stopPropagation="true">
                             <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
                                            Color="Color.Primary"
                                            Disabled="@(trackCount == 0)"
-                                           OnClick="@(() => PlayFolderAsync(folder.Id, MusicPlayerService.PlaybackMode.Sequential))"
+                                           OnClick="@(() => ViewModel.PlayFolderAsync(folder.Id, MusicPlayerService.PlaybackMode.Sequential))"
                                            aria-label="顺序播放" />
                         </div>
                         @if (FavoriteFolderIds.IsDownloadedCatalog(folder.Id))
@@ -88,63 +88,16 @@
     <MudFab StartIcon="@Icons.Material.Filled.Add"
             Color="Color.Primary"
             aria-label="新建收藏夹"
-            OnClick="OpenCreateFolderDialogAsync" />
+            OnClick="@(async () => await ViewModel.OpenCreateFolderDialogCommand.ExecuteAsync(null))" />
 </div>
 
 @code {
     [Inject] private FavoritesVM ViewModel { get; set; } = default!;
-    [Inject] private NavigationManager NavigationManager { get; set; } = default!;
-    [Inject] private MusicPlayerService PlayerService { get; set; } = default!;
-    [Inject] private GlobalStateService GlobalState { get; set; } = default!;
 
     protected override async Task OnInitializedAsync()
     {
         ViewModel.StateHasChanged = StateHasChanged;
         await ViewModel.InitializeAsync();
-    }
-
-    private Task OpenCreateFolderDialogAsync() => ViewModel.OpenCreateFolderDialogAsync();
-
-    private void NavigateToFolder(int folderId)
-    {
-        NavigationManager.NavigateTo($"/favorites/folder/{folderId}");
-    }
-
-    private async Task PlayFolderAsync(int folderId, MusicPlayerService.PlaybackMode mode)
-    {
-        try
-        {
-            GlobalState.ShowLoading();
-            StateHasChanged();
-
-            var tracks = await ViewModel.LoadTracksForFolderAsync(folderId);
-            if (!tracks.Any())
-            {
-                return;
-            }
-
-            var folderName = ViewModel.Folders.FirstOrDefault(f => f.Id == folderId)?.Name ?? "收藏夹";
-            var isDownloadedCatalog = FavoriteFolderIds.IsDownloadedCatalog(folderId);
-            var playlist = tracks.Select(t => new PlayingItem
-            {
-                VideoId = t.VideoId,
-                Title = t.Title,
-                Author = t.Author,
-                ThumbnailUrl = t.ThumbnailUrl,
-                LocalFilePath = t.IsDownloaded || isDownloadedCatalog ? t.LocalFilePath : null,
-                IsVideo = false
-            }).ToList();
-
-            if (await PlayerService.PlayPlaylistAsync(playlist, 0, folderName, mode))
-            {
-                NavigationManager.NavigateTo("/player");
-            }
-        }
-        finally
-        {
-            GlobalState.HideLoading();
-            StateHasChanged();
-        }
     }
 
     public void Dispose()
