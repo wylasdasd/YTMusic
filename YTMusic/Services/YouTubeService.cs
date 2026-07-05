@@ -10,7 +10,7 @@ using YoutubeExplode.Search;
 using YoutubeExplode.Videos;
 using YoutubeExplode.Videos.Streams;
 
-using YTMusic.Services.Abstractions;
+using YTMusic.BLL.Abstractions;
 
 namespace YTMusic.Services
 {

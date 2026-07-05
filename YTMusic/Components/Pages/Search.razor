@@ -1,6 +1,8 @@
 @page "/"
 @page "/search"
 @using YTMusic.Services
+@using YTMusic.ViewModels
+@implements IDisposable
 
 <PageListScroll PageKey="search" ScrollId="search-page-scroll">
     <Header>
@@ -89,3 +91,38 @@
         }
     </ChildContent>
 </PageListScroll>
+
+@code {
+    [Inject] private SearchVM ViewModel { get; set; } = default!;
+    [Inject] private NavigationManager NavigationManager { get; set; } = default!;
+    [Inject] private MusicPlayerService PlayerService { get; set; } = default!;
+    [Inject] private GlobalStateService GlobalState { get; set; } = default!;
+
+    protected override void OnInitialized()
+    {
+        ViewModel.StateHasChanged = StateHasChanged;
+    }
+
+    private async Task PlayAndNavigate(YoutubeExplode.Search.VideoSearchResult video)
+    {
+        try
+        {
+            GlobalState.ShowLoading();
+            StateHasChanged();
+
+            if (await PlayerService.PlayAsync(video))
+            {
+                NavigationManager.NavigateTo("/player");
+            }
+        }
+        finally
+        {
+            GlobalState.HideLoading();
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+    }
+}

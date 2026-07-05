@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using YTMusic.Services.Abstractions;
+using YTMusic.BLL.Abstractions;
 
 namespace YTMusic.Services
 {

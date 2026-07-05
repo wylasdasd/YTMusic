@@ -1,4 +1,5 @@
 @page "/downloads"
+@using YTMusic.Services
 
 <PageListScroll PageKey="downloads" ScrollId="downloads-page-scroll">
     <ChildContent>
@@ -69,7 +70,7 @@
 
 @code {
     [Inject] private DownloadsVM ViewModel { get; set; } = default!;
-    [Inject] private YTMusic.Services.MusicPlayerService PlayerService { get; set; } = default!;
+    [Inject] private MusicPlayerService PlayerService { get; set; } = default!;
     [Inject] private NavigationManager NavigationManager { get; set; } = default!;
 
     protected override async Task OnInitializedAsync()
@@ -78,7 +79,7 @@
         await ViewModel.LoadFilesAsync();
     }
 
-    private async Task PlayLocalAudioFile(YTMusic.Services.DownloadedTrack file)
+    private async Task PlayLocalAudioFile(DownloadedTrack file)
     {
         if (await PlayerService.PlayLocalFileAsync(file.LocalFilePath, file.Title, false, file.Author, file.ThumbnailUrl, file.VideoId))
         {
@@ -86,7 +87,7 @@
         }
     }
 
-    private async Task PlayLocalVideoFile(YTMusic.Services.DownloadedTrack file)
+    private async Task PlayLocalVideoFile(DownloadedTrack file)
     {
         if (await PlayerService.PlayLocalFileAsync(file.LocalFilePath, file.Title, true, file.Author, file.ThumbnailUrl, file.VideoId))
         {

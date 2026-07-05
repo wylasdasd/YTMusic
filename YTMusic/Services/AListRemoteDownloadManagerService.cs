@@ -5,7 +5,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using CommonTool.FileHelps;
 
-using YTMusic.Services.Abstractions;
+using YTMusic.BLL.Abstractions;
+using YTMusic.BLL.Models;
 
 namespace YTMusic.Services
 {
@@ -183,7 +184,7 @@ namespace YTMusic.Services
                     throw new InvalidOperationException("No audio or video file was found in this AList directory.");
                 }
 
-                var localDirectory = RemoteTrackMetadata.ResolveLocalDownloadDirectory(metadata?.FavoriteFolderNames);
+                var localDirectory = StoragePaths.ResolveLocalDownloadDirectory(metadata?.FavoriteFolderNames);
                 FileHelp.EnsureDirectoryExists(localDirectory);
 
                 var resolvedTitleFromMetadata = metadata?.Title;

@@ -157,13 +157,13 @@ public class WindowChromeService
         }
 #endif
 
-        Application.Current?.Quit();
+        global::Microsoft.Maui.Controls.Application.Current?.Quit();
     }
 
 #if WINDOWS
     private static nint GetWindowHandle()
     {
-        var window = Application.Current?.Windows.FirstOrDefault();
+        var window = global::Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault();
         if (window?.Handler?.PlatformView is Microsoft.UI.Xaml.Window winUiWindow)
         {
             return WindowNative.GetWindowHandle(winUiWindow);

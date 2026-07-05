@@ -1,6 +1,12 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.LifecycleEvents;
 using MudBlazor.Services;
+using YTMusic.Adapters;
+using YTMusic.BLL;
+using YTMusic.BLL.Abstractions;
+using YTMusic.BLL.Ports;
+using YTMusic.DAL;
+using YTMusic.ViewModels;
 using YTMusic.Services;
 using YTMusic.Services.Abstractions;
 
@@ -56,20 +62,29 @@ namespace YTMusic
                 });
 
             builder.Services.AddMauiBlazorWebView();
+            builder.Services.AddMudServices();
+
+            builder.Services.AddScoped<IUiNotifier, MudUiNotifier>();
+            builder.Services.AddScoped<IDialogHost, MudDialogHost>();
+            builder.Services.AddSingleton<IFilePickerService, MauiFilePickerService>();
+
+            builder.Services.AddSingleton<IDatabasePathProvider, MauiDatabasePathProvider>();
+            builder.Services.AddSingleton<IDownloadMusicDirectoryProvider, MauiDownloadMusicDirectoryProvider>();
+            builder.Services.AddYTMusicDal();
+            builder.Services.AddYTMusicBll();
 
             builder.Services.AddSingleton<IYouTubeService, YouTubeService>();
-            builder.Services.AddSingleton<ILocalMusicService, LocalMusicService>();
             builder.Services.AddSingleton<GlobalStateService>();
             builder.Services.AddSingleton<UiPreferencesService>();
-            builder.Services.AddSingleton<AListUploadSettingsService>();
+            builder.Services.AddSingleton<IAListUploadSettingsService, AListUploadSettingsService>();
             builder.Services.AddSingleton<AppResetService>();
-            builder.Services.AddSingleton<IFavoriteService, FavoriteService>();
             builder.Services.AddSingleton<IDownloadManagerService, DownloadManagerService>();
-            builder.Services.AddSingleton<AListUploadService>();
+            builder.Services.AddSingleton<IAListUploadService, AListUploadService>();
             builder.Services.AddSingleton<IUploadManagerService, UploadManagerService>();
             builder.Services.AddSingleton<IAListRemoteDownloadManagerService, AListRemoteDownloadManagerService>();
             builder.Services.AddSingleton<MusicPlayerService>();
             builder.Services.AddSingleton<NetworkErrorService>();
+            builder.Services.AddSingleton<INetworkErrorService>(sp => sp.GetRequiredService<NetworkErrorService>());
             builder.Services.AddSingleton<WindowChromeService>();
 #if ANDROID
             builder.Services.AddSingleton<INativeAudioPlaybackService, YTMusic.Platforms.Android.Services.AndroidNativeAudioPlaybackService>();
@@ -81,13 +96,12 @@ namespace YTMusic
             builder.Services.AddSingleton<INativeAudioPlaybackService, NullNativeAudioPlaybackService>();
             builder.Services.AddSingleton<INativeVideoPlaybackService, NullNativeVideoPlaybackService>();
 #endif
-            builder.Services.AddScoped<YTMusic.Components.Pages.SearchVM>();
-            builder.Services.AddTransient<YTMusic.Components.Pages.DownloadsVM>();
-            builder.Services.AddTransient<YTMusic.Components.Pages.TransfersVM>();
-            builder.Services.AddTransient<YTMusic.Components.Pages.FavoritesVM>();
-            builder.Services.AddTransient<YTMusic.Components.Pages.FavoritesFolderVM>();
-            builder.Services.AddTransient<YTMusic.Components.Pages.UploadVM>();
-            builder.Services.AddMudServices();
+            builder.Services.AddScoped<SearchVM>();
+            builder.Services.AddScoped<DownloadsVM>();
+            builder.Services.AddScoped<TransfersVM>();
+            builder.Services.AddScoped<FavoritesVM>();
+            builder.Services.AddScoped<FavoritesFolderVM>();
+            builder.Services.AddScoped<UploadVM>();
 
 #if DEBUG
             builder.Services.AddBlazorWebViewDeveloperTools();

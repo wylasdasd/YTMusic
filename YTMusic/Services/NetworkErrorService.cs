@@ -3,9 +3,11 @@ using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
 
+using YTMusic.BLL.Abstractions;
+
 namespace YTMusic.Services
 {
-    public class NetworkErrorService
+    public class NetworkErrorService : INetworkErrorService
     {
         private static DateTime s_lastNotified = DateTime.MinValue;
         private static readonly TimeSpan Cooldown = TimeSpan.FromSeconds(10);

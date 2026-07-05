@@ -97,6 +97,12 @@ namespace YTMusic.Platforms.iOS.Services
             return Task.CompletedTask;
         }
 
+        public Task DetachAsync()
+        {
+            DisposePlayer();
+            return Task.CompletedTask;
+        }
+
         public void Dispose()
         {
             DisposePlayer();

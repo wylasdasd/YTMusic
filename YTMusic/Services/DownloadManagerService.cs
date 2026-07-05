@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
-using YTMusic.Services.Abstractions;
+using YTMusic.BLL.Abstractions;
+using YTMusic.BLL.Models;
 
 namespace YTMusic.Services
 {

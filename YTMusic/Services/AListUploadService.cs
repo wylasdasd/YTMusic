@@ -10,19 +10,12 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using CommonTool.FileHelps;
+using YTMusic.BLL.Abstractions;
+using YTMusic.BLL.Models;
 
 namespace YTMusic.Services
 {
-    public class AListDirectoryItem
-    {
-        public string Name { get; set; } = string.Empty;
-        public string Path { get; set; } = string.Empty;
-        public long Size { get; set; }
-        public bool IsDir { get; set; }
-        public DateTime? ModifiedAt { get; set; }
-    }
-
-    public class AListUploadService
+    public class AListUploadService : IAListUploadService
     {
         private const long MaxInMemoryUploadBytes = 512L * 1024 * 1024;
 
