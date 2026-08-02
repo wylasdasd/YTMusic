@@ -78,17 +78,14 @@
     padding: 2px 8px 8px;
 }
 
-.search-load-more-wrap {
+.search-scroll-end {
     display: flex;
+    align-items: center;
     justify-content: center;
-    margin-top: 24px;
-    /* 列表滚到底时避开固定底栏，避免 Load More 被遮挡 */
+    min-height: 28px;
+    margin-top: 20px;
     padding-bottom: 28px;
-}
-
-.search-load-more {
-    border-radius: 999px;
-    min-width: 140px;
+    color: var(--ytm-text-secondary);
 }
 
 .search-empty {

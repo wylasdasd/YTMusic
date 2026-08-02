@@ -1,6 +1,8 @@
 @page "/"
 @page "/search"
+@using Microsoft.JSInterop
 @using YTMusic.Services
+@inject IJSRuntime JSRuntime
 @implements IDisposable
 
 <PageListScroll PageKey="search" ScrollId="search-page-scroll">
@@ -58,21 +60,14 @@
                 }
             </MudGrid>
 
-            @if (ViewModel.HasMore)
+            @if (ViewModel.HasMore || ViewModel.IsSearching)
             {
-                <div class="search-load-more-wrap">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(async () => await ViewModel.LoadNextPageCommand.ExecuteAsync(null))"
-                               Disabled="ViewModel.IsSearching" Class="search-load-more">
-                        @if (ViewModel.IsSearching)
-                        {
-                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
-                            <span class="ms-2">Loading...</span>
-                        }
-                        else
-                        {
-                            <span>Load More</span>
-                        }
-                    </MudButton>
+                <div @ref="_scrollEndSentinel" class="search-scroll-end">
+                    @if (ViewModel.IsSearching)
+                    {
+                        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+                        <span class="ms-2">Loading...</span>
+                    }
                 </div>
             }
         }
@@ -92,6 +87,14 @@
 </PageListScroll>
 
 @code {
+    private const string ScrollEndKey = "search";
+    private const string ScrollRootId = "search-page-scroll";
+
+    private ElementReference _scrollEndSentinel;
+    private DotNetObjectReference<Search>? _objRef;
+    private bool _scrollEndBound;
+    private int _observedVideoCount = -1;
+
     [Inject] private SearchVM ViewModel { get; set; } = default!;
 
     protected override void OnInitialized()
@@ -99,8 +102,74 @@
         ViewModel.StateHasChanged = StateHasChanged;
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (ViewModel.Videos.Count > 0 && ViewModel.HasMore && !ViewModel.IsSearching)
+        {
+            // 每次翻页后重绑，sentinel 仍在视口内时才能继续自动加载
+            if (!_scrollEndBound || _observedVideoCount != ViewModel.Videos.Count)
+            {
+                _observedVideoCount = ViewModel.Videos.Count;
+                await EnsureScrollEndObserverAsync();
+            }
+        }
+        else if (_scrollEndBound)
+        {
+            await DisposeScrollEndObserverAsync();
+            _observedVideoCount = -1;
+        }
+    }
+
+    private async Task EnsureScrollEndObserverAsync()
+    {
+        _objRef ??= DotNetObjectReference.Create(this);
+        await JSRuntime.InvokeVoidAsync(
+            "ytmLayout.observeScrollEnd",
+            ScrollEndKey,
+            _scrollEndSentinel,
+            ScrollRootId,
+            _objRef,
+            nameof(OnScrollEndReachedAsync));
+        _scrollEndBound = true;
+    }
+
+    private async Task DisposeScrollEndObserverAsync()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("ytmLayout.disposeScrollEnd", ScrollEndKey);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        _scrollEndBound = false;
+    }
+
+    [JSInvokable]
+    public Task OnScrollEndReachedAsync()
+    {
+        return InvokeAsync(async () =>
+        {
+            if (!ViewModel.HasMore || ViewModel.IsSearching)
+            {
+                return;
+            }
+
+            await ViewModel.LoadNextPageCommand.ExecuteAsync(null);
+        });
+    }
+
     public void Dispose()
     {
+        if (_scrollEndBound)
+        {
+            _ = JSRuntime.InvokeVoidAsync("ytmLayout.disposeScrollEnd", ScrollEndKey);
+            _scrollEndBound = false;
+        }
+
+        _objRef?.Dispose();
+        _objRef = null;
         ViewModel.Dispose();
         ViewModel.StateHasChanged = null;
     }

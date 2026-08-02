@@ -163,6 +163,56 @@ window.ytmLayout.initPageScrollPersistence = function () {
 };
 
 // ---------------------------------------------------------------------------
+// 列表滚到底自动加载（IntersectionObserver；root 为页面内滚动容器）
+// C#：observeScrollEnd(key, sentinel, rootId, dotNetRef, methodName) / disposeScrollEnd(key)
+// ---------------------------------------------------------------------------
+
+window.ytmLayout._scrollEndObservers = window.ytmLayout._scrollEndObservers || {};
+
+window.ytmLayout.observeScrollEnd = function (key, sentinel, rootId, dotNetRef, methodName) {
+    if (!key || !sentinel || !dotNetRef || !methodName) {
+        return;
+    }
+
+    window.ytmLayout.disposeScrollEnd(key);
+
+    const root = rootId ? document.getElementById(rootId) : null;
+    if (!root) {
+        return;
+    }
+
+    const observer = new IntersectionObserver(
+        (entries) => {
+            if (entries.some((entry) => entry.isIntersecting)) {
+                dotNetRef.invokeMethodAsync(methodName);
+            }
+        },
+        {
+            root,
+            rootMargin: "0px 0px 120px 0px",
+            threshold: 0
+        }
+    );
+
+    observer.observe(sentinel);
+    window.ytmLayout._scrollEndObservers[key] = observer;
+};
+
+window.ytmLayout.disposeScrollEnd = function (key) {
+    if (!key) {
+        return;
+    }
+
+    const observer = window.ytmLayout._scrollEndObservers[key];
+    if (!observer) {
+        return;
+    }
+
+    observer.disconnect();
+    delete window.ytmLayout._scrollEndObservers[key];
+};
+
+// ---------------------------------------------------------------------------
 // 底部导航：键盘弹出时抬高 bottom，避免被输入法挡住（visualViewport）
 // ---------------------------------------------------------------------------
 
