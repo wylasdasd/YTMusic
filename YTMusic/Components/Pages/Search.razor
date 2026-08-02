@@ -60,17 +60,17 @@
 
             @if (ViewModel.HasMore)
             {
-                <div class="d-flex justify-center mt-6 mb-4">
+                <div class="search-load-more-wrap">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(async () => await ViewModel.LoadNextPageCommand.ExecuteAsync(null))"
                                Disabled="ViewModel.IsSearching" Class="search-load-more">
                         @if (ViewModel.IsSearching)
                         {
                             <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
-                            <MudText Class="ms-2">Loading...</MudText>
+                            <span class="ms-2">Loading...</span>
                         }
                         else
                         {
-                            <MudText>Load More</MudText>
+                            <span>Load More</span>
                         }
                     </MudButton>
                 </div>
