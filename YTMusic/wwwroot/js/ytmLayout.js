@@ -227,19 +227,34 @@ window.ytmLayout.initBottomNav = function (navId) {
     }
     nav.dataset.ytmBound = "1";
 
+    const updateScrollPadding = () => {
+        const navHeight = nav.offsetHeight || 72;
+        const extra = 12;
+        document.documentElement.style.setProperty(
+            "--ytm-scroll-padding-bottom",
+            `${navHeight + extra}px`);
+    };
+
     const updateBottom = () => {
         const vv = window.visualViewport;
         if (!vv) {
             nav.style.bottom = "0px";
+            updateScrollPadding();
             return;
         }
 
         // Keyboard height approximation relative to layout viewport.
         const keyboardOffset = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
         nav.style.bottom = `${keyboardOffset}px`;
+        updateScrollPadding();
     };
 
     updateBottom();
+
+    if (typeof ResizeObserver !== "undefined") {
+        const resizeObserver = new ResizeObserver(() => updateScrollPadding());
+        resizeObserver.observe(nav);
+    }
 
     window.addEventListener("resize", updateBottom, { passive: true });
     window.addEventListener("orientationchange", updateBottom, { passive: true });

@@ -1,3 +1,8 @@
+:root {
+    /* 底部固定导航高度 + 留白；initBottomNav 会按实测高度覆盖 */
+    --ytm-scroll-padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+}
+
 html,
 body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -70,6 +75,8 @@ body {
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
+    box-sizing: border-box;
+    padding-bottom: var(--ytm-scroll-padding-bottom);
 }
 
 .ytm-page--tabs {
@@ -97,13 +104,16 @@ body {
 }
 
 .ytm-page--tabs .mud-tabs-panels > .mud-tab-panel,
-.ytm-page--tabs .mud-tab-panel[data-page] {
+.ytm-page--tabs .mud-tab-panel[data-page],
+.ytm-page--tabs .mud-tab-panel {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
+    box-sizing: border-box;
+    padding-bottom: var(--ytm-scroll-padding-bottom);
 }
 
 .ytm-global-video-host {
