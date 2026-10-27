@@ -6,6 +6,7 @@ public interface IFavoriteService
 {
     Task<List<FavoriteFolder>> GetFoldersAsync();
     Task<FavoriteFolder> CreateFolderAsync(string name);
+    Task RenameFolderAsync(int folderId, string name);
     Task DeleteFolderAsync(int folderId);
     Task ResetAllAsync();
 
@@ -21,7 +22,6 @@ public interface IFavoriteService
     Task<List<string>> GetFavoriteFolderNamesForVideoAsync(string videoId);
     Task<int> GetOrCreateFolderByNameAsync(string folderName);
     Task RestoreFavoriteFoldersForTrackAsync(string videoId, string title, string author, string? thumbnailUrl, string? localFilePath, IReadOnlyList<string>? folderNames);
-    Task DeleteDownloadedFileAndRecordAsync(string videoId, int folderId = 1);
     Task<FavoriteTrack?> GetTrackByFilePathAsync(string filePath);
     Task RemoveTrackByFilePathAsync(string filePath);
 }

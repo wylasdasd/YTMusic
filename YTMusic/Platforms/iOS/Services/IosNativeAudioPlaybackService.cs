@@ -24,7 +24,7 @@ namespace YTMusic.Platforms.iOS.Services
             session.SetActive(true);
         }
 
-        public Task PlayAsync(string source, bool isLocalFile, string? title, string? artist, double? durationSeconds = null)
+        public Task PlayAsync(string source, bool isLocalFile, string? title, string? artist, double? durationSeconds = null, string? thumbnailUrl = null)
         {
             DisposePlayer();
 

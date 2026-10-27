@@ -6,6 +6,7 @@ public interface IDownloadedTrackRepository
 {
     Task<IReadOnlyList<DownloadedTrack>> GetAllAsync();
     Task<DownloadedTrack?> GetByVideoIdAsync(string videoId);
+    Task<IReadOnlyList<DownloadedTrack>> GetByVideoIdsAsync(IEnumerable<string> videoIds);
     Task<DownloadedTrack?> GetByFilePathAsync(string filePath);
     Task<DownloadedTrack?> GetByRemoteSourcePathAsync(string remoteSourcePath);
     Task AddOrReplaceAsync(DownloadedTrack track);

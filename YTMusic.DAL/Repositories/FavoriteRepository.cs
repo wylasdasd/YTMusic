@@ -30,14 +30,6 @@ public sealed class FavoriteRepository : IFavoriteRepository
         SqliteSchemaMigration.EnsureColumn(connection, "FavoriteFolders", "IsLocalImport", "INTEGER NOT NULL DEFAULT 0");
         SqliteSchemaMigration.EnsureColumn(connection, "FavoriteFolders", "LocalRootPath", "TEXT NULL");
 
-        var defaultFolder = connection.QueryFirstOrDefault<int>("SELECT COUNT(1) FROM FavoriteFolders WHERE Id = 1;");
-        if (defaultFolder == 0)
-        {
-            connection.Execute(
-                "INSERT INTO FavoriteFolders (Id, Name, IsDefault) VALUES (1, @Name, 1);",
-                new { Name = AppGlobal.Favorites.DefaultFolderName });
-        }
-
         const string createTracksSql = @"
             CREATE TABLE IF NOT EXISTS FavoriteTracks (
                 VideoId TEXT NOT NULL,
@@ -62,6 +54,8 @@ public sealed class FavoriteRepository : IFavoriteRepository
                 DROP TABLE Favorites;
             ");
         }
+
+        RetireEmptyDefaultFolder(connection);
     }
 
     public async Task<List<FavoriteFolder>> GetFoldersAsync()
@@ -78,6 +72,14 @@ public sealed class FavoriteRepository : IFavoriteRepository
         const string sql = "INSERT INTO FavoriteFolders (Name, IsDefault) VALUES (@Name, 0); SELECT last_insert_rowid();";
         var id = await connection.ExecuteScalarAsync<int>(sql, new { Name = name });
         return new FavoriteFolder { Id = id, Name = name, IsDefault = false };
+    }
+
+    public async Task RenameFolderAsync(int folderId, string name)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        await connection.ExecuteAsync(
+            "UPDATE FavoriteFolders SET Name = @Name WHERE Id = @Id;",
+            new { Id = folderId, Name = name });
     }
 
     public async Task<FavoriteFolder> CreateLocalImportFolderAsync(string name, string localRootPath)
@@ -109,13 +111,25 @@ public sealed class FavoriteRepository : IFavoriteRepository
     {
         using var connection = _connectionFactory.CreateConnection();
         await connection.ExecuteAsync("DELETE FROM FavoriteTracks;");
-        await connection.ExecuteAsync("DELETE FROM FavoriteFolders WHERE Id != 1;");
-        await connection.ExecuteAsync(
-            "INSERT OR IGNORE INTO FavoriteFolders (Id, Name, IsDefault) VALUES (1, @Name, 1);",
-            new { Name = AppGlobal.Favorites.DefaultFolderName });
-        await connection.ExecuteAsync(
-            "UPDATE FavoriteFolders SET Name = @Name, IsDefault = 1 WHERE Id = 1;",
-            new { Name = AppGlobal.Favorites.DefaultFolderName });
+        await connection.ExecuteAsync("DELETE FROM FavoriteFolders;");
+    }
+
+    private static void RetireEmptyDefaultFolder(System.Data.IDbConnection connection)
+    {
+        var trackCount = connection.ExecuteScalar<int>(
+            "SELECT COUNT(1) FROM FavoriteTracks WHERE FolderId = @FolderId;",
+            new { FolderId = FavoriteFolderIds.Default });
+        if (trackCount == 0)
+        {
+            connection.Execute(
+                "DELETE FROM FavoriteFolders WHERE Id = @FolderId AND IsDefault = 1;",
+                new { FolderId = FavoriteFolderIds.Default });
+            return;
+        }
+
+        connection.Execute(
+            "UPDATE FavoriteFolders SET IsDefault = 0 WHERE Id = @FolderId;",
+            new { FolderId = FavoriteFolderIds.Default });
     }
 
     public async Task<List<FavoriteTrack>> GetTracksAsync(int? folderId = null, bool? hasLocalFilePath = null)

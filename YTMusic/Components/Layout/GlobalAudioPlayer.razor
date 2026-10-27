@@ -1,6 +1,8 @@
+@using YTMusic.BLL.Ports
 @using YTMusic.Services
 @using YTMusic.Services.Playback
 @inject MusicPlayerService PlayerService
+@inject IUiNotifier UiNotifier
 @inject IJSRuntime JSRuntime
 @implements IDisposable
 
@@ -23,12 +25,18 @@
     protected override void OnInitialized()
     {
         PlayerService.OnChange += OnPlayerStateChanged;
+        PlayerService.PlaybackNotice += OnPlaybackNotice;
         PlayerService.OnRequestReplay += OnRequestReplay;
         PlayerService.OnRequestPause += OnRequestPause;
         PlayerService.OnRequestStopWebPlayback += OnRequestStopWebPlayback;
         PlayerService.OnRequestPlay += OnRequestPlay;
         PlayerService.OnRequestSeek += OnRequestSeek;
         PlayerService.OnTimeChanged += OnPlayerTimeChanged;
+    }
+
+    private void OnPlaybackNotice(string message)
+    {
+        _ = InvokeAsync(() => UiNotifier.Warning(message));
     }
 
     private void OnPlayerTimeChanged()
@@ -288,6 +296,7 @@
     public void Dispose()
     {
         PlayerService.OnChange -= OnPlayerStateChanged;
+        PlayerService.PlaybackNotice -= OnPlaybackNotice;
         PlayerService.OnRequestReplay -= OnRequestReplay;
         PlayerService.OnRequestPause -= OnRequestPause;
         PlayerService.OnRequestStopWebPlayback -= OnRequestStopWebPlayback;

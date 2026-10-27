@@ -1,5 +1,8 @@
+using System.IO;
+using System.Net.Http;
 using Android.App;
 using Android.Content;
+using Android.Graphics;
 using Android.Media;
 using Android.Media.Session;
 using Android.OS;
@@ -42,6 +45,7 @@ namespace YTMusic.Platforms.Android.Services
         private const string ExtraArtist = "artist";
         private const string ExtraSeekMs = "seekMs";
         private const string ExtraDurationMs = "durationMs";
+        private const string ExtraArtworkUrl = "artworkUrl";
 
         private IExoPlayer? _player;
         private Media3Session? _mediaSession;
@@ -51,6 +55,11 @@ namespace YTMusic.Platforms.Android.Services
         private long _expectedDurationMs;
         private string _currentTitle = "YTMusic";
         private string _currentArtist = "Playing";
+        private string? _currentArtworkUrl;
+        private string? _currentLocalPath;
+        private bool _currentIsLocalFile;
+        private int _artworkGeneration;
+        private Bitmap? _artworkBitmap;
         private bool _isForegroundStarted;
         private long _lastNotificationUpdateAtMs;
         private long _lastNotifiedPositionSecond = -1;
@@ -108,6 +117,8 @@ namespace YTMusic.Platforms.Android.Services
             _platformSession?.Release();
             _platformSession?.Dispose();
             _platformSession = null;
+            _artworkBitmap?.Dispose();
+            _artworkBitmap = null;
 
             if (_isForegroundStarted)
             {
@@ -147,13 +158,14 @@ namespace YTMusic.Platforms.Android.Services
             }
         }
 
-        public static Task PlayAsync(Context context, string source, bool isLocalFile, string? title, string? artist, double? durationSeconds = null)
+        public static Task PlayAsync(Context context, string source, bool isLocalFile, string? title, string? artist, double? durationSeconds = null, string? thumbnailUrl = null)
         {
             var intent = CreateIntent(context, ActionPlaySource);
             intent.PutExtra(ExtraSource, source);
             intent.PutExtra(ExtraIsLocalFile, isLocalFile);
             intent.PutExtra(ExtraTitle, title ?? "YTMusic");
             intent.PutExtra(ExtraArtist, artist ?? "Playing");
+            intent.PutExtra(ExtraArtworkUrl, thumbnailUrl ?? string.Empty);
             if (durationSeconds.HasValue && durationSeconds.Value > 0)
             {
                 intent.PutExtra(ExtraDurationMs, (long)(durationSeconds.Value * 1000));
@@ -216,6 +228,9 @@ namespace YTMusic.Platforms.Android.Services
                     var isLocalFile = intent.GetBooleanExtra(ExtraIsLocalFile, false);
                     _currentTitle = intent.GetStringExtra(ExtraTitle) ?? "YTMusic";
                     _currentArtist = intent.GetStringExtra(ExtraArtist) ?? "Playing";
+                    _currentArtworkUrl = intent.GetStringExtra(ExtraArtworkUrl);
+                    _currentIsLocalFile = isLocalFile;
+                    _currentLocalPath = isLocalFile ? source : null;
                     _expectedDurationMs = Math.Max(0, intent.GetLongExtra(ExtraDurationMs, 0));
 
                     var mediaMetadata = new Media3Metadata.Builder()
@@ -233,6 +248,7 @@ namespace YTMusic.Platforms.Android.Services
                     player.SetMediaItem(mediaItem);
                     player.Prepare();
                     player.Play();
+                    BeginArtworkLoad();
                     UpdatePlatformSessionState(forceMetadata: true);
                     UpdateForegroundNotification(force: true);
                     StartPositionTimer();
@@ -424,7 +440,124 @@ namespace YTMusic.Platforms.Android.Services
                 metadataBuilder.PutLong(AndroidMediaMetadata.MetadataKeyDuration, durationMs);
             }
 
+            if (_artworkBitmap != null)
+            {
+                metadataBuilder.PutBitmap(AndroidMediaMetadata.MetadataKeyAlbumArt, _artworkBitmap);
+            }
+
             session.SetMetadata(metadataBuilder.Build());
+        }
+
+        private void BeginArtworkLoad()
+        {
+            var generation = ++_artworkGeneration;
+            _artworkBitmap?.Dispose();
+            _artworkBitmap = null;
+            var artworkUrl = _currentArtworkUrl;
+            var localPath = _currentLocalPath;
+            var isLocalFile = _currentIsLocalFile;
+            _ = Task.Run(() =>
+            {
+                Bitmap? bitmap = null;
+                try
+                {
+                    bitmap = LoadArtworkBitmap(artworkUrl, isLocalFile ? localPath : null) ?? CreateDefaultArtwork();
+                }
+                catch
+                {
+                    bitmap ??= CreateDefaultArtwork();
+                }
+
+                _mainHandler?.Post(() =>
+                {
+                    if (generation != _artworkGeneration)
+                    {
+                        bitmap?.Dispose();
+                        return;
+                    }
+
+                    _artworkBitmap?.Dispose();
+                    _artworkBitmap = bitmap;
+                    UpdatePlatformSessionState(forceMetadata: true);
+                    UpdateForegroundNotification(force: true);
+                });
+            });
+        }
+
+        private static Bitmap? LoadArtworkBitmap(string? artworkUrl, string? localPath)
+        {
+            if (!string.IsNullOrWhiteSpace(artworkUrl)
+                && Uri.TryCreate(artworkUrl, UriKind.Absolute, out var uri)
+                && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+            {
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+                var bytes = client.GetByteArrayAsync(uri).GetAwaiter().GetResult();
+                return DecodeSampled(bytes);
+            }
+
+            if (!string.IsNullOrWhiteSpace(localPath) && File.Exists(localPath))
+            {
+                try
+                {
+                    using var retriever = new MediaMetadataRetriever();
+                    retriever.SetDataSource(localPath);
+                    var picture = retriever.GetEmbeddedPicture();
+                    if (picture is { Length: > 0 })
+                    {
+                        return DecodeSampled(picture);
+                    }
+                }
+                catch
+                {
+                    // 本地文件没有内嵌封面时使用默认图。
+                }
+            }
+
+            return null;
+        }
+
+        private static Bitmap? DecodeSampled(byte[] bytes)
+        {
+            var bounds = new BitmapFactory.Options { InJustDecodeBounds = true };
+            BitmapFactory.DecodeByteArray(bytes, 0, bytes.Length, bounds);
+            var sample = 1;
+            while (bounds.OutWidth / sample > 512 || bounds.OutHeight / sample > 512)
+            {
+                sample *= 2;
+            }
+
+            var options = new BitmapFactory.Options { InSampleSize = sample };
+            return BitmapFactory.DecodeByteArray(bytes, 0, bytes.Length, options);
+        }
+
+        private static Bitmap CreateDefaultArtwork()
+        {
+            const int size = 256;
+            var bitmap = Bitmap.CreateBitmap(size, size, Bitmap.Config.Argb8888);
+            if (bitmap == null)
+            {
+                throw new InvalidOperationException("Failed to create default artwork.");
+            }
+
+            using var canvas = new Canvas(bitmap);
+            using var paint = new Paint(PaintFlags.AntiAlias);
+            using var shader = new LinearGradient(
+                0,
+                0,
+                size,
+                size,
+                Color.ParseColor("#059669").ToArgb(),
+                Color.ParseColor("#102A23").ToArgb(),
+                Shader.TileMode.Clamp);
+            paint.SetShader(shader);
+            canvas.DrawRect(0, 0, size, size, paint);
+            paint.SetShader(null);
+            paint.Color = Color.White;
+            canvas.DrawCircle(size / 2f, size / 2f + 6, 42, paint);
+            paint.Color = Color.ParseColor("#059669");
+            canvas.DrawCircle(size / 2f - 8, size / 2f + 14, 10, paint);
+            canvas.DrawRect(size / 2f, size / 2f - 22, size / 2f + 6, size / 2f + 14, paint);
+            return bitmap;
         }
 
         private void EnsureNotificationChannel()
@@ -560,6 +693,10 @@ namespace YTMusic.Platforms.Android.Services
                 .AddAction(previousAction)
                 .AddAction(playPauseAction)
                 .AddAction(nextAction);
+            if (_artworkBitmap != null)
+            {
+                builder.SetLargeIcon(_artworkBitmap);
+            }
 
             if (platformSessionToken != null)
             {

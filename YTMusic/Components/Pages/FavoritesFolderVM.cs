@@ -20,6 +20,7 @@ public enum FavoriteTrackSortMode
 public sealed partial class FavoritesFolderVM : ViewModelBase
 {
     private readonly IFavoriteService _favoriteService;
+    private readonly ILibraryCatalogService _libraryCatalog;
     private readonly ILocalMusicService _localMusicService;
     private readonly IDownloadMusicDirectoryProvider _downloadDirectoryProvider;
     private readonly IUiNotifier _notifier;
@@ -37,13 +38,15 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
     public FavoriteTrackSortMode SortMode { get; set; } = FavoriteTrackSortMode.Time;
     public bool IsLoading { get; private set; }
 
-    public bool IsDownloadedCatalog => FavoriteFolderIds.IsDownloadedCatalog(FolderId);
-    public bool IsLocalLibrary { get; private set; }
+    public FavoriteFolderKind FolderKind { get; private set; } = FavoriteFolderKind.User;
+    public bool IsDownloadedCatalog => FolderKind == FavoriteFolderKind.DownloadedCatalog;
+    public bool IsLocalLibrary => FolderKind == FavoriteFolderKind.LocalImport;
     public string? LocalRootPath { get; private set; }
-    public bool UsesDirectoryGroups => IsDownloadedCatalog || IsLocalLibrary;
+    public bool UsesDirectoryGroups => FolderKind is FavoriteFolderKind.DownloadedCatalog or FavoriteFolderKind.LocalImport;
 
     public FavoritesFolderVM(
         IFavoriteService favoriteService,
+        ILibraryCatalogService libraryCatalog,
         ILocalMusicService localMusicService,
         IDownloadMusicDirectoryProvider downloadDirectoryProvider,
         IUiNotifier notifier,
@@ -53,6 +56,7 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
         GlobalStateService globalState)
     {
         _favoriteService = favoriteService;
+        _libraryCatalog = libraryCatalog;
         _localMusicService = localMusicService;
         _downloadDirectoryProvider = downloadDirectoryProvider;
         _notifier = notifier;
@@ -69,22 +73,38 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
 
         var folders = await _favoriteService.GetFoldersAsync();
         var folder = folders.FirstOrDefault(f => f.Id == folderId);
+        FolderKind = FavoriteFolderKindHelper.Resolve(folderId, folder);
         FolderName = folder?.Name;
-        IsLocalLibrary = folder?.IsLocalImport == true;
         LocalRootPath = folder?.LocalRootPath;
 
-        if (FolderName == null && !FavoriteFolderIds.IsDownloadedCatalog(folderId))
+        if (FolderKind == FavoriteFolderKind.DownloadedCatalog)
+        {
+            FolderName = "已下载";
+        }
+        else if (FolderName == null)
         {
             _notifier.Warning("收藏夹不存在。");
             return;
         }
 
-        if (FavoriteFolderIds.IsDownloadedCatalog(folderId))
+        await LoadTracksAsync();
+    }
+
+    private async Task AttachDownloadedVideoPathsAsync(IReadOnlyList<FavoriteTrack> tracks)
+    {
+        if (tracks.Count == 0)
         {
-            FolderName = folders.FirstOrDefault(f => f.Id == folderId)?.Name ?? "已下载";
+            return;
         }
 
-        await LoadTracksAsync();
+        var downloaded = await _localMusicService.GetDownloadedTracksByVideoIdsAsync(tracks.Select(track => track.VideoId));
+        foreach (var track in tracks)
+        {
+            if (downloaded.TryGetValue(track.VideoId, out var downloadedTrack) && downloadedTrack.IsVideo)
+            {
+                track.LocalVideoFilePath = downloadedTrack.LocalFilePath;
+            }
+        }
     }
 
     public async Task LoadTracksAsync()
@@ -94,22 +114,14 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
 
         try
         {
-            if (IsDownloadedCatalog)
+            if (FolderKind == FavoriteFolderKind.DownloadedCatalog)
             {
                 _rawTracks = await LoadDownloadedCatalogTracksAsync();
             }
             else
             {
                 _rawTracks = await _favoriteService.GetTracksAsync(FolderId, null);
-
-                foreach (var track in _rawTracks)
-                {
-                    var downloadedTrack = await _localMusicService.GetDownloadedTrackByVideoIdAsync(track.VideoId);
-                    if (downloadedTrack?.IsVideo == true)
-                    {
-                        track.LocalVideoFilePath = downloadedTrack.LocalFilePath;
-                    }
-                }
+                await AttachDownloadedVideoPathsAsync(_rawTracks);
             }
 
             ApplyTrackOrdering();
@@ -189,7 +201,7 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
                     playlist,
                     0,
                     node.Name,
-                    MusicPlayerService.PlaybackMode.Sequential))
+                    PlaybackMode.Sequential))
             {
                 _navigation.NavigateTo("/player");
             }
@@ -203,9 +215,9 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
 
     private void ApplyTrackOrdering()
     {
-        if (IsDownloadedCatalog || IsLocalLibrary)
+        if (UsesDirectoryGroups)
         {
-            var libraryRoot = IsLocalLibrary
+            var libraryRoot = FolderKind == FavoriteFolderKind.LocalImport
                 ? LocalRootPath
                 : _downloadDirectoryProvider.GetDownloadedMusicDirectory();
             DirectoryNodes = LocalDirectoryTree.Build(
@@ -242,32 +254,38 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
 
     private async Task<List<FavoriteTrack>> LoadDownloadedCatalogTracksAsync()
     {
-        var downloads = await _localMusicService.GetDownloadedTracksAsync();
-        return downloads
-            .Where(track => !string.IsNullOrWhiteSpace(track.LocalFilePath))
-            .OrderByDescending(track => track.DownloadedDate)
-            .Select(MapDownloadedTrackToFavorite)
-            .ToList();
+        var items = await _libraryCatalog.GetDownloadedItemsAsync();
+        return items.Select(item => item.AsFavoriteTrack()).ToList();
     }
 
-    private static FavoriteTrack MapDownloadedTrackToFavorite(DownloadedTrack track)
+    public async Task DeleteDownloadedFileAsync(FavoriteTrack track)
     {
-        return new FavoriteTrack
+        try
         {
-            VideoId = track.VideoId,
-            FolderId = FavoriteFolderIds.DownloadedCatalog,
-            Title = track.Title,
-            Author = track.Author,
-            ThumbnailUrl = track.ThumbnailUrl,
-            AddedDate = track.DownloadedDate,
-            LocalFilePath = track.LocalFilePath,
-            LocalVideoFilePath = track.IsVideo ? track.LocalFilePath : null
-        };
+            var removedFile = !string.IsNullOrWhiteSpace(track.LocalFilePath) && track.IsDownloaded;
+            if (removedFile)
+            {
+                await _localMusicService.RemoveDownloadedTrackAsync(track.VideoId, track.LocalFilePath!);
+                await _favoriteService.UpdateLocalFilePathAsync(track.VideoId, null);
+            }
+
+            await _favoriteService.RemoveFromFavoritesAsync(track.VideoId, FolderId);
+            _rawTracks.RemoveAll(item => item.VideoId == track.VideoId);
+            ApplyTrackOrdering();
+            _notifier.Success(removedFile
+                ? $"已删除「{track.Title}」的收藏和本地文件"
+                : $"已从收藏夹移除「{track.Title}」");
+            NotifyChanged();
+        }
+        catch (Exception ex)
+        {
+            _notifier.Error($"删除失败: {ex.Message}");
+        }
     }
 
     public async Task DeleteLocalFileAsync(FavoriteTrack track)
     {
-        if (!IsDownloadedCatalog || string.IsNullOrWhiteSpace(track.LocalFilePath))
+        if (!UsesDirectoryGroups || string.IsNullOrWhiteSpace(track.LocalFilePath))
         {
             return;
         }
@@ -322,6 +340,32 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
         _navigation.NavigateTo("/favorites");
     }
 
+    public async Task RenameCurrentFolderAsync()
+    {
+        if (IsDownloadedCatalog || string.IsNullOrWhiteSpace(FolderName))
+        {
+            return;
+        }
+
+        var name = await _dialogHost.PromptRenameFolderNameAsync(FolderName);
+        if (string.IsNullOrWhiteSpace(name) || name.Equals(FolderName, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        try
+        {
+            await _favoriteService.RenameFolderAsync(FolderId, name);
+            FolderName = name.Trim();
+            _notifier.Success($"已重命名为「{FolderName}」");
+            NotifyChanged();
+        }
+        catch (Exception ex)
+        {
+            _notifier.Error($"重命名失败: {ex.Message}");
+        }
+    }
+
     public async Task PlayTrackAsync(FavoriteTrack track)
     {
         try
@@ -361,7 +405,7 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
                     playlist,
                     startIndex,
                     folderName,
-                    MusicPlayerService.PlaybackMode.Sequential))
+                    PlaybackMode.Sequential))
             {
                 _navigation.NavigateTo("/player");
             }
@@ -405,23 +449,9 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
 
     private List<PlayingItem> BuildPlaylist(IEnumerable<FavoriteTrack> tracks)
     {
-        var items = tracks.Select(t => new PlayingItem
-        {
-            VideoId = t.VideoId,
-            Title = t.Title,
-            Author = t.Author,
-            ThumbnailUrl = t.ThumbnailUrl,
-            LocalFilePath = t.IsDownloaded || IsDownloadedCatalog || IsLocalLibrary ? t.LocalFilePath : null,
-            IsVideo = false
-        });
-
-        if (!IsLocalLibrary)
-        {
-            return items.ToList();
-        }
-
-        return items
-            .Where(item => !string.IsNullOrWhiteSpace(item.LocalFilePath) && File.Exists(item.LocalFilePath))
-            .ToList();
+        return PlayingItemMapper.FromFavoriteTracks(
+            tracks,
+            forceIncludeLocalPath: UsesDirectoryGroups,
+            requireExistingLocalFile: FolderKind == FavoriteFolderKind.LocalImport);
     }
 }

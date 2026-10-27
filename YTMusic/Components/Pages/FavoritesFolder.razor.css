@@ -23,10 +23,53 @@
     gap: 8px;
 }
 
+.favorites-card-grid {
+    justify-content: flex-start;
+}
+
+.favorites-card {
+    height: 132px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.favorites-card--with-media {
+    height: 292px;
+}
+
+.favorites-card__media {
+    flex: 0 0 160px;
+    height: 160px;
+    object-fit: cover;
+}
+
+.favorites-card__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 8px;
+}
+
+.favorites-card__body ::deep .ytm-media-title-wrap,
+.favorites-card__body ::deep .ytm-media-title-clamp {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: normal;
+    word-break: break-all;
+}
+
 .favorites-card__footer {
     align-items: center;
+    flex: 0 0 52px;
     padding-top: 0;
-    min-height: 44px;
+    min-height: 52px;
+    max-height: 52px;
+    overflow: hidden;
 }
 
 .favorites-card__footer ::deep .mud-chip {

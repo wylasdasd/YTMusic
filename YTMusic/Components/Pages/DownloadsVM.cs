@@ -88,26 +88,11 @@ public sealed partial class DownloadsVM : ViewModelBase
     {
         try
         {
-            if (LocalAudioFolder.IsImportedVideoId(file.VideoId))
-            {
-                await _favoriteService.RemoveTrackByFilePathAsync(file.LocalFilePath);
-                FavoriteFilePaths.Remove(file.LocalFilePath);
-                RemoveListedFile(file);
-                _notifier.Success($"已从本地资源移除「{file.Title}」");
-                NotifyChanged();
-                return;
-            }
-
-            if (FavoriteFilePaths.Contains(file.LocalFilePath))
-            {
-                await _favoriteService.RemoveTrackByFilePathAsync(file.LocalFilePath);
-                FavoriteFilePaths.Remove(file.LocalFilePath);
-            }
-
+            await _favoriteService.RemoveTrackByFilePathAsync(file.LocalFilePath);
+            FavoriteFilePaths.Remove(file.LocalFilePath);
             await _localMusicService.RemoveDownloadedTrackAsync(file.VideoId, file.LocalFilePath);
             RemoveListedFile(file);
-
-            _notifier.Success($"{file.Title} deleted");
+            _notifier.Success($"已删除「{file.Title}」");
             NotifyChanged();
         }
         catch (Exception ex)
@@ -157,17 +142,9 @@ public sealed partial class DownloadsVM : ViewModelBase
             return;
         }
 
-        var playlist = tracks.Select(file => new PlayingItem
-        {
-            VideoId = file.VideoId,
-            Title = file.Title,
-            Author = file.Author,
-            ThumbnailUrl = file.ThumbnailUrl,
-            LocalFilePath = file.LocalFilePath,
-            IsVideo = false
-        }).ToList();
+        var playlist = PlayingItemMapper.FromDownloadedTracks(tracks, isVideo: false);
 
-        if (await _playerService.PlayPlaylistAsync(playlist, 0, node.Name, MusicPlayerService.PlaybackMode.Sequential))
+        if (await _playerService.PlayPlaylistAsync(playlist, 0, node.Name, PlaybackMode.Sequential))
         {
             _navigation.NavigateTo("/player");
         }

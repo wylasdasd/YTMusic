@@ -22,7 +22,8 @@ namespace YTMusic.Services.Playback
                 source.IsLocalFile,
                 source.Title,
                 source.Artist,
-                source.DurationSeconds);
+                source.DurationSeconds,
+                source.ThumbnailUrl);
 
             if (!options.AutoPlay)
             {

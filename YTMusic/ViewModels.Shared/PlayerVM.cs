@@ -265,11 +265,11 @@ public sealed partial class PlayerVM : ViewModelBase
         return Task.FromResult(true);
     }
 
-    public static string GetPlaybackModeIcon(MusicPlayerService.PlaybackMode mode) => mode switch
+    public static string GetPlaybackModeIcon(PlaybackMode mode) => mode switch
     {
-        MusicPlayerService.PlaybackMode.Sequential => Icons.Material.Filled.Repeat,
-        MusicPlayerService.PlaybackMode.Random => Icons.Material.Filled.Shuffle,
-        MusicPlayerService.PlaybackMode.SingleLoop => Icons.Material.Filled.RepeatOne,
+        PlaybackMode.Sequential => Icons.Material.Filled.Repeat,
+        PlaybackMode.Random => Icons.Material.Filled.Shuffle,
+        PlaybackMode.SingleLoop => Icons.Material.Filled.RepeatOne,
         _ => Icons.Material.Filled.Repeat
     };
 }

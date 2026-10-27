@@ -6,6 +6,7 @@ public interface ILocalMusicService
 {
     Task<IReadOnlyList<DownloadedTrack>> GetDownloadedTracksAsync();
     Task<DownloadedTrack?> GetDownloadedTrackByVideoIdAsync(string videoId);
+    Task<IReadOnlyDictionary<string, DownloadedTrack>> GetDownloadedTracksByVideoIdsAsync(IEnumerable<string> videoIds);
     Task<DownloadedTrack?> GetDownloadedTrackByFilePathAsync(string filePath);
     Task ResetAllAsync();
     Task AddDownloadedTrackAsync(DownloadedTrack track);

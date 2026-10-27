@@ -47,6 +47,30 @@ public sealed class MudDialogHost(IDialogService dialogService) : IDialogHost
         return name.Trim();
     }
 
+    public async Task<string?> PromptRenameFolderNameAsync(string currentName)
+    {
+        var parameters = new DialogParameters<CreateFavoriteFolderDialog>
+        {
+            { x => x.InitialName, currentName },
+            { x => x.ConfirmText, "保存" }
+        };
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await dialogService.ShowAsync<CreateFavoriteFolderDialog>("重命名收藏夹", parameters, options);
+        var result = await dialog.Result;
+        if (result == null || result.Canceled || result.Data is not string name || string.IsNullOrWhiteSpace(name))
+        {
+            return null;
+        }
+
+        return name.Trim();
+    }
+
     public async Task<bool> ConfirmDeleteLocalFilesAsync(int count)
     {
         var parameters = new DialogParameters<ConfirmDeleteLocalFilesDialog>

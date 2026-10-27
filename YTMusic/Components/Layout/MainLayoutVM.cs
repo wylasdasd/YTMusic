@@ -15,6 +15,7 @@ public sealed class MainLayoutVM : ViewModelBase, IDisposable
     private readonly INetworkErrorService _networkErrorService;
     private readonly IDialogHost _dialogHost;
     private readonly IUiNotifier _notifier;
+    private Func<Action, Task>? _invokeOnUi;
 
     public int ThemeIndex { get; private set; }
     public bool IsThemePanelOpen { get; private set; }
@@ -35,8 +36,9 @@ public sealed class MainLayoutVM : ViewModelBase, IDisposable
         _notifier = notifier;
     }
 
-    public void Initialize()
+    public void Initialize(Func<Action, Task> invokeOnUi)
     {
+        _invokeOnUi = invokeOnUi;
         if (ThemePresets.All.Length > 0)
         {
             ThemeIndex = Math.Clamp(_uiPreferences.ThemeIndex, 0, ThemePresets.All.Length - 1);
@@ -176,6 +178,17 @@ public sealed class MainLayoutVM : ViewModelBase, IDisposable
     }
 
     private void OnNetworkNotification(string message)
+    {
+        if (_invokeOnUi != null)
+        {
+            _ = _invokeOnUi(() => ApplyNetworkNotification(message));
+            return;
+        }
+
+        ApplyNetworkNotification(message);
+    }
+
+    private void ApplyNetworkNotification(string message)
     {
         _globalState.HideLoading();
         _notifier.Error(message);

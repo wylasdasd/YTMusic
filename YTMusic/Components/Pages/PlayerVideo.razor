@@ -184,6 +184,11 @@
 
     private void OnStateChanged()
     {
+        _ = InvokeAsync(HandlePlayerStateOnUiAsync);
+    }
+
+    private async Task HandlePlayerStateOnUiAsync()
+    {
         if (OperatingSystem.IsAndroid() && PlayerService.UseNativeVideoPlayback)
         {
             NavigationManager.NavigateTo("/player/audio", replace: true);
@@ -194,7 +199,7 @@
         {
             if (!PlayerService.UseNativeVideoPlayback)
             {
-                _ = JSRuntime.InvokeVoidAsync("audioPlayer.clearVideoElement");
+                await JSRuntime.InvokeVoidAsync("audioPlayer.clearVideoElement");
             }
             _videoAttached = false;
             NavigationManager.NavigateTo("/player/audio", replace: true);
@@ -206,7 +211,7 @@
         _ = AttachVideoIfNeededAsync();
         _ = SyncWebVideoFromServiceAsync();
         _ = SyncPlayerChromeAsync();
-        InvokeAsync(StateHasChanged);
+        StateHasChanged();
     }
 
     private string? GetProgressTrackKey()

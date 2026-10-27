@@ -67,6 +67,23 @@ public sealed class LocalMusicService : ILocalMusicService
         return null;
     }
 
+    public async Task<IReadOnlyDictionary<string, DownloadedTrack>> GetDownloadedTracksByVideoIdsAsync(IEnumerable<string> videoIds)
+    {
+        var tracks = await _repository.GetByVideoIdsAsync(videoIds);
+        var result = new Dictionary<string, DownloadedTrack>(StringComparer.Ordinal);
+        foreach (var track in tracks)
+        {
+            if (string.IsNullOrWhiteSpace(track.VideoId) || !_fileSystem.FileExists(track.LocalFilePath))
+            {
+                continue;
+            }
+
+            result[track.VideoId] = track;
+        }
+
+        return result;
+    }
+
     public async Task<DownloadedTrack?> GetDownloadedTrackByFilePathAsync(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))

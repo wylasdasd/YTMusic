@@ -1,5 +1,7 @@
+@page "/"
 @page "/favorites"
 @using YTMusic.Services
+@using YTMusic.Services.Playback
 @using MudBlazor
 @implements IDisposable
 
@@ -48,16 +50,25 @@
                             <MudIconButton Icon="@Icons.Material.Filled.Shuffle"
                                            Color="Color.Error"
                                            Disabled="@(trackCount == 0)"
-                                           OnClick="@(() => ViewModel.PlayFolderAsync(folder.Id, MusicPlayerService.PlaybackMode.Random))"
+                                           OnClick="@(() => ViewModel.PlayFolderAsync(folder.Id, PlaybackMode.Random))"
                                            aria-label="随机播放" />
                         </div>
                         <div @onclick:stopPropagation="true">
                             <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
                                            Color="Color.Primary"
                                            Disabled="@(trackCount == 0)"
-                                           OnClick="@(() => ViewModel.PlayFolderAsync(folder.Id, MusicPlayerService.PlaybackMode.Sequential))"
+                                           OnClick="@(() => ViewModel.PlayFolderAsync(folder.Id, PlaybackMode.Sequential))"
                                            aria-label="顺序播放" />
                         </div>
+                        @if (!FavoriteFolderIds.IsDownloadedCatalog(folder.Id))
+                        {
+                            <div @onclick:stopPropagation="true">
+                                <MudIconButton Icon="@Icons.Material.Filled.DriveFileRenameOutline"
+                                               Color="Color.Default"
+                                               OnClick="@(() => ViewModel.RenameFolderAsync(folder))"
+                                               aria-label="重命名收藏夹" />
+                            </div>
+                        }
                         @if (FavoriteFolderIds.IsDownloadedCatalog(folder.Id))
                         {
                             <div @onclick:stopPropagation="true">
@@ -65,7 +76,7 @@
                                                Color="Color.Error"
                                                Disabled="@(trackCount == 0)"
                                                OnClick="@(() => ViewModel.ConfirmClearLocalDownloadsAsync())"
-                                               aria-label="删除本地文件" />
+                                               aria-label="清空歌曲" />
                             </div>
                         }
                         else if (!FavoriteFolderIds.IsProtectedFolder(folder.Id))

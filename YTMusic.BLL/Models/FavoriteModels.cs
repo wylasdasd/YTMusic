@@ -7,8 +7,7 @@ public static class FavoriteFolderIds
 
     public static bool IsDownloadedCatalog(int folderId) => folderId == DownloadedCatalog;
 
-    public static bool IsProtectedFolder(int folderId)
-        => folderId == Default || folderId == DownloadedCatalog;
+    public static bool IsProtectedFolder(int folderId) => folderId == DownloadedCatalog;
 }
 
 public class FavoriteFolder

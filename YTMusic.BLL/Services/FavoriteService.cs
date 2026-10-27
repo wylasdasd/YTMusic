@@ -1,4 +1,3 @@
-using CommonHelp;
 using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Abstractions.Data;
 using YTMusic.BLL.Models;
@@ -17,22 +16,33 @@ public sealed class FavoriteService : IFavoriteService
     public async Task<List<FavoriteFolder>> GetFoldersAsync()
     {
         var dbFolders = await _repository.GetFoldersAsync();
-
-        var defaultFolder = dbFolders.FirstOrDefault(f => f.Id == FavoriteFolderIds.Default)
-            ?? new FavoriteFolder { Id = FavoriteFolderIds.Default, Name = AppGlobal.Favorites.DefaultFolderName, IsDefault = true };
-
-        var folders = new List<FavoriteFolder> { defaultFolder };
-        folders.Add(new FavoriteFolder
-        {
-            Id = FavoriteFolderIds.DownloadedCatalog,
-            Name = "已下载",
-            IsDownloadedCatalog = true
-        });
-        folders.AddRange(dbFolders.Where(f => f.Id != FavoriteFolderIds.Default));
-        return folders;
+        // Real favorite folders only — virtual "已下载" is composed by UI via ILibraryCatalogService.
+        return dbFolders.Where(folder => !folder.IsDefault).ToList();
     }
 
     public Task<FavoriteFolder> CreateFolderAsync(string name) => _repository.CreateFolderAsync(name);
+
+    public async Task RenameFolderAsync(int folderId, string name)
+    {
+        if (FavoriteFolderIds.IsDownloadedCatalog(folderId))
+        {
+            throw new InvalidOperationException("已下载不能改名。");
+        }
+
+        var trimmed = name.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            throw new InvalidOperationException("名称不能为空。");
+        }
+
+        var folders = await _repository.GetFoldersAsync();
+        if (folders.Any(folder => folder.Id != folderId && folder.Name.Equals(trimmed, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException("已有同名收藏夹。");
+        }
+
+        await _repository.RenameFolderAsync(folderId, trimmed);
+    }
 
     public async Task DeleteFolderAsync(int folderId)
     {
@@ -152,7 +162,7 @@ public sealed class FavoriteService : IFavoriteService
     {
         if (string.IsNullOrWhiteSpace(folderName))
         {
-            return FavoriteFolderIds.Default;
+            throw new InvalidOperationException("收藏夹名称不能为空。");
         }
 
         var trimmed = folderName.Trim();
@@ -192,17 +202,6 @@ public sealed class FavoriteService : IFavoriteService
             var folderId = await GetOrCreateFolderByNameAsync(folderName);
             await AddToFavoritesAsync(videoId, title, author, thumbnailUrl, folderId, localFilePath);
         }
-    }
-
-    public async Task DeleteDownloadedFileAndRecordAsync(string videoId, int folderId = 1)
-    {
-        var path = await _repository.GetLocalFilePathAsync(videoId, folderId);
-        if (!string.IsNullOrWhiteSpace(path))
-        {
-            FileHelp.DeleteIfExists(path);
-        }
-
-        await RemoveFromFavoritesAsync(videoId, folderId);
     }
 
     public Task<FavoriteTrack?> GetTrackByFilePathAsync(string filePath)

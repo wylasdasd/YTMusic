@@ -10,7 +10,7 @@ namespace YTMusic.Services.Abstractions
         event Action<bool>? PlayingStateChanged;
         event Action? PlaybackEnded;
 
-        Task PlayAsync(string source, bool isLocalFile, string? title, string? artist, double? durationSeconds = null);
+        Task PlayAsync(string source, bool isLocalFile, string? title, string? artist, double? durationSeconds = null, string? thumbnailUrl = null);
         Task PauseAsync();
         Task ResumeAsync();
         Task SeekAsync(double positionSeconds);

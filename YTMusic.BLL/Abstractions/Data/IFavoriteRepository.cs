@@ -7,6 +7,7 @@ public interface IFavoriteRepository
     Task<List<FavoriteFolder>> GetFoldersAsync();
     Task<FavoriteFolder> CreateFolderAsync(string name);
     Task<FavoriteFolder> CreateLocalImportFolderAsync(string name, string localRootPath);
+    Task RenameFolderAsync(int folderId, string name);
     Task DeleteFolderAsync(int folderId);
     Task ResetAllAsync();
 

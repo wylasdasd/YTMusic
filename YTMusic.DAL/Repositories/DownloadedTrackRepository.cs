@@ -64,6 +64,32 @@ public sealed class DownloadedTrackRepository : IDownloadedTrackRepository
             new { VideoId = videoId });
     }
 
+    public async Task<IReadOnlyList<DownloadedTrack>> GetByVideoIdsAsync(IEnumerable<string> videoIds)
+    {
+        var ids = videoIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (ids.Length == 0)
+        {
+            return Array.Empty<DownloadedTrack>();
+        }
+
+        var result = new List<DownloadedTrack>(ids.Length);
+        using var connection = _connectionFactory.CreateConnection();
+        const int chunkSize = 400;
+        for (var offset = 0; offset < ids.Length; offset += chunkSize)
+        {
+            var slice = ids.Skip(offset).Take(chunkSize).ToArray();
+            var rows = await connection.QueryAsync<DownloadedTrack>(
+                "SELECT * FROM DownloadedTracks WHERE VideoId IN @VideoIds;",
+                new { VideoIds = slice });
+            result.AddRange(rows);
+        }
+
+        return result;
+    }
+
     public async Task<DownloadedTrack?> GetByFilePathAsync(string filePath)
     {
         using var connection = _connectionFactory.CreateConnection();

@@ -6,7 +6,6 @@ using System.IO;
 using YoutubeExplode.Videos;
 using YoutubeExplode.Videos.Streams;
 using YoutubeExplode.Search;
-using CommonHelp;
 using YTMusic.BLL.Abstractions;
 using YTMusic.Services.Abstractions;
 using YTMusic.Services.Abstractions.Playback;
@@ -29,6 +28,10 @@ namespace YTMusic.Services
         private readonly WebAudioPlaybackInstance _webAudioPlayback = new();
         private readonly WebMuxedVideoPlaybackInstance _webMuxedPlayback = new();
         private readonly HybridPlaybackInstance _hybridPlayback = new();
+        private readonly PlaylistSession _playlist = new();
+        private readonly RemoteVideoPrefetchCache _remoteVideoPrefetch =
+            new(AppGlobal.Playback.RemoteVideoPrefetchTtl);
+        private readonly UiPreferencesService _uiPreferences;
         private TaskCompletionSource<bool>? _webStopTcs;
         
         public event Action? OnChange;
@@ -38,6 +41,7 @@ namespace YTMusic.Services
         public event Action? OnRequestStopWebPlayback;
         public event Action? OnRequestPlay;
         public event Action<double>? OnRequestSeek;
+        public event Action<string>? PlaybackNotice;
         public PlayingItem? CurrentVideo { get; private set; }
         public string? CurrentStreamUrl { get; private set; }
         public bool IsPlaying { get; private set; }
@@ -57,20 +61,10 @@ namespace YTMusic.Services
         public double CurrentTime { get; private set; } = 0;
         public double Duration { get; private set; } = 100;
 
-        // Playlist State
-        public List<PlayingItem> Playlist { get; private set; } = new List<PlayingItem>();
-        public int CurrentPlaylistIndex { get; private set; } = -1;
-        public string? CurrentPlaylistName { get; private set; }
-        public enum PlaybackMode { Sequential, Random, SingleLoop }
-        public PlaybackMode CurrentMode { get; private set; } = PlaybackMode.Sequential;
-        private List<int> _shuffleIndices = new List<int>();
-        private readonly UiPreferencesService _uiPreferences;
-        private readonly object _remoteVideoPrefetchLock = new();
-        private string? _prefetchedRemoteVideoId;
-        private RemoteWebVideoStreams? _prefetchedRemoteVideo;
-        private RemoteVideoStreamQuality _prefetchedRemoteVideoQuality;
-        private DateTime _prefetchedRemoteVideoAt;
-        private static readonly TimeSpan RemoteVideoPrefetchTtl = AppGlobal.Playback.RemoteVideoPrefetchTtl;
+        public List<PlayingItem> Playlist => _playlist.Items;
+        public int CurrentPlaylistIndex => _playlist.CurrentIndex;
+        public string? CurrentPlaylistName => _playlist.Name;
+        public PlaybackMode CurrentMode => _playlist.Mode;
 
         public MusicPlayerService(
             INativeAudioPlaybackService nativeAudio,
@@ -130,47 +124,9 @@ namespace YTMusic.Services
             _webStopTcs?.TrySetResult(true);
         }
 
-        public async Task<bool> PlayAsync(VideoSearchResult video)
-        {
-            var item = new PlayingItem
-            {
-                VideoId = video.Id.Value,
-                Title = video.Title,
-                Author = video.Author.ChannelTitle,
-                ThumbnailUrl = video.Thumbnails.FirstOrDefault()?.Url,
-                DurationSeconds = video.Duration?.TotalSeconds
-            };
+        public Task<bool> PlayAsync(VideoSearchResult video) => PlayAsync(PlayingItemMapper.From(video));
 
-            if (!await PlayInternalAsync(item))
-            {
-                return false;
-            }
-
-            ClearPlaylist();
-            CurrentMode = PlaybackMode.SingleLoop;
-            return true;
-        }
-
-        public async Task<bool> PlayAsync(IVideo video)
-        {
-            var item = new PlayingItem
-            {
-                VideoId = video.Id.Value,
-                Title = video.Title,
-                Author = video.Author.ChannelTitle,
-                ThumbnailUrl = video.Thumbnails.FirstOrDefault()?.Url,
-                DurationSeconds = video.Duration?.TotalSeconds
-            };
-
-            if (!await PlayInternalAsync(item))
-            {
-                return false;
-            }
-
-            ClearPlaylist();
-            CurrentMode = PlaybackMode.SingleLoop;
-            return true;
-        }
+        public Task<bool> PlayAsync(IVideo video) => PlayAsync(PlayingItemMapper.From(video));
 
         public async Task<bool> PlayAsync(PlayingItem playingItem)
         {
@@ -180,7 +136,7 @@ namespace YTMusic.Services
             }
 
             ClearPlaylist();
-            CurrentMode = PlaybackMode.SingleLoop;
+            _playlist.Mode = PlaybackMode.SingleLoop;
             return true;
         }
 
@@ -192,15 +148,7 @@ namespace YTMusic.Services
             string? thumbnailUrl = null,
             string? videoId = null)
         {
-            var item = new PlayingItem
-            {
-                VideoId = !string.IsNullOrWhiteSpace(videoId) ? videoId : "local",
-                Title = title,
-                Author = string.IsNullOrWhiteSpace(author) ? "Local File" : author,
-                ThumbnailUrl = thumbnailUrl,
-                LocalFilePath = filePath,
-                IsVideo = isVideo
-            };
+            var item = PlayingItemMapper.FromLocalFile(filePath, title, isVideo, author, thumbnailUrl, videoId);
 
             IsLoading = true;
             IsPlaying = false;
@@ -213,45 +161,23 @@ namespace YTMusic.Services
                     return false;
                 }
 
-                var isWebM = filePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
-                var isStreamVideo = ShouldPlayLocalAsVideo(filePath, isVideo == true);
                 var artistName = string.IsNullOrWhiteSpace(author) ? "Local File" : author;
-                var options = BuildPlaybackOptions(autoPlay: true);
-
-                if (ShouldUseNativeLocalVideo(filePath, isVideo == true))
-                {
-                    PlaybackDiagnostics.Log($"PlayLocalFile native video path={filePath}");
-                    await ActivatePlaybackAsync(
-                        PlaybackKind.NativeVideo,
-                        BuildLocalPlaybackSource(filePath, isWebM, isStreamVideo, title, artistName, null),
-                        options);
-                    AddToPlaybackHistory(item, true);
-                }
-                else if (_nativeAudio.IsSupported && !isStreamVideo)
-                {
-                    await ActivatePlaybackAsync(
-                        PlaybackKind.NativeAudio,
-                        BuildLocalPlaybackSource(filePath, isWebM, false, title, artistName, null),
-                        options);
-                    AddToPlaybackHistory(item, false);
-                }
-                else
-                {
-                    await _proxyCoordinator.EnsureFileProxyCreatedAsync();
-                    _proxyCoordinator.ConfigureFileProxy(filePath, isStreamVideo);
-                    var proxyUrl = _proxyCoordinator.BuildLocalProxyStreamUrl(filePath);
-                    await ActivatePlaybackAsync(
-                        isStreamVideo ? PlaybackKind.WebMuxedVideo : PlaybackKind.WebAudio,
-                        BuildWebPlaybackSource(proxyUrl, isWebM, isStreamVideo, title, artistName, null),
-                        options);
-                    AddToPlaybackHistory(item, isStreamVideo);
-                }
+                var options = PlaybackRouteSelector.BuildPlaybackOptions(autoPlay: true);
+                await ActivateLocalFilePlaybackAsync(
+                    filePath,
+                    isVideo == true,
+                    title,
+                    artistName,
+                    durationSeconds: null,
+                    thumbnailUrl,
+                    options,
+                    item);
 
                 CurrentVideo = item;
                 IsPlaying = true;
 
                 ClearPlaylist();
-                CurrentMode = PlaybackMode.SingleLoop;
+                _playlist.Mode = PlaybackMode.SingleLoop;
                 return true;
             }
             catch (Exception ex)
@@ -319,12 +245,12 @@ namespace YTMusic.Services
             if (!string.IsNullOrWhiteSpace(current.LocalFilePath))
             {
                 var localTrack = await _localMusicService.GetDownloadedTrackByFilePathAsync(current.LocalFilePath);
-                if (localTrack != null && ShouldPlayLocalAsVideo(localTrack.LocalFilePath, localTrack.IsVideo))
+                if (localTrack != null && PlaybackRouteSelector.ShouldPlayLocalAsVideo(localTrack.LocalFilePath, localTrack.IsVideo))
                 {
                     return true;
                 }
 
-                if (ShouldPlayLocalAsVideo(current.LocalFilePath, current.IsVideo == true))
+                if (PlaybackRouteSelector.ShouldPlayLocalAsVideo(current.LocalFilePath, current.IsVideo == true))
                 {
                     return true;
                 }
@@ -337,7 +263,7 @@ namespace YTMusic.Services
 
             var downloaded = await _localMusicService.GetDownloadedTrackByVideoIdAsync(current.VideoId);
             return downloaded != null
-                && ShouldPlayLocalAsVideo(downloaded.LocalFilePath, downloaded.IsVideo);
+                && PlaybackRouteSelector.ShouldPlayLocalAsVideo(downloaded.LocalFilePath, downloaded.IsVideo);
         }
 
         public async Task<bool> CheckRemoteVideoAvailableAsync(string videoId)
@@ -377,7 +303,7 @@ namespace YTMusic.Services
                 var localTrack = await _localMusicService.GetDownloadedTrackByFilePathAsync(current.LocalFilePath);
                 if (localTrack != null
                     && !string.IsNullOrWhiteSpace(localTrack.LocalFilePath)
-                    && ShouldPlayLocalAsVideo(localTrack.LocalFilePath, localTrack.IsVideo))
+                    && PlaybackRouteSelector.ShouldPlayLocalAsVideo(localTrack.LocalFilePath, localTrack.IsVideo))
                 {
                     return await PlayLocalFileAsync(localTrack.LocalFilePath, current.Title, true, current.Author, current.ThumbnailUrl);
                 }
@@ -391,7 +317,7 @@ namespace YTMusic.Services
             var downloaded = await _localMusicService.GetDownloadedTrackByVideoIdAsync(current.VideoId);
             if (downloaded != null
                 && !string.IsNullOrWhiteSpace(downloaded.LocalFilePath)
-                && ShouldPlayLocalAsVideo(downloaded.LocalFilePath, downloaded.IsVideo))
+                && PlaybackRouteSelector.ShouldPlayLocalAsVideo(downloaded.LocalFilePath, downloaded.IsVideo))
             {
                 return await PlayLocalFileAsync(downloaded.LocalFilePath, current.Title, true, current.Author, current.ThumbnailUrl);
             }
@@ -407,15 +333,7 @@ namespace YTMusic.Services
                 return false;
             }
 
-            return await PlayInternalAsync(new PlayingItem
-            {
-                VideoId = current.VideoId,
-                Title = current.Title,
-                Author = current.Author,
-                ThumbnailUrl = current.ThumbnailUrl,
-                DurationSeconds = current.DurationSeconds,
-                IsVideo = true
-            });
+            return await PlayInternalAsync(PlayingItemMapper.Clone(current, isVideo: true));
         }
 
         public async Task<bool> PlayCurrentAsAudioAsync()
@@ -426,22 +344,14 @@ namespace YTMusic.Services
                 return false;
             }
 
-            var item = new PlayingItem
-            {
-                VideoId = current.VideoId,
-                Title = current.Title,
-                Author = current.Author,
-                ThumbnailUrl = current.ThumbnailUrl,
-                DurationSeconds = current.DurationSeconds,
-                IsVideo = false
-            };
+            var item = PlayingItemMapper.Clone(current, isVideo: false);
 
             if (!string.IsNullOrWhiteSpace(current.VideoId) && current.VideoId != "local")
             {
                 var downloaded = await _localMusicService.GetDownloadedTrackByVideoIdAsync(current.VideoId);
                 if (downloaded != null
                     && !string.IsNullOrWhiteSpace(downloaded.LocalFilePath)
-                    && !ShouldPlayLocalAsVideo(downloaded.LocalFilePath, downloaded.IsVideo))
+                    && !PlaybackRouteSelector.ShouldPlayLocalAsVideo(downloaded.LocalFilePath, downloaded.IsVideo))
                 {
                     item.LocalFilePath = downloaded.LocalFilePath;
                 }
@@ -464,10 +374,7 @@ namespace YTMusic.Services
 
         public void ClearPlaylist()
         {
-            Playlist.Clear();
-            _shuffleIndices.Clear();
-            CurrentPlaylistIndex = -1;
-            CurrentPlaylistName = null;
+            _playlist.Clear();
             NotifyStateChanged();
         }
 
@@ -478,46 +385,46 @@ namespace YTMusic.Services
             if (items == null || items.Count == 0 || startIndex < 0 || startIndex >= items.Count)
                 return false;
 
-            if (!await PlayInternalAsync(items[startIndex]))
-                return false;
-
-            Playlist = items;
-            CurrentPlaylistName = playlistName;
-            CurrentPlaylistIndex = startIndex;
-            CurrentMode = mode;
-            GenerateShuffleIndices();
-            return true;
-        }
-
-        private void GenerateShuffleIndices()
-        {
-            _shuffleIndices.Clear();
-
-            var indices = Enumerable.Range(0, Playlist.Count).ToList();
-            
-            if (CurrentPlaylistIndex >= 0 && CurrentPlaylistIndex < Playlist.Count)
+            var index = startIndex;
+            var skipped = 0;
+            PlayingItem? playable = null;
+            for (var attempt = 0; attempt < items.Count; attempt++)
             {
-                indices.RemoveAt(CurrentPlaylistIndex);
-                _shuffleIndices.Add(CurrentPlaylistIndex);
+                var candidate = items[index];
+                if (PlaylistSession.IsMissingLocalFile(candidate))
+                {
+                    skipped++;
+                    index = (index + 1) % items.Count;
+                    continue;
+                }
+
+                playable = candidate;
+                break;
             }
 
-            indices.Shuffle();
-            _shuffleIndices.AddRange(indices);
+            if (playable == null || !await PlayInternalAsync(playable))
+            {
+                if (skipped > 0)
+                {
+                    NotifySkippedLocalFiles(skipped, playable == null);
+                }
+
+                return false;
+            }
+
+            _playlist.Replace(items, index, playlistName, mode);
+            NotifySkippedLocalFiles(skipped, exhausted: false);
+            return true;
         }
 
         public async Task PlayNextAsync()
         {
-            if (Playlist.Count == 0 || IsSwitchingTrack) return;
-
-            int nextIndex = GetNextIndex();
-            if (nextIndex == -1) return;
-
-            int previousIndex = CurrentPlaylistIndex;
-            CurrentPlaylistIndex = nextIndex;
-            if (!await PlayInternalAsync(Playlist[CurrentPlaylistIndex]))
+            if (Playlist.Count == 0 || IsSwitchingTrack)
             {
-                CurrentPlaylistIndex = previousIndex;
+                return;
             }
+
+            await MoveToPlayableAsync(forward: true);
         }
 
         private async Task<bool> TryRestartCurrentLocalWebAsync()
@@ -580,90 +487,73 @@ namespace YTMusic.Services
                 return;
             }
 
-            int previousIndex = GetPreviousIndex();
-            if (previousIndex == -1)
+            var currentIndex = _playlist.CurrentIndex;
+            if (!await MoveToPlayableAsync(forward: false))
+            {
+                _playlist.CurrentIndex = currentIndex;
+            }
+        }
+
+        private async Task<bool> MoveToPlayableAsync(bool forward)
+        {
+            var origin = _playlist.CurrentIndex;
+            var skipped = 0;
+            for (var attempt = 0; attempt < Playlist.Count; attempt++)
+            {
+                var index = forward ? _playlist.GetNextIndex() : _playlist.GetPreviousIndex();
+                if (index < 0 || index >= Playlist.Count)
+                {
+                    _playlist.CurrentIndex = origin;
+                    return false;
+                }
+
+                var item = Playlist[index];
+                if (PlaylistSession.IsMissingLocalFile(item))
+                {
+                    _playlist.CurrentIndex = index;
+                    skipped++;
+                    continue;
+                }
+
+                _playlist.CurrentIndex = index;
+                if (await PlayInternalAsync(item))
+                {
+                    NotifySkippedLocalFiles(skipped, exhausted: false);
+                    return true;
+                }
+
+                _playlist.CurrentIndex = origin;
+                return false;
+            }
+
+            _playlist.CurrentIndex = origin;
+            NotifySkippedLocalFiles(skipped, exhausted: true);
+            return false;
+        }
+
+        private void NotifySkippedLocalFiles(int skipped, bool exhausted)
+        {
+            if (skipped <= 0)
             {
                 return;
             }
 
-            int currentIndex = CurrentPlaylistIndex;
-            CurrentPlaylistIndex = previousIndex;
-            if (!await PlayInternalAsync(Playlist[CurrentPlaylistIndex]))
-            {
-                CurrentPlaylistIndex = currentIndex;
-            }
-        }
-
-        private int GetNextIndex()
-        {
-            if (Playlist.Count <= 1) return CurrentPlaylistIndex;
-
-            if (CurrentMode == PlaybackMode.Random)
-            {
-                int currentShufflePosition = _shuffleIndices.IndexOf(CurrentPlaylistIndex);
-                if (currentShufflePosition == -1 || currentShufflePosition == _shuffleIndices.Count - 1)
-                {
-                    // Re-shuffle and start over
-                    // Wait to play the next song in the new sequence
-                    int previousTrackIndex = CurrentPlaylistIndex;
-                    GenerateShuffleIndices();
-                    
-                    // Edge case: if the newly shuffled first item is the same as the one we just finished playing, skip to the second (if size > 1)
-                    if (_shuffleIndices.Count > 1 && _shuffleIndices[0] == previousTrackIndex)
-                    {
-                        return _shuffleIndices[1];
-                    }
-                    return _shuffleIndices[0];
-                }
-                return _shuffleIndices[currentShufflePosition + 1];
-            }
-            
-            // Sequential
-            return (CurrentPlaylistIndex + 1) % Playlist.Count;
-        }
-
-        private int GetPreviousIndex()
-        {
-            if (Playlist.Count <= 1) return CurrentPlaylistIndex;
-
-            if (CurrentMode == PlaybackMode.Random)
-            {
-                int currentShufflePosition = _shuffleIndices.IndexOf(CurrentPlaylistIndex);
-                if (currentShufflePosition > 0)
-                {
-                    return _shuffleIndices[currentShufflePosition - 1];
-                }
-                // If at the beginning of shuffle, wrap to end
-                return _shuffleIndices[^1];
-            }
-
-            // Sequential
-            int previousIndex = CurrentPlaylistIndex - 1;
-            if (previousIndex < 0)
-            {
-                previousIndex = Playlist.Count - 1;
-            }
-            return previousIndex;
+            var message = exhausted
+                ? "本地文件不存在，无法继续播放。"
+                : skipped == 1
+                    ? "有 1 首本地文件不存在，已跳过。"
+                    : $"有 {skipped} 首本地文件不存在，已跳过。";
+            PlaybackNotice?.Invoke(message);
         }
 
         public void TogglePlaybackMode()
         {
-            if (Playlist.Count == 0) return;
-
-            CurrentMode = CurrentMode switch
+            if (Playlist.Count == 0)
             {
-                PlaybackMode.Sequential => PlaybackMode.Random,
-                PlaybackMode.Random => PlaybackMode.SingleLoop,
-                PlaybackMode.SingleLoop => PlaybackMode.Sequential,
-                _ => PlaybackMode.Sequential
-            };
-
-            if (CurrentMode == PlaybackMode.Random && Playlist.Count > 0)
-            {
-                // Re-initialize random sequence starting from the currently playing
-                GenerateShuffleIndices();
+                return;
             }
 
+            _playlist.ToggleMode();
             NotifyStateChanged();
         }
 
@@ -710,7 +600,7 @@ namespace YTMusic.Services
                 }
 
                 NotifyStateChanged();
-                var options = BuildPlaybackOptions(shouldAutoPlay);
+                var options = PlaybackRouteSelector.BuildPlaybackOptions(shouldAutoPlay);
 
                 if (!string.IsNullOrEmpty(video.LocalFilePath))
                 {
@@ -719,37 +609,15 @@ namespace YTMusic.Services
                         return false;
                     }
 
-                    var isWebM = video.LocalFilePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
-                    var isStreamVideo = ShouldPlayLocalAsVideo(video.LocalFilePath, video.IsVideo == true);
-
-                    if (ShouldUseNativeLocalVideo(video.LocalFilePath, video.IsVideo == true))
-                    {
-                        PlaybackDiagnostics.Log($"PlayInternal local native video path={video.LocalFilePath}");
-                        await ActivatePlaybackAsync(
-                            PlaybackKind.NativeVideo,
-                            BuildLocalPlaybackSource(video.LocalFilePath, isWebM, isStreamVideo, video.Title, video.Author, video.DurationSeconds),
-                            options);
-                        AddToPlaybackHistory(video, true);
-                    }
-                    else if (_nativeAudio.IsSupported && !isStreamVideo)
-                    {
-                        await ActivatePlaybackAsync(
-                            PlaybackKind.NativeAudio,
-                            BuildLocalPlaybackSource(video.LocalFilePath, isWebM, false, video.Title, video.Author, video.DurationSeconds),
-                            options);
-                        AddToPlaybackHistory(video, false);
-                    }
-                    else
-                    {
-                        await _proxyCoordinator.EnsureFileProxyCreatedAsync();
-                        _proxyCoordinator.ConfigureFileProxy(video.LocalFilePath, isStreamVideo);
-                        var proxyUrl = _proxyCoordinator.BuildLocalProxyStreamUrl(video.LocalFilePath);
-                        await ActivatePlaybackAsync(
-                            isStreamVideo ? PlaybackKind.WebMuxedVideo : PlaybackKind.WebAudio,
-                            BuildWebPlaybackSource(proxyUrl, isWebM, isStreamVideo, video.Title, video.Author, video.DurationSeconds),
-                            options);
-                        AddToPlaybackHistory(video, isStreamVideo);
-                    }
+                    await ActivateLocalFilePlaybackAsync(
+                        video.LocalFilePath,
+                        video.IsVideo == true,
+                        video.Title,
+                        video.Author,
+                        video.DurationSeconds,
+                        video.ThumbnailUrl,
+                        options,
+                        video);
 
                     CurrentVideo = video;
                     IsPlaying = shouldAutoPlay;
@@ -763,7 +631,7 @@ namespace YTMusic.Services
                 {
                     // 显式请求视频时：纯音频下载、或非 .mp4 的“视频”下载，改走在线视频流。
                     useDownloadedLocal = useDownloadedLocal
-                        && ShouldPlayLocalAsVideo(downloaded!.LocalFilePath, downloaded.IsVideo);
+                        && PlaybackRouteSelector.ShouldPlayLocalAsVideo(downloaded!.LocalFilePath, downloaded.IsVideo);
                     if (downloaded != null && !useDownloadedLocal)
                     {
                         PlaybackDiagnostics.Log(
@@ -777,37 +645,18 @@ namespace YTMusic.Services
                         $"PlayInternal using local download videoId={video.VideoId} requestVideo={video.IsVideo == true} downloadedIsVideo={downloaded!.IsVideo}");
                     video.LocalFilePath = downloaded.LocalFilePath;
                     video.IsVideo = downloaded.IsVideo;
-                    var isWebM = video.LocalFilePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
-                    var isStreamVideo = ShouldPlayLocalAsVideo(video.LocalFilePath, downloaded.IsVideo);
-
-                    if (_nativeAudio.IsSupported && !isStreamVideo)
-                    {
-                        await ActivatePlaybackAsync(
-                            PlaybackKind.NativeAudio,
-                            BuildLocalPlaybackSource(video.LocalFilePath, isWebM, false, video.Title, video.Author, video.DurationSeconds),
-                            options);
-                        AddToPlaybackHistory(video, false);
-                    }
-                    else if (ShouldUseNativeLocalVideo(video.LocalFilePath, downloaded.IsVideo))
-                    {
-                        PlaybackDiagnostics.Log($"PlayInternal downloaded native video path={video.LocalFilePath}");
-                        await ActivatePlaybackAsync(
-                            PlaybackKind.NativeVideo,
-                            BuildLocalPlaybackSource(video.LocalFilePath, isWebM, isStreamVideo, video.Title, video.Author, video.DurationSeconds),
-                            options);
-                        AddToPlaybackHistory(video, true);
-                    }
-                    else
-                    {
-                        await _proxyCoordinator.EnsureFileProxyCreatedAsync();
-                        _proxyCoordinator.ConfigureFileProxy(video.LocalFilePath, isStreamVideo);
-                        var proxyUrl = _proxyCoordinator.BuildLocalProxyStreamUrl(video.LocalFilePath);
-                        await ActivatePlaybackAsync(
-                            isStreamVideo ? PlaybackKind.WebMuxedVideo : PlaybackKind.WebAudio,
-                            BuildWebPlaybackSource(proxyUrl, isWebM, isStreamVideo, video.Title, video.Author, video.DurationSeconds),
-                            options);
-                        AddToPlaybackHistory(video, isStreamVideo);
-                    }
+                    var artworkUrl = string.IsNullOrWhiteSpace(video.ThumbnailUrl)
+                        ? downloaded.ThumbnailUrl
+                        : video.ThumbnailUrl;
+                    await ActivateLocalFilePlaybackAsync(
+                        video.LocalFilePath,
+                        downloaded.IsVideo,
+                        video.Title,
+                        video.Author,
+                        video.DurationSeconds,
+                        artworkUrl,
+                        options,
+                        video);
 
                     CurrentVideo = video;
                     IsPlaying = shouldAutoPlay;
@@ -829,7 +678,7 @@ namespace YTMusic.Services
                         var companionAudio = webVideo.CompanionAudioStream;
                         var isWebM = videoStreamInfo.Container == Container.WebM;
 
-                        if (ShouldUseNativeOnlineVideo())
+                        if (PlaybackRouteSelector.ShouldUseNativeOnlineVideo(_nativeVideo))
                         {
                             if (companionAudio != null)
                             {
@@ -895,7 +744,7 @@ namespace YTMusic.Services
                                 $"PlayRemoteVideo muxed/web-only video={videoStreamInfo.Container} webUrl={PlaybackDiagnostics.DescribeUrl(webUrl)}");
                             await ActivatePlaybackAsync(
                                 PlaybackKind.WebMuxedVideo,
-                                BuildWebPlaybackSource(webUrl, isWebM, true, video.Title, video.Author, video.DurationSeconds),
+                                PlaybackRouteSelector.BuildWebPlaybackSource(webUrl, isWebM, true, video.Title, video.Author, video.DurationSeconds),
                                 options);
                         }
 
@@ -933,7 +782,8 @@ namespace YTMusic.Services
                                 IsVideo = false,
                                 Title = video.Title,
                                 Artist = video.Author,
-                                DurationSeconds = video.DurationSeconds
+                                DurationSeconds = video.DurationSeconds,
+                                ThumbnailUrl = video.ThumbnailUrl
                             },
                             options);
                         AddToPlaybackHistory(video, false);
@@ -1029,17 +879,7 @@ namespace YTMusic.Services
         {
             if (ActivePlaybackKind == PlaybackKind.None && CurrentStreamUrl == null && CurrentVideo != null)
             {
-                var resumeItem = new PlayingItem
-                {
-                    VideoId = CurrentVideo.VideoId,
-                    Title = CurrentVideo.Title,
-                    Author = CurrentVideo.Author,
-                    ThumbnailUrl = CurrentVideo.ThumbnailUrl,
-                    LocalFilePath = CurrentVideo.LocalFilePath,
-                    DurationSeconds = CurrentVideo.DurationSeconds,
-                    IsVideo = IsCurrentStreamVideo ? true : false
-                };
-
+                var resumeItem = PlayingItemMapper.Clone(CurrentVideo, isVideo: IsCurrentStreamVideo);
                 await PlayInternalAsync(resumeItem);
                 return;
             }
@@ -1118,14 +958,7 @@ namespace YTMusic.Services
                     cts.Token,
                     PreferLowestRemoteVideoStream()).ConfigureAwait(false);
 
-                lock (_remoteVideoPrefetchLock)
-                {
-                    _prefetchedRemoteVideoId = videoId;
-                    _prefetchedRemoteVideo = streams;
-                    _prefetchedRemoteVideoQuality = _uiPreferences.RemoteVideoStreamQuality;
-                    _prefetchedRemoteVideoAt = DateTime.UtcNow;
-                }
-
+                _remoteVideoPrefetch.Store(videoId, streams, _uiPreferences.RemoteVideoStreamQuality);
                 PlaybackDiagnostics.Log($"PrefetchRemoteVideo done videoId={videoId} available={streams != null}");
             }
             catch (Exception ex)
@@ -1138,19 +971,11 @@ namespace YTMusic.Services
             string videoId,
             CancellationToken cancellationToken)
         {
-            if (_uiPreferences.PrefetchRemoteVideo)
+            if (_uiPreferences.PrefetchRemoteVideo
+                && _remoteVideoPrefetch.TryGet(videoId, _uiPreferences.RemoteVideoStreamQuality, out var cached))
             {
-                lock (_remoteVideoPrefetchLock)
-                {
-                    if (_prefetchedRemoteVideoId == videoId
-                        && _prefetchedRemoteVideo != null
-                        && _prefetchedRemoteVideoQuality == _uiPreferences.RemoteVideoStreamQuality
-                        && DateTime.UtcNow - _prefetchedRemoteVideoAt < RemoteVideoPrefetchTtl)
-                    {
-                        PlaybackDiagnostics.Log($"PlayRemoteVideo using prefetch videoId={videoId}");
-                        return Task.FromResult<RemoteWebVideoStreams?>(_prefetchedRemoteVideo);
-                    }
-                }
+                PlaybackDiagnostics.Log($"PlayRemoteVideo using prefetch videoId={videoId}");
+                return Task.FromResult(cached);
             }
 
             return _streamResolver.ResolveRemoteWebVideoStreamsAsync(
@@ -1159,28 +984,53 @@ namespace YTMusic.Services
                 PreferLowestRemoteVideoStream());
         }
 
-        /// <summary>
-        /// 本地文件仅 .mp4 且在下载记录或调用方中标记为视频时才走视频流；webm 等一律当音频。
-        /// </summary>
-        private static bool ShouldPlayLocalAsVideo(string filePath, bool markedAsVideo)
+        private async Task ActivateLocalFilePlaybackAsync(
+            string filePath,
+            bool markedAsVideo,
+            string title,
+            string author,
+            double? durationSeconds,
+            string? thumbnailUrl,
+            PlaybackOptions options,
+            PlayingItem historyItem)
         {
-            if (!markedAsVideo)
+            var isWebM = filePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase);
+            var isStreamVideo = PlaybackRouteSelector.ShouldPlayLocalAsVideo(filePath, markedAsVideo);
+            var kind = PlaybackRouteSelector.SelectLocalKind(_nativeAudio, _nativeVideo, filePath, markedAsVideo);
+
+            if (kind == PlaybackKind.NativeVideo)
             {
-                return false;
+                PlaybackDiagnostics.Log($"ActivateLocal native video path={filePath}");
+                await ActivatePlaybackAsync(
+                    PlaybackKind.NativeVideo,
+                    PlaybackRouteSelector.BuildLocalPlaybackSource(
+                        filePath, isWebM, isStreamVideo, title, author, durationSeconds),
+                    options);
+                AddToPlaybackHistory(historyItem, true);
+                return;
             }
 
-            return Path.GetExtension(filePath).Equals(".mp4", StringComparison.OrdinalIgnoreCase);
+            if (kind == PlaybackKind.NativeAudio)
+            {
+                await ActivatePlaybackAsync(
+                    PlaybackKind.NativeAudio,
+                    PlaybackRouteSelector.BuildLocalPlaybackSource(
+                        filePath, isWebM, false, title, author, durationSeconds, thumbnailUrl),
+                    options);
+                AddToPlaybackHistory(historyItem, false);
+                return;
+            }
+
+            await _proxyCoordinator.EnsureFileProxyCreatedAsync();
+            _proxyCoordinator.ConfigureFileProxy(filePath, isStreamVideo);
+            var proxyUrl = _proxyCoordinator.BuildLocalProxyStreamUrl(filePath);
+            await ActivatePlaybackAsync(
+                kind,
+                PlaybackRouteSelector.BuildWebPlaybackSource(
+                    proxyUrl, isWebM, isStreamVideo, title, author, durationSeconds),
+                options);
+            AddToPlaybackHistory(historyItem, isStreamVideo);
         }
-
-        /// <summary>Android 本地 .mp4 走 VideoPlayerActivity ExoPlayer。</summary>
-        private bool ShouldUseNativeLocalVideo(string filePath, bool markedAsVideo) =>
-            OperatingSystem.IsAndroid()
-            && _nativeVideo.IsSupported
-            && ShouldPlayLocalAsVideo(filePath, markedAsVideo);
-
-        /// <summary>Android 在线视频走 VideoPlayerActivity（muxed 单流或 MergingMediaSource 合并分离流）。</summary>
-        private bool ShouldUseNativeOnlineVideo() =>
-            OperatingSystem.IsAndroid() && _nativeVideo.IsSupported;
 
         private async Task ActivatePlaybackAsync(PlaybackKind kind, PlaybackSource source, PlaybackOptions options)
         {
@@ -1197,42 +1047,6 @@ namespace YTMusic.Services
             PlaybackKind.WebMuxedVideo => _webMuxedPlayback,
             PlaybackKind.Hybrid => _hybridPlayback,
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported playback kind.")
-        };
-
-        private static PlaybackOptions BuildPlaybackOptions(bool autoPlay) => new() { AutoPlay = autoPlay };
-
-        private static PlaybackSource BuildLocalPlaybackSource(
-            string filePath,
-            bool isWebM,
-            bool isVideo,
-            string? title,
-            string? artist,
-            double? durationSeconds) => new()
-        {
-            LocalFilePath = filePath,
-            IsLocalFile = true,
-            IsWebM = isWebM,
-            IsVideo = isVideo,
-            Title = title,
-            Artist = artist,
-            DurationSeconds = durationSeconds
-        };
-
-        private static PlaybackSource BuildWebPlaybackSource(
-            string streamUrl,
-            bool isWebM,
-            bool isVideo,
-            string? title,
-            string? artist,
-            double? durationSeconds) => new()
-        {
-            StreamUrl = streamUrl,
-            IsLocalFile = false,
-            IsWebM = isWebM,
-            IsVideo = isVideo,
-            Title = title,
-            Artist = artist,
-            DurationSeconds = durationSeconds
         };
 
         INativeAudioPlaybackService IPlaybackHost.NativeAudio => _nativeAudio;

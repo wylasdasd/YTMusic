@@ -34,16 +34,7 @@ public sealed partial class HistoryVM : ViewModelBase
 
     public async Task PlayItemAsync(PlaybackHistoryRecord item)
     {
-        if (await _playerService.PlayAsync(new PlayingItem
-        {
-            VideoId = item.VideoId,
-            Title = item.Title,
-            Author = item.Author,
-            ThumbnailUrl = item.ThumbnailUrl,
-            LocalFilePath = item.LocalFilePath,
-            IsVideo = item.IsVideo,
-            DurationSeconds = item.DurationSeconds
-        }))
+        if (await _playerService.PlayAsync(PlayingItemMapper.From(item)))
         {
             _navigation.NavigateTo("/player");
         }

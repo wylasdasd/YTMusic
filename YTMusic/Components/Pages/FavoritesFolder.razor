@@ -12,6 +12,13 @@
             <MudText Typo="Typo.h6" Class="favorites-track-toolbar__title">
                 @(ViewModel.FolderName ?? "收藏夹")
             </MudText>
+            @if (!ViewModel.IsDownloadedCatalog)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.DriveFileRenameOutline"
+                               Color="Color.Default"
+                               OnClick="ViewModel.RenameCurrentFolderAsync"
+                               aria-label="重命名收藏夹" />
+            }
         </div>
         <div class="favorites-sort-field">
             <MudSelect T="FavoriteTrackSortMode"
@@ -39,7 +46,7 @@
         else if (ViewModel.IsLocalLibrary)
         {
             <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
-                来自本地文件夹，按存放目录分组。删除这个收藏夹不会删除磁盘上的文件。
+                来自本地文件夹，按存放目录分组。删除单首会从设备移除文件；删除整个收藏夹只去掉记录。
             </MudAlert>
         }
     </Header>
@@ -106,13 +113,13 @@
                                                    OnClick="@(async () => await ViewModel.OpenFavoriteFolderDialogAsync(track))"
                                                    aria-label="管理收藏夹" />
                                 </div>
-                                @if (ViewModel.IsDownloadedCatalog)
+                                @if (ViewModel.IsDownloadedCatalog || ViewModel.IsLocalLibrary)
                                 {
                                     <div @onclick:stopPropagation="true">
                                         <MudIconButton Icon="@Icons.Material.Filled.Delete"
                                                        Color="Color.Error"
                                                        OnClick="@(async () => await ViewModel.DeleteLocalFileAsync(track))"
-                                                       aria-label="删除本地文件" />
+                                                       aria-label="删除歌曲" />
                                     </div>
                                 }
                             </MudPaper>
@@ -123,17 +130,18 @@
         }
         else
         {
-            <MudGrid Class="mt-2 justify-center">
+            <MudGrid Class="mt-2 favorites-card-grid">
                 @foreach (var track in ViewModel.Tracks)
                 {
                     <MudItem xs="12" sm="6" md="4" lg="3">
-                        <MudCard Elevation="2" Style="height: 100%; display: flex; flex-direction: column; cursor: pointer;"
+                        <MudCard Elevation="2"
+                                 Class="@($"favorites-card{(UiPreferences.ShowFavoriteCardImages ? " favorites-card--with-media" : "")}")"
                                  @onclick="@(() => ViewModel.PlayTrackAsync(track))">
                             @if (UiPreferences.ShowFavoriteCardImages)
                             {
-                                <MudCardMedia Image="@track.ThumbnailUrl" Height="160" />
+                                <MudCardMedia Image="@track.ThumbnailUrl" Height="160" Class="favorites-card__media" />
                             }
-                            <MudCardContent Style="flex-grow: 1;">
+                            <MudCardContent Class="favorites-card__body">
                                 <MediaTitle Text="@track.Title" Typo="Typo.subtitle1" />
                             </MudCardContent>
                             <MudCardActions Class="favorites-card__footer">
@@ -163,6 +171,12 @@
                                         Color="@(ViewModel.IsTrackFavoritedAnywhere(track) ? Color.Error : Color.Default)"
                                         OnClick="@(async () => await ViewModel.OpenFavoriteFolderDialogAsync(track))"
                                         aria-label="管理收藏夹" />
+                                </div>
+                                <div @onclick:stopPropagation="true">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                   Color="Color.Error"
+                                                   OnClick="@(async () => await ViewModel.DeleteDownloadedFileAsync(track))"
+                                                   aria-label="删除本地文件" />
                                 </div>
                             </MudCardActions>
                         </MudCard>

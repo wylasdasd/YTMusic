@@ -12,6 +12,13 @@ namespace YTMusic.Services.Playback
         Hybrid
     }
 
+    public enum PlaybackMode
+    {
+        Sequential,
+        Random,
+        SingleLoop
+    }
+
     public sealed class PlaybackSource
     {
         public string? StreamUrl { get; init; }
@@ -22,6 +29,7 @@ namespace YTMusic.Services.Playback
         public string? Title { get; init; }
         public string? Artist { get; init; }
         public double? DurationSeconds { get; init; }
+        public string? ThumbnailUrl { get; init; }
         public string? CompanionAudioUrl { get; init; }
         public IStreamInfo? ProxyStreamInfo { get; init; }
     }

@@ -12,6 +12,7 @@ namespace YTMusic.Components.Pages;
 public sealed partial class FavoritesVM : ViewModelBase
 {
     private readonly IFavoriteService _favoriteService;
+    private readonly ILibraryCatalogService _libraryCatalog;
     private readonly ILocalFolderImportService _localFolderImportService;
     private readonly IFolderPicker _folderPicker;
     private readonly ILocalMusicService _localMusicService;
@@ -29,6 +30,7 @@ public sealed partial class FavoritesVM : ViewModelBase
 
     public FavoritesVM(
         IFavoriteService favoriteService,
+        ILibraryCatalogService libraryCatalog,
         ILocalFolderImportService localFolderImportService,
         IFolderPicker folderPicker,
         ILocalMusicService localMusicService,
@@ -40,6 +42,7 @@ public sealed partial class FavoritesVM : ViewModelBase
         GlobalStateService globalState)
     {
         _favoriteService = favoriteService;
+        _libraryCatalog = libraryCatalog;
         _localFolderImportService = localFolderImportService;
         _folderPicker = folderPicker;
         _localMusicService = localMusicService;
@@ -74,6 +77,31 @@ public sealed partial class FavoritesVM : ViewModelBase
         catch (Exception ex)
         {
             _notifier.Error($"创建收藏夹失败: {ex.Message}");
+        }
+    }
+
+    public async Task RenameFolderAsync(FavoriteFolder folder)
+    {
+        if (FavoriteFolderIds.IsDownloadedCatalog(folder.Id))
+        {
+            return;
+        }
+
+        var name = await _dialogHost.PromptRenameFolderNameAsync(folder.Name);
+        if (string.IsNullOrWhiteSpace(name) || name.Equals(folder.Name, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        try
+        {
+            await _favoriteService.RenameFolderAsync(folder.Id, name);
+            _notifier.Success($"已重命名为「{name.Trim()}」");
+            await LoadFoldersAsync();
+        }
+        catch (Exception ex)
+        {
+            _notifier.Error($"重命名失败: {ex.Message}");
         }
     }
 
@@ -120,22 +148,22 @@ public sealed partial class FavoritesVM : ViewModelBase
 
     public async Task LoadFoldersAsync()
     {
-        Folders = await _favoriteService.GetFoldersAsync();
+        var userFolders = await _favoriteService.GetFoldersAsync();
+        Folders = new List<FavoriteFolder> { FavoriteFolderKindHelper.CreateDownloadedCatalogFolder() };
+        Folders.AddRange(userFolders);
+
         FolderTrackCounts.Clear();
         FolderCoverUrls.Clear();
         FolderFirstTrackAuthors.Clear();
 
         foreach (var folder in Folders)
         {
-            if (FavoriteFolderIds.IsDownloadedCatalog(folder.Id))
+            var kind = FavoriteFolderKindHelper.Resolve(folder.Id, folder);
+            if (kind == FavoriteFolderKind.DownloadedCatalog)
             {
-                var downloads = await _localMusicService.GetDownloadedTracksAsync();
-                var ordered = downloads
-                    .Where(track => !string.IsNullOrWhiteSpace(track.LocalFilePath))
-                    .OrderByDescending(track => track.DownloadedDate)
-                    .ToList();
-                var first = ordered.FirstOrDefault();
-                FolderTrackCounts[folder.Id] = ordered.Count;
+                var downloads = await _libraryCatalog.GetDownloadedItemsAsync();
+                var first = downloads.FirstOrDefault();
+                FolderTrackCounts[folder.Id] = downloads.Count;
                 FolderCoverUrls[folder.Id] = first?.ThumbnailUrl;
                 FolderFirstTrackAuthors[folder.Id] = first?.Author;
             }
@@ -154,7 +182,8 @@ public sealed partial class FavoritesVM : ViewModelBase
 
     public async Task<List<FavoriteTrack>> LoadTracksForFolderAsync(int folderId)
     {
-        if (FavoriteFolderIds.IsDownloadedCatalog(folderId))
+        var kind = ResolveFolderKind(folderId);
+        if (kind == FavoriteFolderKind.DownloadedCatalog)
         {
             var downloads = await LoadDownloadedCatalogTracksAsync();
             var nodes = LocalDirectoryTree.Build(
@@ -165,49 +194,46 @@ public sealed partial class FavoritesVM : ViewModelBase
         }
 
         var folder = Folders.FirstOrDefault(item => item.Id == folderId);
-        if (folder?.IsLocalImport == true)
+        if (kind == FavoriteFolderKind.LocalImport)
         {
             var imported = await _favoriteService.GetTracksAsync(folderId, null);
-            var importedNodes = LocalDirectoryTree.Build(imported, folder.LocalRootPath, sortByName: true);
+            var importedNodes = LocalDirectoryTree.Build(imported, folder?.LocalRootPath, sortByName: true);
             return LocalDirectoryTree.Flatten(importedNodes);
         }
 
         var tracks = await _favoriteService.GetTracksAsync(folderId, null);
-        foreach (var track in tracks)
-        {
-            var downloadedTrack = await _localMusicService.GetDownloadedTrackByVideoIdAsync(track.VideoId);
-            if (downloadedTrack?.IsVideo == true)
-            {
-                track.LocalVideoFilePath = downloadedTrack.LocalFilePath;
-            }
-        }
+        await AttachDownloadedVideoPathsAsync(tracks);
 
         return tracks.OrderByDescending(track => track.AddedDate).ToList();
     }
 
-    private async Task<List<FavoriteTrack>> LoadDownloadedCatalogTracksAsync()
+    private FavoriteFolderKind ResolveFolderKind(int folderId)
     {
-        var downloads = await _localMusicService.GetDownloadedTracksAsync();
-        return downloads
-            .Where(track => !string.IsNullOrWhiteSpace(track.LocalFilePath))
-            .OrderByDescending(track => track.DownloadedDate)
-            .Select(MapDownloadedTrackToFavorite)
-            .ToList();
+        var folder = Folders.FirstOrDefault(item => item.Id == folderId);
+        return FavoriteFolderKindHelper.Resolve(folderId, folder);
     }
 
-    private static FavoriteTrack MapDownloadedTrackToFavorite(DownloadedTrack track)
+    private async Task AttachDownloadedVideoPathsAsync(IReadOnlyList<FavoriteTrack> tracks)
     {
-        return new FavoriteTrack
+        if (tracks.Count == 0)
         {
-            VideoId = track.VideoId,
-            FolderId = FavoriteFolderIds.DownloadedCatalog,
-            Title = track.Title,
-            Author = track.Author,
-            ThumbnailUrl = track.ThumbnailUrl,
-            AddedDate = track.DownloadedDate,
-            LocalFilePath = track.LocalFilePath,
-            LocalVideoFilePath = track.IsVideo ? track.LocalFilePath : null
-        };
+            return;
+        }
+
+        var downloaded = await _localMusicService.GetDownloadedTracksByVideoIdsAsync(tracks.Select(track => track.VideoId));
+        foreach (var track in tracks)
+        {
+            if (downloaded.TryGetValue(track.VideoId, out var downloadedTrack) && downloadedTrack.IsVideo)
+            {
+                track.LocalVideoFilePath = downloadedTrack.LocalFilePath;
+            }
+        }
+    }
+
+    private async Task<List<FavoriteTrack>> LoadDownloadedCatalogTracksAsync()
+    {
+        var items = await _libraryCatalog.GetDownloadedItemsAsync();
+        return items.Select(item => item.AsFavoriteTrack()).ToList();
     }
 
     public async Task ConfirmClearLocalDownloadsAsync()
@@ -236,7 +262,7 @@ public sealed partial class FavoritesVM : ViewModelBase
                 await _localMusicService.RemoveDownloadedTrackAsync(file.VideoId, file.LocalFilePath);
             }
 
-            _notifier.Success($"已删除 {downloads.Count} 个本地文件");
+            _notifier.Success($"已清空 {downloads.Count} 首，已下载收藏夹仍保留");
             await LoadFoldersAsync();
         }
         catch (Exception ex)
@@ -275,7 +301,7 @@ public sealed partial class FavoritesVM : ViewModelBase
         _navigation.NavigateTo($"/favorites/folder/{folderId}");
     }
 
-    public async Task PlayFolderAsync(int folderId, MusicPlayerService.PlaybackMode mode)
+    public async Task PlayFolderAsync(int folderId, PlaybackMode mode)
     {
         try
         {
@@ -290,27 +316,15 @@ public sealed partial class FavoritesVM : ViewModelBase
 
             var folder = Folders.FirstOrDefault(f => f.Id == folderId);
             var folderName = folder?.Name ?? "收藏夹";
-            var isDownloadedCatalog = FavoriteFolderIds.IsDownloadedCatalog(folderId);
-            var isLocalImport = folder?.IsLocalImport == true;
-            var playlist = tracks.Select(t => new PlayingItem
+            var kind = ResolveFolderKind(folderId);
+            var playlist = PlayingItemMapper.FromFavoriteTracks(
+                tracks,
+                forceIncludeLocalPath: kind is FavoriteFolderKind.DownloadedCatalog or FavoriteFolderKind.LocalImport,
+                requireExistingLocalFile: kind == FavoriteFolderKind.LocalImport);
+            if (kind == FavoriteFolderKind.LocalImport && playlist.Count == 0)
             {
-                VideoId = t.VideoId,
-                Title = t.Title,
-                Author = t.Author,
-                ThumbnailUrl = t.ThumbnailUrl,
-                LocalFilePath = t.IsDownloaded || isDownloadedCatalog || isLocalImport ? t.LocalFilePath : null,
-                IsVideo = false
-            }).ToList();
-            if (isLocalImport)
-            {
-                playlist = playlist
-                    .Where(item => !string.IsNullOrWhiteSpace(item.LocalFilePath) && File.Exists(item.LocalFilePath))
-                    .ToList();
-                if (playlist.Count == 0)
-                {
-                    _notifier.Warning("没有可播放的文件。");
-                    return;
-                }
+                _notifier.Warning("没有可播放的文件。");
+                return;
             }
 
             if (await _playerService.PlayPlaylistAsync(playlist, 0, folderName, mode))

@@ -4,6 +4,7 @@ public interface IDialogHost
 {
     Task ShowFavoriteFolderDialogAsync(FavoritePickRequest request, string title);
     Task<string?> PromptCreateFolderNameAsync();
+    Task<string?> PromptRenameFolderNameAsync(string currentName);
     Task<bool> ConfirmDeleteLocalFilesAsync(int count);
     Task<bool> ConfirmDeleteFolderAsync(string folderName);
     Task<bool> ConfirmAppResetAsync();

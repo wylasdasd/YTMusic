@@ -183,7 +183,7 @@
 
     private void OnStateChanged()
     {
-        _ = HandleStateChangedAsync();
+        _ = InvokeAsync(HandleStateChangedAsync);
     }
 
     private async Task HandleStateChangedAsync()

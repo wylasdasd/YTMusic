@@ -18,7 +18,7 @@
     <MudLayout Class="ytm-shell">
         <MudAppBar Elevation="0" Fixed="true" Color="Color.Transparent" Class="ytm-topbar">
             <div class="ytm-topbar-inner">
-                <button class="ytm-brand" @onclick='() => NavigateToTab("")'>
+                <button class="ytm-brand" @onclick='() => NavigateToTab("search")'>
                     <MudIcon Icon="@Icons.Material.Filled.PlayCircleFilled" />
                     <span>YTMusic</span>
                 </button>
@@ -183,7 +183,7 @@
             <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Style="@GetBottomItemContentStyle("Player")" />
             <MudText Typo="Typo.caption" Style="@GetBottomItemContentStyle("Player")">Player</MudText>
         </div>
-        <div @onclick='() => NavigateToTab("")' class="@GetBottomItemClass("Search")">
+        <div @onclick='() => NavigateToTab("search")' class="@GetBottomItemClass("Search")">
             <MudIcon Icon="@Icons.Material.Filled.Search" Style="@GetBottomItemContentStyle("Search")" />
             <MudText Typo="Typo.caption" Style="@GetBottomItemContentStyle("Search")">Home</MudText>
         </div>
@@ -210,9 +210,9 @@
     protected override void OnInitialized()
     {
         LayoutVM.StateHasChanged = StateHasChanged;
-        LayoutVM.Initialize();
-        GlobalState.OnChange += StateHasChanged;
-        UiPreferences.OnChange += StateHasChanged;
+        LayoutVM.Initialize(action => InvokeAsync(action));
+        GlobalState.OnChange += QueueStateHasChanged;
+        UiPreferences.OnChange += QueueStateHasChanged;
         UpdateSelectedNavValue();
         _locationChangedHandler = OnLocationChanged;
         NavigationManager.LocationChanged += _locationChangedHandler;
@@ -246,6 +246,8 @@
         }
     }
 
+    private void QueueStateHasChanged() => _ = InvokeAsync(StateHasChanged);
+
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         UpdateSelectedNavValue();
@@ -256,7 +258,7 @@
     private void UpdateSelectedNavValue()
     {
         var uri = NavigationManager.ToBaseRelativePath(NavigationManager.Uri).ToLower();
-        if (uri.Contains("favorites")) SelectedNavValue = "Favorites";
+        if (string.IsNullOrEmpty(uri) || uri.Contains("favorites")) SelectedNavValue = "Favorites";
         else if (uri.Contains("player")) SelectedNavValue = "Player";
         else if (uri.Contains("other") || uri.Contains("downloads") || uri.Contains("transfers") || uri.Contains("upload") || uri.Contains("history")) SelectedNavValue = "Other";
         else SelectedNavValue = "Search";
@@ -409,8 +411,8 @@
     public void Dispose()
     {
         LayoutVM.Dispose();
-        GlobalState.OnChange -= StateHasChanged;
-        UiPreferences.OnChange -= StateHasChanged;
+        GlobalState.OnChange -= QueueStateHasChanged;
+        UiPreferences.OnChange -= QueueStateHasChanged;
         if (_locationChangedHandler != null)
         {
             NavigationManager.LocationChanged -= _locationChangedHandler;

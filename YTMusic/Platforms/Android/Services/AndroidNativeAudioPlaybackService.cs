@@ -22,10 +22,10 @@ namespace YTMusic.Platforms.Android.Services
             PlaybackForegroundService.PlaybackEnded += OnPlaybackEnded;
         }
 
-        public Task PlayAsync(string source, bool isLocalFile, string? title, string? artist, double? durationSeconds = null)
+        public Task PlayAsync(string source, bool isLocalFile, string? title, string? artist, double? durationSeconds = null, string? thumbnailUrl = null)
         {
             var resolvedDuration = ResolveDurationSeconds(source, isLocalFile, durationSeconds);
-            return PlaybackForegroundService.PlayAsync(_context, source, isLocalFile, title, artist, resolvedDuration);
+            return PlaybackForegroundService.PlayAsync(_context, source, isLocalFile, title, artist, resolvedDuration, thumbnailUrl);
         }
 
         public Task PauseAsync()
