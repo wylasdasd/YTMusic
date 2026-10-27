@@ -26,6 +26,7 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
     private readonly IUiNotifier _notifier;
     private readonly IDialogHost _dialogHost;
     private readonly MusicPlayerService _playerService;
+    private readonly LocalFileDeleteCoordinator _localFileDelete;
     private readonly NavigationManager _navigation;
     private readonly GlobalStateService _globalState;
     private List<FavoriteTrack> _rawTracks = new();
@@ -52,6 +53,7 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
         IUiNotifier notifier,
         IDialogHost dialogHost,
         MusicPlayerService playerService,
+        LocalFileDeleteCoordinator localFileDelete,
         NavigationManager navigation,
         GlobalStateService globalState)
     {
@@ -62,6 +64,7 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
         _notifier = notifier;
         _dialogHost = dialogHost;
         _playerService = playerService;
+        _localFileDelete = localFileDelete;
         _navigation = navigation;
         _globalState = globalState;
     }
@@ -265,7 +268,10 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
             var removedFile = !string.IsNullOrWhiteSpace(track.LocalFilePath) && track.IsDownloaded;
             if (removedFile)
             {
-                await _localMusicService.ClearDownloadedLocalFileAsync(track.VideoId, track.LocalFilePath!);
+                await _localFileDelete.ClearDownloadedLocalFileAsync(
+                    _localMusicService,
+                    track.VideoId,
+                    track.LocalFilePath);
                 await _favoriteService.UpdateLocalFilePathAsync(track.VideoId, null);
             }
 
@@ -293,7 +299,10 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
         try
         {
             await _favoriteService.RemoveTrackByFilePathAsync(track.LocalFilePath);
-            await _localMusicService.ClearDownloadedLocalFileAsync(track.VideoId, track.LocalFilePath);
+            await _localFileDelete.ClearDownloadedLocalFileAsync(
+                _localMusicService,
+                track.VideoId,
+                track.LocalFilePath);
             _rawTracks.Remove(track);
             ApplyTrackOrdering();
             _notifier.Success($"已删除「{track.Title}」");

@@ -20,6 +20,7 @@ public sealed partial class FavoritesVM : ViewModelBase
     private readonly IUiNotifier _notifier;
     private readonly IDialogHost _dialogHost;
     private readonly MusicPlayerService _playerService;
+    private readonly LocalFileDeleteCoordinator _localFileDelete;
     private readonly NavigationManager _navigation;
     private readonly GlobalStateService _globalState;
 
@@ -38,6 +39,7 @@ public sealed partial class FavoritesVM : ViewModelBase
         IUiNotifier notifier,
         IDialogHost dialogHost,
         MusicPlayerService playerService,
+        LocalFileDeleteCoordinator localFileDelete,
         NavigationManager navigation,
         GlobalStateService globalState)
     {
@@ -50,6 +52,7 @@ public sealed partial class FavoritesVM : ViewModelBase
         _notifier = notifier;
         _dialogHost = dialogHost;
         _playerService = playerService;
+        _localFileDelete = localFileDelete;
         _navigation = navigation;
         _globalState = globalState;
     }
@@ -259,7 +262,10 @@ public sealed partial class FavoritesVM : ViewModelBase
                     await _favoriteService.RemoveTrackByFilePathAsync(file.LocalFilePath);
                 }
 
-                await _localMusicService.ClearDownloadedLocalFileAsync(file.VideoId, file.LocalFilePath);
+                await _localFileDelete.ClearDownloadedLocalFileAsync(
+                    _localMusicService,
+                    file.VideoId,
+                    file.LocalFilePath);
             }
 
             _notifier.Success($"已清空 {downloads.Count} 首，已下载收藏夹仍保留");

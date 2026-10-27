@@ -100,6 +100,7 @@ namespace YTMusic
             builder.Services.AddSingleton<INativeVideoPlaybackService, NullNativeVideoPlaybackService>();
 #endif
             builder.Services.AddSingleton<DownloadRecordsSync>();
+            builder.Services.AddSingleton<LocalFileDeleteCoordinator>();
 
             builder.Services.AddScoped<SearchVM>();
             builder.Services.AddScoped<DownloadsVM>();

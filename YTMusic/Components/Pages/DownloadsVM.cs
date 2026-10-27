@@ -27,6 +27,7 @@ public sealed partial class DownloadsVM : ViewModelBase, IDisposable
     private readonly IFavoriteService _favoriteService;
     private readonly IDialogHost _dialogHost;
     private readonly MusicPlayerService _playerService;
+    private readonly LocalFileDeleteCoordinator _localFileDelete;
     private readonly NavigationManager _navigation;
     private readonly DownloadRecordsSync _downloadRecordsSync;
 
@@ -67,6 +68,7 @@ public sealed partial class DownloadsVM : ViewModelBase, IDisposable
         IFavoriteService favoriteService,
         IDialogHost dialogHost,
         MusicPlayerService playerService,
+        LocalFileDeleteCoordinator localFileDelete,
         NavigationManager navigation,
         DownloadRecordsSync downloadRecordsSync)
     {
@@ -77,6 +79,7 @@ public sealed partial class DownloadsVM : ViewModelBase, IDisposable
         _favoriteService = favoriteService;
         _dialogHost = dialogHost;
         _playerService = playerService;
+        _localFileDelete = localFileDelete;
         _navigation = navigation;
         _downloadRecordsSync = downloadRecordsSync;
         _downloadManager.OnDownloadsChanged += HandleDownloadsChanged;
@@ -328,9 +331,12 @@ public sealed partial class DownloadsVM : ViewModelBase, IDisposable
     {
         try
         {
-            await _favoriteService.RemoveTrackByFilePathAsync(file.LocalFilePath);
             FavoriteFilePaths.Remove(file.LocalFilePath);
-            await _localMusicService.RemoveDownloadedTrackAsync(file.VideoId, file.LocalFilePath);
+            await _localFileDelete.RemoveDownloadedTrackAsync(
+                _localMusicService,
+                _favoriteService,
+                file.VideoId,
+                file.LocalFilePath);
             DownloadRecords.RemoveAll(item =>
                 string.Equals(item.VideoId, file.VideoId, StringComparison.Ordinal));
             _notifier.Success($"已删除「{file.Title}」");

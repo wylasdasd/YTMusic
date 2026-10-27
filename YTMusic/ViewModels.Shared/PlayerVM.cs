@@ -18,6 +18,7 @@ public sealed partial class PlayerVM : ViewModelBase
     private readonly IDialogHost _dialogHost;
     private readonly IUiNotifier _notifier;
     private readonly MusicPlayerService _playerService;
+    private readonly LocalFileDeleteCoordinator _localFileDelete;
     private readonly NavigationManager _navigation;
     private readonly GlobalStateService _globalState;
 
@@ -33,6 +34,7 @@ public sealed partial class PlayerVM : ViewModelBase
         IDialogHost dialogHost,
         IUiNotifier notifier,
         MusicPlayerService playerService,
+        LocalFileDeleteCoordinator localFileDelete,
         NavigationManager navigation,
         GlobalStateService globalState)
     {
@@ -42,6 +44,7 @@ public sealed partial class PlayerVM : ViewModelBase
         _dialogHost = dialogHost;
         _notifier = notifier;
         _playerService = playerService;
+        _localFileDelete = localFileDelete;
         _navigation = navigation;
         _globalState = globalState;
     }
@@ -209,7 +212,7 @@ public sealed partial class PlayerVM : ViewModelBase
 
         try
         {
-            var released = await _playerService.ReleaseIfPlayingFileAsync(path);
+            var removedPath = path;
             if (!string.IsNullOrWhiteSpace(path))
             {
                 await _favoriteService.RemoveTrackByFilePathAsync(path);
@@ -251,13 +254,7 @@ public sealed partial class PlayerVM : ViewModelBase
                 }
             }
 
-            if (released)
-            {
-                var removedPath = path;
-                await _playerService.ContinueAfterDroppingAsync(item =>
-                    !string.IsNullOrWhiteSpace(removedPath)
-                    && string.Equals(item.LocalFilePath, removedPath, StringComparison.OrdinalIgnoreCase));
-            }
+            await _localFileDelete.NotifyLocalFileRemovedAsync(removedPath);
 
             _currentCheckedVideoId = null;
             IsFavorite = false;

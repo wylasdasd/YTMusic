@@ -452,17 +452,38 @@ namespace YTMusic.Services
             return true;
         }
 
-        /// <summary>把已删除的本地曲目移出播放列表，并接着播下一首。</summary>
-        public async Task ContinueAfterDroppingAsync(Func<PlayingItem, bool> drop)
+        /// <summary>本地文件已删除：移出播放列表；若正在播该文件则切到下一首可播曲目。</summary>
+        public async Task ApplyLocalFileDeletedAsync(string? localFilePath)
         {
-            if (Playlist.Count > 0)
+            if (string.IsNullOrWhiteSpace(localFilePath))
             {
-                _playlist.RemoveWhere(drop);
+                return;
             }
+
+            bool Matches(PlayingItem item) =>
+                !string.IsNullOrWhiteSpace(item.LocalFilePath)
+                && string.Equals(item.LocalFilePath, localFilePath, StringComparison.OrdinalIgnoreCase);
+
+            var released = await ReleaseIfPlayingFileAsync(localFilePath).ConfigureAwait(false);
+            if (!released)
+            {
+                if (Playlist.Count > 0)
+                {
+                    _playlist.RemoveWhere(Matches);
+                    NotifyStateChanged();
+                }
+
+                return;
+            }
+
+            var wasLastInList = Playlist.Count > 0 && _playlist.CurrentIndex == Playlist.Count - 1;
+            _playlist.RemoveWhere(Matches);
 
             CurrentVideo = null;
             IsCurrentStreamVideo = false;
             CurrentStreamUrl = null;
+            IsPlaying = false;
+
             if (Playlist.Count == 0 || _playlist.CurrentIndex < 0)
             {
                 NotifyStateChanged();
@@ -470,7 +491,14 @@ namespace YTMusic.Services
                 return;
             }
 
-            await PlayInternalAsync(Playlist[_playlist.CurrentIndex]);
+            if (wasLastInList)
+            {
+                await MoveToPlayableAsync(forward: true).ConfigureAwait(false);
+            }
+            else
+            {
+                await PlayInternalAsync(Playlist[_playlist.CurrentIndex]).ConfigureAwait(false);
+            }
         }
 
         private async Task<bool> TryRestartCurrentLocalWebAsync()
