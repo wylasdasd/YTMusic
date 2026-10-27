@@ -22,6 +22,8 @@ public sealed partial class DownloadsVM : ViewModelBase
     public List<DownloadedTrack> Files { get; private set; } = new();
     public IReadOnlyList<LocalDirectoryNode<DownloadedTrack>> DirectoryNodes { get; private set; } = Array.Empty<LocalDirectoryNode<DownloadedTrack>>();
     public HashSet<string> FavoriteFilePaths { get; } = new(StringComparer.OrdinalIgnoreCase);
+    private List<DownloadedTrack> _downloadedFiles = new();
+    private readonly List<ImportedLocalGroup> _importedGroups = new();
 
     [ObservableProperty]
     private bool _isLoading = true;
@@ -51,8 +53,11 @@ public sealed partial class DownloadsVM : ViewModelBase
 
         try
         {
-            var files = await _localMusicService.GetDownloadedTracksAsync();
-            Files = new List<DownloadedTrack>(files);
+            var downloads = await _localMusicService.GetDownloadedTracksAsync();
+            _downloadedFiles = downloads
+                .Where(file => !string.IsNullOrWhiteSpace(file.LocalFilePath))
+                .ToList();
+            await LoadImportedGroupsAsync();
             RebuildDirectories();
             FavoriteFilePaths.Clear();
 
@@ -83,6 +88,16 @@ public sealed partial class DownloadsVM : ViewModelBase
     {
         try
         {
+            if (LocalAudioFolder.IsImportedVideoId(file.VideoId))
+            {
+                await _favoriteService.RemoveTrackByFilePathAsync(file.LocalFilePath);
+                FavoriteFilePaths.Remove(file.LocalFilePath);
+                RemoveListedFile(file);
+                _notifier.Success($"已从本地资源移除「{file.Title}」");
+                NotifyChanged();
+                return;
+            }
+
             if (FavoriteFilePaths.Contains(file.LocalFilePath))
             {
                 await _favoriteService.RemoveTrackByFilePathAsync(file.LocalFilePath);
@@ -90,8 +105,7 @@ public sealed partial class DownloadsVM : ViewModelBase
             }
 
             await _localMusicService.RemoveDownloadedTrackAsync(file.VideoId, file.LocalFilePath);
-            Files.Remove(file);
-            RebuildDirectories();
+            RemoveListedFile(file);
 
             _notifier.Success($"{file.Title} deleted");
             NotifyChanged();
@@ -159,16 +173,79 @@ public sealed partial class DownloadsVM : ViewModelBase
         }
     }
 
+    private async Task LoadImportedGroupsAsync()
+    {
+        _importedGroups.Clear();
+        var downloadedPaths = _downloadedFiles
+            .Select(file => file.LocalFilePath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var folders = await _favoriteService.GetFoldersAsync();
+        foreach (var folder in folders.Where(item => item.IsLocalImport))
+        {
+            var tracks = await _favoriteService.GetTracksAsync(folder.Id, null);
+            var files = tracks
+                .Where(track => !string.IsNullOrWhiteSpace(track.LocalFilePath))
+                .Where(track => !downloadedPaths.Contains(track.LocalFilePath!))
+                .Select(track => new DownloadedTrack
+                {
+                    VideoId = track.VideoId,
+                    Title = track.Title,
+                    Author = track.Author,
+                    ThumbnailUrl = track.ThumbnailUrl,
+                    LocalFilePath = track.LocalFilePath!,
+                    IsVideo = false,
+                    DownloadedDate = track.AddedDate
+                })
+                .ToList();
+            if (files.Count == 0)
+            {
+                continue;
+            }
+
+            _importedGroups.Add(new ImportedLocalGroup(folder.LocalRootPath, files));
+        }
+    }
+
+    private void RemoveListedFile(DownloadedTrack file)
+    {
+        _downloadedFiles.RemoveAll(item => SameFile(item, file));
+        foreach (var group in _importedGroups)
+        {
+            group.Files.RemoveAll(item => SameFile(item, file));
+        }
+
+        RebuildDirectories();
+    }
+
+    private static bool SameFile(DownloadedTrack left, DownloadedTrack right)
+        => string.Equals(left.LocalFilePath, right.LocalFilePath, StringComparison.OrdinalIgnoreCase)
+           && string.Equals(left.VideoId, right.VideoId, StringComparison.Ordinal);
+
     private void RebuildDirectories()
     {
-        DirectoryNodes = LocalDirectoryTree.Build(
-            Files,
+        var nodes = new List<LocalDirectoryNode<DownloadedTrack>>();
+        nodes.AddRange(BuildNodes(_downloadedFiles, _downloadDirectoryProvider.GetDownloadedMusicDirectory()));
+        foreach (var group in _importedGroups)
+        {
+            nodes.AddRange(BuildNodes(group.Files, group.RootPath));
+        }
+
+        DirectoryNodes = nodes;
+        Files = _downloadedFiles.Concat(_importedGroups.SelectMany(group => group.Files)).ToList();
+    }
+
+    private static IReadOnlyList<LocalDirectoryNode<DownloadedTrack>> BuildNodes(
+        IReadOnlyList<DownloadedTrack> files,
+        string? libraryRoot)
+        => LocalDirectoryTree.Build(
+            files,
             file => file.LocalFilePath,
             file => file.Title,
             file => file.DownloadedDate,
-            _downloadDirectoryProvider.GetDownloadedMusicDirectory(),
+            libraryRoot,
             sortByName: false);
-    }
+
+    private sealed record ImportedLocalGroup(string? RootPath, List<DownloadedTrack> Files);
 
     public async Task PlayLocalAudioFileAsync(DownloadedTrack file)
     {

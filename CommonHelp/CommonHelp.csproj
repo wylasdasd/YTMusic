@@ -1,26 +1,26 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
     <Platforms>AnyCPU;x64</Platforms>
     <Configurations>Debug;Release;MYTEST</Configurations>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.1" />
-    <PackageReference Include="Riok.Mapperly" Version="4.3.1" />
-            <PackageReference Include="Serilog.Extensions.Logging" Version="9.0.0" />
-        <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
-        <PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0" />
+    <!-- IHttpService 所需的 IHttpClientFactory / ILogger 抽象 -->
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
+    <!-- ScheduleTimingHelp 的 Cron 表达式计算 -->
+    <PackageReference Include="Cronos" Version="0.9.0" />
+    <PackageReference Include="Serilog" Version="4.4.0" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <!-- GBK/Big5 等 CodePages 编码由 net10.0 共享框架内置（CodePagesEncodingProvider），无需单独引用包；
+         Serilog 全局日志由 LogHelps/LogHelp 装配（Mapperly 已移除）。 -->
   </ItemGroup>
 
-  <ItemGroup>
-    <Compile Remove="**\obj-temp\**\*.cs" />
-    <None Remove="**\obj-temp\**" />
-    <Content Remove="**\obj-temp\**" />
-    <EmbeddedResource Remove="**\obj-temp\**" />
-  </ItemGroup>
 </Project>
-

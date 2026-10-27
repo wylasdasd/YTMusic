@@ -1,5 +1,5 @@
 using System.IO;
-using CommonTool.FileHelps;
+using CommonHelp;
 using Microsoft.Data.Sqlite;
 using YTMusic.BLL.Ports;
 
@@ -14,7 +14,7 @@ internal sealed class SqliteConnectionFactory
         SqliteBootstrap.EnsureInitialized();
 
         var dbDir = pathProvider.GetDatabaseDirectory();
-        FileHelp.EnsureDirectoryExists(dbDir);
+        FileHelp.EnsureDirectoryExists(dbDir + Path.DirectorySeparatorChar);
         var dbPath = Path.Combine(dbDir, databaseFileName);
         _connectionString = $"Data Source={dbPath}";
     }

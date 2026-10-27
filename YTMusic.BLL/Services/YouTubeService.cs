@@ -1,5 +1,5 @@
 using System.IO;
-using CommonTool.FileHelps;
+using CommonHelp;
 using YoutubeExplode.Videos.Streams;
 using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Ports;
@@ -68,7 +68,7 @@ public sealed class YouTubeService : IYouTubeService
         }
 
         var musicDirectory = _downloadMusicDirectoryProvider.GetDownloadedMusicDirectory();
-        FileHelp.EnsureDirectoryExists(musicDirectory);
+        FileHelp.EnsureDirectoryExists(musicDirectory + Path.DirectorySeparatorChar);
 
         var safeFileName = FileHelp.SafeFileName(fileName);
         var filePath = Path.Combine(musicDirectory, $"{safeFileName}.{streamInfo.Container.Name}");

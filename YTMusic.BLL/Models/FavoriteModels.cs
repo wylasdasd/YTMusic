@@ -17,6 +17,8 @@ public class FavoriteFolder
     public string Name { get; set; } = string.Empty;
     public bool IsDefault { get; set; }
     public bool IsDownloadedCatalog { get; set; }
+    public bool IsLocalImport { get; set; }
+    public string? LocalRootPath { get; set; }
 }
 
 public class FavoriteTrack

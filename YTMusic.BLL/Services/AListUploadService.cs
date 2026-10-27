@@ -9,7 +9,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using CommonTool.FileHelps;
+using CommonHelp;
 using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Infrastructure.AList;
 using YTMusic.BLL.Models;
@@ -391,7 +391,7 @@ namespace YTMusic.BLL.Services
             }
 
             var localDirectory = _downloadMusicDirectoryProvider.GetDownloadedMusicDirectory();
-            FileHelp.EnsureDirectoryExists(localDirectory);
+            FileHelp.EnsureDirectoryExists(localDirectory + Path.DirectorySeparatorChar);
             var localFilePath = Path.Combine(localDirectory, FileHelp.SafeFileName(fileName));
             return await DownloadFileToPathAsync(remotePath, localFilePath, progress, cancellationToken);
         }

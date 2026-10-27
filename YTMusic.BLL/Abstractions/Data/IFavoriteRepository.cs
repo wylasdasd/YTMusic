@@ -6,6 +6,7 @@ public interface IFavoriteRepository
 {
     Task<List<FavoriteFolder>> GetFoldersAsync();
     Task<FavoriteFolder> CreateFolderAsync(string name);
+    Task<FavoriteFolder> CreateLocalImportFolderAsync(string name, string localRootPath);
     Task DeleteFolderAsync(int folderId);
     Task ResetAllAsync();
 
@@ -13,6 +14,7 @@ public interface IFavoriteRepository
     Task<HashSet<string>> GetFavoritedVideoIdsAsync(IEnumerable<string> videoIds);
     Task<HashSet<string>> GetFavoritedFilePathsAsync(IEnumerable<string> filePaths);
     Task AddTrackAsync(string videoId, string title, string author, string? thumbnailUrl, int folderId, string? localFilePath, DateTime addedDate);
+    Task AddTracksAsync(IReadOnlyList<FavoriteTrack> tracks);
     Task RemoveTrackAsync(string videoId, int folderId);
     Task UpdateLocalFilePathAsync(string videoId, string? localFilePath);
     Task<bool> IsFavoriteAsync(string videoId, int folderId);

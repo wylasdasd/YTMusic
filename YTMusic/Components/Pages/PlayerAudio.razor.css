@@ -56,6 +56,12 @@
     gap: 14px;
 }
 
+.player-backdrop--default {
+    background-image:
+        radial-gradient(circle at 30% 18%, color-mix(in srgb, white 50%, var(--ytm-accent)), transparent 46%),
+        linear-gradient(145deg, var(--ytm-accent), var(--ytm-text-primary));
+}
+
 .player-artwork-wrap {
     position: relative;
     width: min(100%, 440px);

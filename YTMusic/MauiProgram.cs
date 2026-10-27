@@ -74,6 +74,7 @@ namespace YTMusic
             builder.Services.AddScoped<IUiNotifier, MudUiNotifier>();
             builder.Services.AddScoped<IDialogHost, MudDialogHost>();
             builder.Services.AddSingleton<IFilePickerService, MauiFilePickerService>();
+            builder.Services.AddSingleton<IFolderPicker, MauiFolderPicker>();
 
             builder.Services.AddSingleton<IPreferencesStore, MauiPreferencesStore>();
             builder.Services.AddSingleton<IDatabasePathProvider, MauiDatabasePathProvider>();

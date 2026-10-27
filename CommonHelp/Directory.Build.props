@@ -1,0 +1,4 @@
+<Project>
+  <!-- CommonHelp 是可独立迁移的类库（自带 .git）。这个空文件阻断 MSBuild 继续向上一级查找
+       Directory.Build.props，避免继承外层解决方案的统一版本号，单独拷走也能原样构建。 -->
+</Project>

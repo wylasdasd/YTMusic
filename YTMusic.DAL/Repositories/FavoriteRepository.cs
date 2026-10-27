@@ -27,6 +27,8 @@ public sealed class FavoriteRepository : IFavoriteRepository
                 IsDefault INTEGER NOT NULL DEFAULT 0
             );";
         connection.Execute(createFoldersSql);
+        SqliteSchemaMigration.EnsureColumn(connection, "FavoriteFolders", "IsLocalImport", "INTEGER NOT NULL DEFAULT 0");
+        SqliteSchemaMigration.EnsureColumn(connection, "FavoriteFolders", "LocalRootPath", "TEXT NULL");
 
         var defaultFolder = connection.QueryFirstOrDefault<int>("SELECT COUNT(1) FROM FavoriteFolders WHERE Id = 1;");
         if (defaultFolder == 0)
@@ -76,6 +78,24 @@ public sealed class FavoriteRepository : IFavoriteRepository
         const string sql = "INSERT INTO FavoriteFolders (Name, IsDefault) VALUES (@Name, 0); SELECT last_insert_rowid();";
         var id = await connection.ExecuteScalarAsync<int>(sql, new { Name = name });
         return new FavoriteFolder { Id = id, Name = name, IsDefault = false };
+    }
+
+    public async Task<FavoriteFolder> CreateLocalImportFolderAsync(string name, string localRootPath)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        const string sql = @"
+            INSERT INTO FavoriteFolders (Name, IsDefault, IsLocalImport, LocalRootPath)
+            VALUES (@Name, 0, 1, @LocalRootPath);
+            SELECT last_insert_rowid();";
+        var id = await connection.ExecuteScalarAsync<int>(sql, new { Name = name, LocalRootPath = localRootPath });
+        return new FavoriteFolder
+        {
+            Id = id,
+            Name = name,
+            IsDefault = false,
+            IsLocalImport = true,
+            LocalRootPath = localRootPath
+        };
     }
 
     public async Task DeleteFolderAsync(int folderId)
@@ -197,6 +217,23 @@ public sealed class FavoriteRepository : IFavoriteRepository
             AddedDate = addedDate,
             LocalFilePath = localFilePath
         });
+    }
+
+    public async Task AddTracksAsync(IReadOnlyList<FavoriteTrack> tracks)
+    {
+        if (tracks.Count == 0)
+        {
+            return;
+        }
+
+        using var connection = _connectionFactory.CreateConnection();
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+        const string sql = @"
+            INSERT OR REPLACE INTO FavoriteTracks (VideoId, FolderId, Title, Author, ThumbnailUrl, AddedDate, LocalFilePath)
+            VALUES (@VideoId, @FolderId, @Title, @Author, @ThumbnailUrl, @AddedDate, @LocalFilePath);";
+        await connection.ExecuteAsync(sql, tracks, transaction);
+        transaction.Commit();
     }
 
     public async Task RemoveTrackAsync(string videoId, int folderId)

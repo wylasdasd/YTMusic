@@ -12,6 +12,8 @@ namespace YTMusic.Components.Pages;
 public sealed partial class FavoritesVM : ViewModelBase
 {
     private readonly IFavoriteService _favoriteService;
+    private readonly ILocalFolderImportService _localFolderImportService;
+    private readonly IFolderPicker _folderPicker;
     private readonly ILocalMusicService _localMusicService;
     private readonly IDownloadMusicDirectoryProvider _downloadDirectoryProvider;
     private readonly IUiNotifier _notifier;
@@ -27,6 +29,8 @@ public sealed partial class FavoritesVM : ViewModelBase
 
     public FavoritesVM(
         IFavoriteService favoriteService,
+        ILocalFolderImportService localFolderImportService,
+        IFolderPicker folderPicker,
         ILocalMusicService localMusicService,
         IDownloadMusicDirectoryProvider downloadDirectoryProvider,
         IUiNotifier notifier,
@@ -36,6 +40,8 @@ public sealed partial class FavoritesVM : ViewModelBase
         GlobalStateService globalState)
     {
         _favoriteService = favoriteService;
+        _localFolderImportService = localFolderImportService;
+        _folderPicker = folderPicker;
         _localMusicService = localMusicService;
         _downloadDirectoryProvider = downloadDirectoryProvider;
         _notifier = notifier;
@@ -68,6 +74,47 @@ public sealed partial class FavoritesVM : ViewModelBase
         catch (Exception ex)
         {
             _notifier.Error($"创建收藏夹失败: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private async Task ImportLocalFolderAsync()
+    {
+        try
+        {
+            var pick = await _folderPicker.PickAsync("选择要导入的音乐文件夹");
+            if (!pick.IsSupported)
+            {
+                _notifier.Warning("当前平台不能选择文件夹。");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(pick.Path))
+            {
+                return;
+            }
+
+            _globalState.ShowLoading();
+            NotifyChanged();
+            var result = await _localFolderImportService.ImportAsync(pick.Path);
+            if (result == null)
+            {
+                _notifier.Warning("这个文件夹里没有可播放的音频。");
+                return;
+            }
+
+            _notifier.Success($"已导入 {result.TrackCount} 首到「{result.Folder.Name}」");
+            await LoadFoldersAsync();
+            _navigation.NavigateTo($"/favorites/folder/{result.Folder.Id}");
+        }
+        catch (Exception ex)
+        {
+            _notifier.Error($"导入文件夹失败: {ex.Message}");
+        }
+        finally
+        {
+            _globalState.HideLoading();
+            NotifyChanged();
         }
     }
 
@@ -115,6 +162,14 @@ public sealed partial class FavoritesVM : ViewModelBase
                 _downloadDirectoryProvider.GetDownloadedMusicDirectory(),
                 sortByName: true);
             return LocalDirectoryTree.Flatten(nodes);
+        }
+
+        var folder = Folders.FirstOrDefault(item => item.Id == folderId);
+        if (folder?.IsLocalImport == true)
+        {
+            var imported = await _favoriteService.GetTracksAsync(folderId, null);
+            var importedNodes = LocalDirectoryTree.Build(imported, folder.LocalRootPath, sortByName: true);
+            return LocalDirectoryTree.Flatten(importedNodes);
         }
 
         var tracks = await _favoriteService.GetTracksAsync(folderId, null);
@@ -233,17 +288,30 @@ public sealed partial class FavoritesVM : ViewModelBase
                 return;
             }
 
-            var folderName = Folders.FirstOrDefault(f => f.Id == folderId)?.Name ?? "收藏夹";
+            var folder = Folders.FirstOrDefault(f => f.Id == folderId);
+            var folderName = folder?.Name ?? "收藏夹";
             var isDownloadedCatalog = FavoriteFolderIds.IsDownloadedCatalog(folderId);
+            var isLocalImport = folder?.IsLocalImport == true;
             var playlist = tracks.Select(t => new PlayingItem
             {
                 VideoId = t.VideoId,
                 Title = t.Title,
                 Author = t.Author,
                 ThumbnailUrl = t.ThumbnailUrl,
-                LocalFilePath = t.IsDownloaded || isDownloadedCatalog ? t.LocalFilePath : null,
+                LocalFilePath = t.IsDownloaded || isDownloadedCatalog || isLocalImport ? t.LocalFilePath : null,
                 IsVideo = false
             }).ToList();
+            if (isLocalImport)
+            {
+                playlist = playlist
+                    .Where(item => !string.IsNullOrWhiteSpace(item.LocalFilePath) && File.Exists(item.LocalFilePath))
+                    .ToList();
+                if (playlist.Count == 0)
+                {
+                    _notifier.Warning("没有可播放的文件。");
+                    return;
+                }
+            }
 
             if (await _playerService.PlayPlaylistAsync(playlist, 0, folderName, mode))
             {

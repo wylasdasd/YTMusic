@@ -1,4 +1,3 @@
-using CommonTool.TimeHelps;
 using YoutubeExplode.Videos.Streams;
 using YTMusic.BLL.Ports;
 using YTMusic.Infrastructure.Proxies;
@@ -103,7 +102,7 @@ public sealed class PlaybackProxyCoordinator
     {
         EnsureProxiesCreated();
         var fileKey = Uri.EscapeDataString(localFilePath);
-        return $"{_fileProxy!.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}&f={fileKey}";
+        return $"{_fileProxy!.ProxyUrl}?t={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}&f={fileKey}";
     }
 
     public async Task<string> BuildWebVideoStreamUrlAsync(IStreamInfo videoStreamInfo)
@@ -111,7 +110,7 @@ public sealed class PlaybackProxyCoordinator
         await EnsureAudioProxyCreatedAsync().ConfigureAwait(false);
         _audioProxy!.ContentType = GetStreamContentType(videoStreamInfo, true);
         _audioProxy.CurrentStreamInfo = videoStreamInfo;
-        var url = $"{_audioProxy.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
+        var url = $"{_audioProxy.ProxyUrl}?t={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
         PlaybackDiagnostics.Log($"BuildWebVideoStreamUrl proxy={url} upstream={PlaybackDiagnostics.DescribeUrl(videoStreamInfo.Url)}");
         return url;
     }
@@ -119,7 +118,7 @@ public sealed class PlaybackProxyCoordinator
     public string BuildAudioProxyStreamUrl(IStreamInfo streamInfo, bool isVideo)
     {
         ConfigureAudioProxy(streamInfo, isVideo);
-        return $"{_audioProxy!.ProxyUrl}?t={UnixHelp.GetUtcNowUnixTimeMilliseconds()}";
+        return $"{_audioProxy!.ProxyUrl}?t={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
     }
 
     public static string GetFileContentType(string filePath, bool isVideo)
@@ -133,6 +132,21 @@ public sealed class PlaybackProxyCoordinator
         if (extension == ".mp3")
         {
             return "audio/mpeg";
+        }
+
+        if (extension is ".wav" or ".wave")
+        {
+            return "audio/wav";
+        }
+
+        if (extension is ".flac")
+        {
+            return "audio/flac";
+        }
+
+        if (extension is ".ogg" or ".oga")
+        {
+            return "audio/ogg";
         }
 
         return isVideo ? "video/mp4" : "audio/mp4";

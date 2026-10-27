@@ -12,16 +12,44 @@
     @if (PlayerService.CurrentVideo != null)
     {
         <div class="player-shell">
-            <div class="player-backdrop"
-                 style="@($"background-image: linear-gradient(180deg, color-mix(in srgb, var(--ytm-bg-base) 18%, transparent), color-mix(in srgb, var(--ytm-bg-base) 92%, transparent)), url('{PlayerService.CurrentVideo.ThumbnailUrl}');")">
+            <div class="player-backdrop @(HasArtwork ? null : "player-backdrop--default")"
+                 style="@BackdropStyle">
             </div>
 
             <div class="player-content">
                 <div class="player-artwork-wrap">
                     <div class="player-artwork-shadow"></div>
-                    <MudImage Src="@PlayerService.CurrentVideo.ThumbnailUrl"
-                              ObjectFit="ObjectFit.Cover"
-                              Class="player-artwork" />
+                    @if (HasArtwork)
+                    {
+                        <MudImage Src="@PlayerService.CurrentVideo.ThumbnailUrl"
+                                  ObjectFit="ObjectFit.Cover"
+                                  Class="player-artwork" />
+                    }
+                    else
+                    {
+                        <svg class="player-artwork player-artwork--default" viewBox="0 0 240 240" aria-hidden="true">
+                            <defs>
+                                <linearGradient id="ytmDefaultCoverBg" x1="18%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stop-color="var(--ytm-accent)" />
+                                    <stop offset="100%" stop-color="var(--ytm-text-primary)" />
+                                </linearGradient>
+                                <radialGradient id="ytmDefaultCoverShine" cx="32%" cy="24%" r="68%">
+                                    <stop offset="0%" stop-color="#ffffff" stop-opacity="0.5" />
+                                    <stop offset="58%" stop-color="#ffffff" stop-opacity="0" />
+                                </radialGradient>
+                            </defs>
+                            <rect width="240" height="240" fill="url(#ytmDefaultCoverBg)" />
+                            <rect width="240" height="240" fill="url(#ytmDefaultCoverShine)" />
+                            <circle cx="120" cy="124" r="86" fill="#000000" fill-opacity="0.18" />
+                            <circle cx="120" cy="124" r="72" fill="none" stroke="#ffffff" stroke-opacity="0.28" stroke-width="8" />
+                            <circle cx="120" cy="124" r="54" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2" />
+                            <circle cx="120" cy="124" r="38" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2" />
+                            <circle cx="120" cy="124" r="30" fill="#ffffff" fill-opacity="0.94" />
+                            <g transform="translate(96 98) scale(2.2)" fill="var(--ytm-accent)">
+                                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                            </g>
+                        </svg>
+                    }
                 </div>
 
                 <div class="player-meta">
@@ -34,9 +62,12 @@
                     <MediaTitle Text="@PlayerService.CurrentVideo.Title"
                                 Typo="Typo.h5"
                                 Class="player-title" />
-                    <MudText Typo="Typo.body1" Class="player-author">
-                        @PlayerService.CurrentVideo.Author
-                    </MudText>
+                    @if (!string.IsNullOrWhiteSpace(PlayerService.CurrentVideo.Author))
+                    {
+                        <MudText Typo="Typo.body1" Class="player-author">
+                            @PlayerService.CurrentVideo.Author
+                        </MudText>
+                    }
                 </div>
 
                 <div class="player-progress" @ref="_progressHost"></div>
@@ -143,6 +174,12 @@
             await MountProgressBarAsync();
         }
     }
+
+    private bool HasArtwork => !string.IsNullOrWhiteSpace(PlayerService.CurrentVideo?.ThumbnailUrl);
+
+    private string? BackdropStyle => HasArtwork
+        ? $"background-image: linear-gradient(180deg, color-mix(in srgb, var(--ytm-bg-base) 18%, transparent), color-mix(in srgb, var(--ytm-bg-base) 92%, transparent)), url('{PlayerService.CurrentVideo!.ThumbnailUrl}');"
+        : null;
 
     private void OnStateChanged()
     {

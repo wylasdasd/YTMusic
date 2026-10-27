@@ -38,6 +38,9 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
     public bool IsLoading { get; private set; }
 
     public bool IsDownloadedCatalog => FavoriteFolderIds.IsDownloadedCatalog(FolderId);
+    public bool IsLocalLibrary { get; private set; }
+    public string? LocalRootPath { get; private set; }
+    public bool UsesDirectoryGroups => IsDownloadedCatalog || IsLocalLibrary;
 
     public FavoritesFolderVM(
         IFavoriteService favoriteService,
@@ -65,7 +68,10 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
         SortMode = FavoriteTrackSortMode.Time;
 
         var folders = await _favoriteService.GetFoldersAsync();
-        FolderName = folders.FirstOrDefault(f => f.Id == folderId)?.Name;
+        var folder = folders.FirstOrDefault(f => f.Id == folderId);
+        FolderName = folder?.Name;
+        IsLocalLibrary = folder?.IsLocalImport == true;
+        LocalRootPath = folder?.LocalRootPath;
 
         if (FolderName == null && !FavoriteFolderIds.IsDownloadedCatalog(folderId))
         {
@@ -167,8 +173,10 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
     public async Task PlayDirectoryAsync(LocalDirectoryNode<FavoriteTrack> node)
     {
         var tracks = LocalDirectoryTree.Flatten(new[] { node });
-        if (tracks.Count == 0)
+        var playlist = BuildPlaylist(tracks);
+        if (playlist.Count == 0)
         {
+            _notifier.Warning("没有可播放的文件。");
             return;
         }
 
@@ -178,7 +186,7 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
             NotifyChanged();
 
             if (await _playerService.PlayPlaylistAsync(
-                    BuildPlaylist(tracks),
+                    playlist,
                     0,
                     node.Name,
                     MusicPlayerService.PlaybackMode.Sequential))
@@ -195,11 +203,14 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
 
     private void ApplyTrackOrdering()
     {
-        if (IsDownloadedCatalog)
+        if (IsDownloadedCatalog || IsLocalLibrary)
         {
+            var libraryRoot = IsLocalLibrary
+                ? LocalRootPath
+                : _downloadDirectoryProvider.GetDownloadedMusicDirectory();
             DirectoryNodes = LocalDirectoryTree.Build(
                 _rawTracks,
-                _downloadDirectoryProvider.GetDownloadedMusicDirectory(),
+                libraryRoot,
                 SortMode == FavoriteTrackSortMode.Name);
             Tracks = LocalDirectoryTree.Flatten(DirectoryNodes);
             return;
@@ -324,11 +335,23 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
             }
 
             var playlist = BuildPlaylist(Tracks);
-            var startIndex = Tracks.FindIndex(t =>
-                t.VideoId == track.VideoId &&
-                string.Equals(t.LocalFilePath, track.LocalFilePath, StringComparison.OrdinalIgnoreCase));
+            if (playlist.Count == 0)
+            {
+                _notifier.Warning("没有可播放的文件。");
+                return;
+            }
+
+            var startIndex = playlist.FindIndex(item =>
+                item.VideoId == track.VideoId &&
+                string.Equals(item.LocalFilePath, track.LocalFilePath, StringComparison.OrdinalIgnoreCase));
             if (startIndex == -1)
             {
+                if (IsLocalLibrary)
+                {
+                    _notifier.Warning("文件不存在。");
+                    return;
+                }
+
                 startIndex = 0;
             }
 
@@ -380,19 +403,25 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
         }
     }
 
-    private static List<PlayingItem> BuildPlaylist(IEnumerable<FavoriteTrack> tracks, bool isDownloadedCatalog)
+    private List<PlayingItem> BuildPlaylist(IEnumerable<FavoriteTrack> tracks)
     {
-        return tracks.Select(t => new PlayingItem
+        var items = tracks.Select(t => new PlayingItem
         {
             VideoId = t.VideoId,
             Title = t.Title,
             Author = t.Author,
             ThumbnailUrl = t.ThumbnailUrl,
-            LocalFilePath = t.IsDownloaded || isDownloadedCatalog ? t.LocalFilePath : null,
+            LocalFilePath = t.IsDownloaded || IsDownloadedCatalog || IsLocalLibrary ? t.LocalFilePath : null,
             IsVideo = false
-        }).ToList();
-    }
+        });
 
-    private List<PlayingItem> BuildPlaylist(IEnumerable<FavoriteTrack> tracks)
-        => BuildPlaylist(tracks, IsDownloadedCatalog);
+        if (!IsLocalLibrary)
+        {
+            return items.ToList();
+        }
+
+        return items
+            .Where(item => !string.IsNullOrWhiteSpace(item.LocalFilePath) && File.Exists(item.LocalFilePath))
+            .ToList();
+    }
 }

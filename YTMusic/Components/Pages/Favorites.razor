@@ -85,6 +85,10 @@
 </PageListScroll>
 
 <div class="favorites-fab-wrap">
+    <MudFab StartIcon="@Icons.Material.Filled.DriveFolderUpload"
+            Color="Color.Secondary"
+            aria-label="导入本地文件夹"
+            OnClick="@(async () => await ViewModel.ImportLocalFolderCommand.ExecuteAsync(null))" />
     <MudFab StartIcon="@Icons.Material.Filled.Add"
             Color="Color.Primary"
             aria-label="新建收藏夹"

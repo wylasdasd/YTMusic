@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using CommonTool.FileHelps;
+using CommonHelp;
 
 using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Models;
@@ -189,7 +189,7 @@ namespace YTMusic.BLL.Services
                 }
 
                 var localDirectory = _downloadMusicDirectoryProvider.ResolveLocalDownloadDirectory(metadata?.FavoriteFolderNames);
-                FileHelp.EnsureDirectoryExists(localDirectory);
+                FileHelp.EnsureDirectoryExists(localDirectory + Path.DirectorySeparatorChar);
 
                 var resolvedTitleFromMetadata = metadata?.Title;
                 if (!string.IsNullOrWhiteSpace(resolvedTitleFromMetadata))

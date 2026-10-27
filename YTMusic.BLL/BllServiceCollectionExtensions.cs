@@ -22,6 +22,7 @@ public static class BllServiceCollectionExtensions
         services.AddSingleton<IAListUploadSettingsService, AListUploadSettingsService>();
         services.AddSingleton<IAListUploadService, AListUploadService>();
         services.AddSingleton<IFavoriteService, FavoriteService>();
+        services.AddSingleton<ILocalFolderImportService, LocalFolderImportService>();
         services.AddSingleton<ILocalMusicService, LocalMusicService>();
         services.AddSingleton<IDownloadManagerService, DownloadManagerService>();
         services.AddSingleton<IUploadManagerService, UploadManagerService>();

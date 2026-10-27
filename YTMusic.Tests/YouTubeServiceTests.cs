@@ -15,7 +15,7 @@ namespace YTMusic.Tests
 
         public YouTubeServiceTests()
         {
-            _youTubeService = new YouTubeService(new TestDownloadMusicDirectoryProvider());
+            _youTubeService = new YouTubeService(new UnusedYouTubeApiClient(), new TestDownloadMusicDirectoryProvider());
         }
 
         [Fact]
@@ -64,6 +64,18 @@ namespace YTMusic.Tests
             {
                 System.IO.File.Delete(filePath);
             }
+        }
+
+        private sealed class UnusedYouTubeApiClient : IYouTubeApiClient
+        {
+            public IAsyncEnumerable<YoutubeExplode.Search.VideoSearchResult> SearchVideosAsync(string query)
+                => throw new NotSupportedException();
+
+            public Task<YoutubeExplode.Videos.Streams.StreamManifest> GetStreamManifestAsync(string videoId)
+                => throw new NotSupportedException();
+
+            public Task DownloadStreamAsync(YoutubeExplode.Videos.Streams.IStreamInfo streamInfo, string filePath, IProgress<double>? progress = null)
+                => throw new NotSupportedException();
         }
 
         private sealed class TestDownloadMusicDirectoryProvider : IDownloadMusicDirectoryProvider

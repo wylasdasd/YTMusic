@@ -23,7 +23,7 @@
                        Dense="true">
                 <MudSelectItem T="FavoriteTrackSortMode" Value="FavoriteTrackSortMode.Time">时间</MudSelectItem>
                 <MudSelectItem T="FavoriteTrackSortMode" Value="FavoriteTrackSortMode.Name">名称</MudSelectItem>
-                @if (!ViewModel.IsDownloadedCatalog)
+                @if (!ViewModel.IsDownloadedCatalog && !ViewModel.IsLocalLibrary)
                 {
                     <MudSelectItem T="FavoriteTrackSortMode" Value="FavoriteTrackSortMode.Downloaded">已下载</MudSelectItem>
                     <MudSelectItem T="FavoriteTrackSortMode" Value="FavoriteTrackSortMode.NotDownloaded">未下载</MudSelectItem>
@@ -34,6 +34,12 @@
         {
             <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
                 已下载按存放目录分组，展开后查看曲目。可通过爱心按钮收藏到其他收藏夹。
+            </MudAlert>
+        }
+        else if (ViewModel.IsLocalLibrary)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
+                来自本地文件夹，按存放目录分组。删除这个收藏夹不会删除磁盘上的文件。
             </MudAlert>
         }
     </Header>
@@ -47,10 +53,10 @@
         else if (!ViewModel.Tracks.Any())
         {
             <MudAlert Severity="Severity.Info" Class="mt-4">
-                @(ViewModel.IsDownloadedCatalog ? "暂无本地下载文件。" : "当前收藏夹没有符合条件的歌曲。")
+                @(ViewModel.IsDownloadedCatalog ? "暂无本地下载文件。" : ViewModel.IsLocalLibrary ? "这个文件夹里没有音频文件。" : "当前收藏夹没有符合条件的歌曲。")
             </MudAlert>
         }
-        else if (ViewModel.IsDownloadedCatalog)
+        else if (ViewModel.UsesDirectoryGroups)
         {
             <div class="local-library mt-2">
                 @foreach (var node in ViewModel.DirectoryNodes)
@@ -100,12 +106,15 @@
                                                    OnClick="@(async () => await ViewModel.OpenFavoriteFolderDialogAsync(track))"
                                                    aria-label="管理收藏夹" />
                                 </div>
-                                <div @onclick:stopPropagation="true">
-                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                                   Color="Color.Error"
-                                                   OnClick="@(async () => await ViewModel.DeleteLocalFileAsync(track))"
-                                                   aria-label="删除本地文件" />
-                                </div>
+                                @if (ViewModel.IsDownloadedCatalog)
+                                {
+                                    <div @onclick:stopPropagation="true">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                       Color="Color.Error"
+                                                       OnClick="@(async () => await ViewModel.DeleteLocalFileAsync(track))"
+                                                       aria-label="删除本地文件" />
+                                    </div>
+                                }
                             </MudPaper>
                         </TrackRow>
                     </LocalDirectoryGroup>
