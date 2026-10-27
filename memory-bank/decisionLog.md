@@ -1,5 +1,17 @@
 # 决策日志 (Decision Log)
 
+## 2026-10-27: 废除 YouTube 视频本地下载，仅保留在线播放与音频下载
+
+- **决策**:
+  - 移除「下载视频」入口与 `YoutubeExplode.Converter` / FFmpeg 合并方案；`YouTubeService.DownloadAsync(isVideo: true)` 明确拒绝。
+  - **在线视频**仍通过分离流（video-only + audio-only）播放：Android 原生合并 / Windows Hybrid，不依赖本地下载。
+  - **本地下载**仅保留 **audio-only** 单文件（WebM 优先）。
+- **原因**:
+  1. YouTube 已基本不再提供可靠的 **muxed（音画合一）** 流；高清需分离轨，本地下载须 **FFmpeg 或 Converter 附带的大体积 `ffmpeg.exe`**（常见数十～上百 MB），与「轻量客户端、主要在线听看」产品方向不符。
+  2. 分离流在线播放已在应用内解决；离线视频需维护合并、存储、版权与失败面（代理/风控与播放相同甚至更重），投入产出低。
+  3. 用户仅需 **在线看视频 + 下载音频**；视频下载能力暂停而非删除播放架构。
+- **相关文件**: `YouTubeService.cs`、`Search.razor`、`PlayerAudio.razor`、`PlayerVideo.razor`、`PlayerVM.cs`、`AppGlobal.Network.VideoDownloadNotSupported`。
+
 ## 2026-06-29: 全仓库 Markdown 文档与代码基线对齐
 
 - **决策**:

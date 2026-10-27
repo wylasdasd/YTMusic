@@ -8,8 +8,10 @@ namespace YTMusic.Services.Playback;
 public sealed class PlaybackProxyCoordinator
 {
     private LocalAudioProxy? _audioProxy;
+    private LocalAudioProxy? _companionAudioProxy;
     private LocalFileProxy? _fileProxy;
     private readonly SemaphoreSlim _audioProxyInitLock = new(1, 1);
+    private readonly SemaphoreSlim _companionProxyInitLock = new(1, 1);
     private readonly SemaphoreSlim _fileProxyInitLock = new(1, 1);
 
     public PlaybackProxyCoordinator()
@@ -113,6 +115,43 @@ public sealed class PlaybackProxyCoordinator
         var url = $"{_audioProxy.ProxyUrl}?t={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
         PlaybackDiagnostics.Log($"BuildWebVideoStreamUrl proxy={url} upstream={PlaybackDiagnostics.DescribeUrl(videoStreamInfo.Url)}");
         return url;
+    }
+
+    /// <summary>
+    /// 第二条本地代理。在线分离流的画面和伴音不能共用同一个 <see cref="LocalAudioProxy"/>。
+    /// </summary>
+    public async Task<string> BuildWebCompanionAudioUrlAsync(IStreamInfo audioStreamInfo)
+    {
+        await EnsureCompanionAudioProxyCreatedAsync().ConfigureAwait(false);
+        _companionAudioProxy!.ContentType = GetStreamContentType(audioStreamInfo, false);
+        _companionAudioProxy.CurrentStreamInfo = audioStreamInfo;
+        var url = $"{_companionAudioProxy.ProxyUrl}?t={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+        PlaybackDiagnostics.Log($"BuildWebCompanionAudioUrl proxy={url} upstream={PlaybackDiagnostics.DescribeUrl(audioStreamInfo.Url)}");
+        return url;
+    }
+
+    private async Task EnsureCompanionAudioProxyCreatedAsync()
+    {
+        if (_companionAudioProxy != null)
+        {
+            return;
+        }
+
+        await _companionProxyInitLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_companionAudioProxy != null)
+            {
+                return;
+            }
+
+            _companionAudioProxy = new LocalAudioProxy();
+            PlaybackDiagnostics.Log($"Companion audio proxy ready url={_companionAudioProxy.ProxyUrl}");
+        }
+        finally
+        {
+            _companionProxyInitLock.Release();
+        }
     }
 
     public string BuildAudioProxyStreamUrl(IStreamInfo streamInfo, bool isVideo)

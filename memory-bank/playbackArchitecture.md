@@ -52,8 +52,8 @@ IPlaybackInstance × 5
 | `NativeAudio` | Android `PlaybackForegroundService` ExoPlayer | 在线/本地音频（Android） |
 | `NativeVideo` | Android `VideoPlayerActivity` ExoPlayer 全屏 | 本地 `.mp4`、在线视频（Android） |
 | `WebAudio` | `GlobalAudioPlayer` `<audio>` + 代理 | Windows 在线音频、Android 无原生兜底 |
-| `WebMuxedVideo` | `GlobalAudioPlayer` `<video>` + 代理 | Windows 在线 muxed / video-only 单流 |
-| `Hybrid` | 原生音频轨 + Web `<video>` 画面（静音） | 非 Android 分离流（iOS 有原生音频；Windows 无原生音频时为已知 gap，依赖 muxed 优先） |
+| `WebMuxedVideo` | `GlobalAudioPlayer` `<video>` + 代理 | 本地单文件视频（非 YouTube 在线分离流） |
+| `Hybrid` | Web 静音 `<video>` + 伴音 | 非 Android 在线分离流。iOS 伴音走 `INativeAudio`；Windows 无原生音频，伴音走第二条代理 + Web `<audio>` |
 | `None` | 无活跃实例 | 停止 / 失败清空后 |
 
 **派生 UI 属性**（`MusicPlayerService`）
@@ -77,10 +77,9 @@ IPlaybackInstance × 5
 
 | 平台 | 视频请求 | 流类型 | Kind |
 |------|----------|--------|------|
-| Android | 是 | muxed 单 URL | `NativeVideo` |
 | Android | 是 | video-only + audio-only | `NativeVideo` + `MergingMediaSource` |
-| Windows / iOS | 是 | video-only + audio-only | `Hybrid`（Web 静音视频 + `INativeAudio` 播 companion；Windows 无原生音频时需 muxed 或后续改进） |
-| Windows / iOS | 是 | muxed / 单 video URL | `WebMuxedVideo` |
+| Windows | 是 | video-only + audio-only | `Hybrid`：Web 静音视频 + 第二条 `LocalAudioProxy` 上的 Web `<audio>` |
+| iOS | 是 | video-only + audio-only | `Hybrid`：Web 静音视频 + `INativeAudio` 播 companion |
 | 任意 | 否（音频） | audio-only WebM 优先 | `NativeAudio`（Android）/ `WebAudio`+代理（Windows） |
 
 入口：`PlayInternalAsync(PlayingItem)`  
@@ -91,8 +90,7 @@ IPlaybackInstance × 5
 ## 5. 在线流解析 (`ResolveRemoteWebVideoStreamsAsync`)
 
 **顺序（固定）**
-1. 有 **muxed** → 优先 `GetWithHighestVideoQuality()`，单 URL，不走合并。
-2. 无 muxed → **video-only (mp4)** + **audio-only (WebM 优先)** 分离流。
+1. **video-only (mp4)** + **audio-only (WebM 优先)**。没有 audio-only 则失败，不回退 muxed。
 
 **分离流画质**（`UiPreferencesService.RemoteVideoStreamQuality`，默认 **最低**）
 - `Lowest`：`SelectLowestVideoOnlyStream` — mp4 中分辨率最低档，起播更快。
@@ -142,8 +140,9 @@ await next.AttachAsync(host, source, options);
 - 实际加载由 `GlobalAudioPlayer` 监听 `OnChange` → `audioPlayer.loadSource` / `syncWebVideoState`。
 
 ### Hybrid
-- `Attach`：先 `NativeAudio.PlayAsync(companionAudioUrl)`，再 `RequestWebStateSync`（Web 视频静音）。
-- `PlayAsync`：原生 Resume + `PlayWebPlaybackAsync(videoOnly: true)` 同步。
+- iOS：`Attach` 先 `NativeAudio.PlayAsync(companionAudioUrl)`，再 `RequestWebStateSync`（Web 视频静音）。
+- Windows：`UseWebCompanionAudio`。画面和伴音各走一条 `LocalAudioProxy`；`<video>` 静音，`<audio>` 为进度时钟。
+- `Play` / `Pause` / `Seek`：有原生音频时两边一起动；Windows 只驱动 Web 音视频。
 
 ## 8. UI 层协作
 
@@ -179,8 +178,8 @@ await next.AttachAsync(host, source, options);
 ## 11. 修改时勿回归
 
 - [ ] 切换曲目/音轨时无双音轨（必须先 `Detach` 旧 `IPlaybackInstance`）。
-- [ ] Android 在线视频走 `NativeVideo`，不回到 WebView 主路径。
-- [ ] muxed 仍优先于分离流合并。
+- [ ] 在线视频仅分离流（video-only + audio-only），无 muxed 回退。
+- [ ] Windows 在线视频伴音走 Web `<audio>`，不依赖 `NullNativeAudioPlaybackService`。
 - [ ] 本地 webm 不当视频；仅 `.mp4` + `IsVideo` 走视频。
 - [ ] 全屏视频 `autoPlay` 从 Intent 传到 ExoPlayer，不在 Attach 后再 `PauseAsync`。
 - [ ] 全屏播放期间屏幕常亮。

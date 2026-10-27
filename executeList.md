@@ -6,7 +6,8 @@
 
 ### 1. YouTube 数据与流解析
 - 使用 **YoutubeExplode**（无需官方 API Key）完成搜索、分页与流地址提取。
-- 默认播放 **audio-only** 流；视频模式支持 muxed 单流或 video-only + audio-only 分离流。
+- 默认播放 **audio-only** 流；**在线视频**为 video-only + audio-only 分离流（无 muxed 依赖）。
+- **本地下载**：仅 **音频**；YouTube **视频不下载到本地**（见 `memory-bank/decisionLog.md` 2026-10-27）。
 - 流 URL **即时解析**（JIT），不长期缓存（YouTube 链接会过期）。
 
 ### 2. 播放引擎（当前架构）
@@ -19,7 +20,7 @@
 
 ### 3. 默认音频 / 可选视频
 - 音频：`GetAudioOnlyStreams()`，WebM 优先。
-- 视频：muxed 优先；无 muxed 时合并或 Hybrid（分离流，见播放架构文档）。
+- 在线视频：分离流 + Hybrid / 原生合并（见播放架构文档）；不提供视频本地下载。
 - Android 在线视频走原生 ExoPlayer；Windows 走 Web `<video>` 或 Hybrid。
 
 ### 4. 后台播放（Android）

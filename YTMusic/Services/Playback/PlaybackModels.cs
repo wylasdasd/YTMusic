@@ -31,6 +31,8 @@ namespace YTMusic.Services.Playback
         public double? DurationSeconds { get; init; }
         public string? ThumbnailUrl { get; init; }
         public string? CompanionAudioUrl { get; init; }
+        /// <summary>无原生音频时，由 Web <audio> 播放已代理的伴音（Windows）。</summary>
+        public bool UseWebCompanionAudio { get; init; }
         public IStreamInfo? ProxyStreamInfo { get; init; }
     }
 

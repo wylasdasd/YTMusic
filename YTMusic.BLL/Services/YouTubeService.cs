@@ -2,6 +2,7 @@ using System.IO;
 using CommonHelp;
 using YoutubeExplode.Videos.Streams;
 using YTMusic.BLL.Abstractions;
+using YTMusic.BLL.Infrastructure.YouTube;
 using YTMusic.BLL.Ports;
 
 namespace YTMusic.BLL.Services;
@@ -25,14 +26,7 @@ public sealed class YouTubeService : IYouTubeService
     public async Task<string?> GetAudioOnlyStreamUrlAsync(string videoId)
     {
         var manifest = await _youTubeApiClient.GetStreamManifestAsync(videoId);
-        var streamInfo = manifest.GetAudioOnlyStreams().GetWithHighestBitrate();
-        return streamInfo?.Url;
-    }
-
-    public async Task<string?> GetMuxedStreamUrlAsync(string videoId)
-    {
-        var manifest = await _youTubeApiClient.GetStreamManifestAsync(videoId);
-        var streamInfo = manifest.GetMuxedStreams().GetWithHighestVideoQuality();
+        var streamInfo = YouTubeStreamSelection.SelectPreferredAudioStream(manifest);
         return streamInfo?.Url;
     }
 
@@ -48,29 +42,24 @@ public sealed class YouTubeService : IYouTubeService
 
     private async Task<string> DownloadCoreAsync(string videoId, string fileName, bool isVideo, IProgress<double>? progress)
     {
-        var streamManifest = await _youTubeApiClient.GetStreamManifestAsync(videoId);
-        IStreamInfo? streamInfo;
-
-        if (isVideo)
-        {
-            streamInfo = streamManifest.GetMuxedStreams().GetWithHighestVideoQuality();
-        }
-        else
-        {
-            streamInfo = streamManifest.GetAudioOnlyStreams()
-                .Where(s => s.Container == Container.WebM)
-                .GetWithHighestBitrate() ?? streamManifest.GetAudioOnlyStreams().GetWithHighestBitrate();
-        }
-
-        if (streamInfo == null)
-        {
-            throw new InvalidOperationException($"No {(isVideo ? "video" : "audio")} stream found.");
-        }
-
         var musicDirectory = _downloadMusicDirectoryProvider.GetDownloadedMusicDirectory();
         FileHelp.EnsureDirectoryExists(musicDirectory + Path.DirectorySeparatorChar);
 
         var safeFileName = FileHelp.SafeFileName(fileName);
+
+        if (isVideo)
+        {
+            throw new InvalidOperationException(AppGlobal.Network.VideoDownloadNotSupported);
+        }
+
+        var streamManifest = await _youTubeApiClient.GetStreamManifestAsync(videoId);
+        var streamInfo = YouTubeStreamSelection.SelectPreferredAudioStream(streamManifest);
+
+        if (streamInfo == null)
+        {
+            throw new InvalidOperationException("未找到可下载的音频流。");
+        }
+
         var filePath = Path.Combine(musicDirectory, $"{safeFileName}.{streamInfo.Container.Name}");
 
         await _youTubeApiClient.DownloadStreamAsync(streamInfo, filePath, progress);

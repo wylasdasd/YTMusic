@@ -86,8 +86,16 @@ public static class AppGlobal
         /// <summary>无法连接 YouTube 时的默认用户提示文案。</summary>
         public const string DefaultConnectionError = "无法连接到 YouTube 服务器";
 
-        /// <summary>连接失败时附带的 VPN 切换建议。</summary>
-        public const string VpnRetryHint = "可尝试切换 VPN 节点后重试。";
+        /// <summary>连接失败时附带的 VPN / 代理切换建议。</summary>
+        public const string VpnRetryHint = "请换更干净、人少的代理节点，或关闭代理后用家庭宽带重试。";
+
+        /// <summary>YouTube 拒绝匿名取流（机器人检测 / 共享代理 IP）时的说明。</summary>
+        public const string YouTubeAnonymousAccessBlocked =
+            "YouTube 拒绝了当前网络的匿名取流（常见于共享 VPN 或机房代理）。请更换更干净的代理、切换冷门节点，或关闭代理后用家庭宽带重试。";
+
+        /// <summary>已废除 YouTube 视频本地下载时的用户提示（仅保留在线播放与音频下载）。</summary>
+        public const string VideoDownloadNotSupported =
+            "不支持将 YouTube 视频下载到本地，请使用在线播放。仅支持下载音频。";
     }
 
     /// <summary>进程内可变共享状态（无 DI 场景或冷却窗口等）。</summary>

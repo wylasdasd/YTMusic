@@ -18,6 +18,7 @@
     private ElementReference _videoHost;
     private DotNetObjectReference<GlobalAudioPlayer>? _objRef;
     private string? _lastUrl = null;
+    private string? _lastCompanionUrl;
     private bool _lastIsVideo;
     private bool _lastPlaying;
     private bool _lastHybrid;
@@ -120,6 +121,7 @@
         }
 
         var stateChanged = PlayerService.CurrentStreamUrl != _lastUrl
+            || PlayerService.CurrentCompanionAudioUrl != _lastCompanionUrl
             || PlayerService.IsCurrentStreamVideo != _lastIsVideo
             || PlayerService.IsPlaying != _lastPlaying
             || PlayerService.IsUsingHybridWebVideo != _lastHybrid;
@@ -130,6 +132,7 @@
         }
 
         _lastUrl = PlayerService.CurrentStreamUrl;
+        _lastCompanionUrl = PlayerService.CurrentCompanionAudioUrl;
         _lastIsVideo = PlayerService.IsCurrentStreamVideo;
         _lastPlaying = PlayerService.IsPlaying;
         _lastHybrid = PlayerService.IsUsingHybridWebVideo;
@@ -168,7 +171,8 @@
             PlayerService.IsCurrentStreamWebM,
             PlayerService.IsUsingHybridWebVideo,
             PlayerService.IsPlaying,
-            PlayerService.CurrentTime);
+            PlayerService.CurrentTime,
+            PlayerService.CurrentCompanionAudioUrl);
     }
 
     private async Task SyncWebAudioAsync()
@@ -226,7 +230,11 @@
         {
             try
             {
-                if (PlayerService.IsUsingHybridWebVideo)
+                if (PlayerService.UsesWebCompanionAudio)
+                {
+                    await JSRuntime.InvokeVoidAsync("audioPlayer.play");
+                }
+                else if (PlayerService.IsUsingHybridWebVideo)
                 {
                     await JSRuntime.InvokeVoidAsync("audioPlayer.playVideoOnly");
                 }

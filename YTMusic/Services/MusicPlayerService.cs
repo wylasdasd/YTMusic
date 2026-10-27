@@ -55,6 +55,11 @@ namespace YTMusic.Services
         public bool IsUsingNativePlayback => ActivePlaybackKind == PlaybackKind.NativeAudio;
         public bool IsUsingNativeVideoPlayback => ActivePlaybackKind == PlaybackKind.NativeVideo;
         public bool IsUsingHybridWebVideo => ActivePlaybackKind == PlaybackKind.Hybrid;
+        /// <summary>Hybrid 且伴音由 Web &lt;audio&gt; 播放（Windows 等无原生音频的平台）。</summary>
+        public bool UsesWebCompanionAudio =>
+            ActivePlaybackKind == PlaybackKind.Hybrid
+            && !string.IsNullOrEmpty(CurrentCompanionAudioUrl);
+        public string? CurrentCompanionAudioUrl { get; private set; }
         public bool UsesWebPlaybackSink => ActivePlaybackKind.UsesWebSink();
         public bool IsCurrentStreamWebM { get; private set; }
         public bool IsCurrentStreamVideo { get; private set; }
@@ -678,57 +683,25 @@ namespace YTMusic.Services
                         var companionAudio = webVideo.CompanionAudioStream;
                         var isWebM = videoStreamInfo.Container == Container.WebM;
 
+                        if (companionAudio == null)
+                        {
+                            PlaybackDiagnostics.LogError(
+                                $"PlayRemoteVideo missing companion audio videoId={video.VideoId}");
+                            await _networkErrorService.NotifyFailureAsync("播放");
+                            return false;
+                        }
+
                         if (PlaybackRouteSelector.ShouldUseNativeOnlineVideo(_nativeVideo))
                         {
-                            if (companionAudio != null)
-                            {
-                                PlaybackDiagnostics.Log(
-                                    $"PlayRemoteVideo native-merge video={videoStreamInfo.Container} audio={companionAudio.Container}");
-                                await ActivatePlaybackAsync(
-                                    PlaybackKind.NativeVideo,
-                                    new PlaybackSource
-                                    {
-                                        StreamUrl = videoStreamInfo.Url,
-                                        CompanionAudioUrl = companionAudio.Url,
-                                        IsLocalFile = false,
-                                        IsWebM = isWebM,
-                                        IsVideo = true,
-                                        Title = video.Title,
-                                        Artist = video.Author,
-                                        DurationSeconds = video.DurationSeconds
-                                    },
-                                    options);
-                            }
-                            else
-                            {
-                                PlaybackDiagnostics.Log(
-                                    $"PlayRemoteVideo native-muxed container={videoStreamInfo.Container}");
-                                await ActivatePlaybackAsync(
-                                    PlaybackKind.NativeVideo,
-                                    new PlaybackSource
-                                    {
-                                        StreamUrl = videoStreamInfo.Url,
-                                        IsLocalFile = false,
-                                        IsWebM = isWebM,
-                                        IsVideo = true,
-                                        Title = video.Title,
-                                        Artist = video.Author,
-                                        DurationSeconds = video.DurationSeconds
-                                    },
-                                    options);
-                            }
-                        }
-                        else if (companionAudio != null)
-                        {
-                            var webUrl = await _proxyCoordinator.BuildWebVideoStreamUrlAsync(videoStreamInfo).ConfigureAwait(false);
                             PlaybackDiagnostics.Log(
-                                $"PlayRemoteVideo hybrid video={videoStreamInfo.Container} audio={companionAudio.Container} webUrl={PlaybackDiagnostics.DescribeUrl(webUrl)}");
+                                $"PlayRemoteVideo native-merge video={videoStreamInfo.Container} audio={companionAudio.Container}");
                             await ActivatePlaybackAsync(
-                                PlaybackKind.Hybrid,
+                                PlaybackKind.NativeVideo,
                                 new PlaybackSource
                                 {
-                                    StreamUrl = webUrl,
+                                    StreamUrl = videoStreamInfo.Url,
                                     CompanionAudioUrl = companionAudio.Url,
+                                    IsLocalFile = false,
                                     IsWebM = isWebM,
                                     IsVideo = true,
                                     Title = video.Title,
@@ -740,11 +713,25 @@ namespace YTMusic.Services
                         else
                         {
                             var webUrl = await _proxyCoordinator.BuildWebVideoStreamUrlAsync(videoStreamInfo).ConfigureAwait(false);
+                            var useWebCompanion = !_nativeAudio.IsSupported;
+                            var companionUrl = useWebCompanion
+                                ? await _proxyCoordinator.BuildWebCompanionAudioUrlAsync(companionAudio).ConfigureAwait(false)
+                                : companionAudio.Url;
                             PlaybackDiagnostics.Log(
-                                $"PlayRemoteVideo muxed/web-only video={videoStreamInfo.Container} webUrl={PlaybackDiagnostics.DescribeUrl(webUrl)}");
+                                $"PlayRemoteVideo hybrid video={videoStreamInfo.Container} audio={companionAudio.Container} webCompanion={useWebCompanion} webUrl={PlaybackDiagnostics.DescribeUrl(webUrl)} audioUrl={PlaybackDiagnostics.DescribeUrl(companionUrl)}");
                             await ActivatePlaybackAsync(
-                                PlaybackKind.WebMuxedVideo,
-                                PlaybackRouteSelector.BuildWebPlaybackSource(webUrl, isWebM, true, video.Title, video.Author, video.DurationSeconds),
+                                PlaybackKind.Hybrid,
+                                new PlaybackSource
+                                {
+                                    StreamUrl = webUrl,
+                                    CompanionAudioUrl = companionUrl,
+                                    UseWebCompanionAudio = useWebCompanion,
+                                    IsWebM = isWebM,
+                                    IsVideo = true,
+                                    Title = video.Title,
+                                    Artist = video.Author,
+                                    DurationSeconds = video.DurationSeconds
+                                },
                                 options);
                         }
 
@@ -1062,6 +1049,12 @@ namespace YTMusic.Services
             CurrentStreamUrl = streamUrl;
             IsCurrentStreamWebM = isWebM;
             IsCurrentStreamVideo = isVideo;
+            CurrentCompanionAudioUrl = null;
+        }
+
+        void IPlaybackHost.SetWebCompanionAudioUrl(string? url)
+        {
+            CurrentCompanionAudioUrl = string.IsNullOrWhiteSpace(url) ? null : url;
         }
 
         void IPlaybackHost.ResetPlaybackTiming()

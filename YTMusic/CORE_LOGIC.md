@@ -12,7 +12,7 @@
 - `MusicPlayerService` 作为唯一状态源，实现 `IPlaybackHost`。
 - `PlaybackSwitcher` 用 `SemaphoreSlim` 串行执行 `Detach` → `Attach`，任意时刻仅一种 `PlaybackKind` 活跃。
 - 五种实例：`NativeAudio`、`NativeVideo`、`WebAudio`、`WebMuxedVideo`、`Hybrid`。
-- Android 在线视频统一走 `NativeVideo`（ExoPlayer 全屏）；Windows 走 Web `<video>` 或 Hybrid（分离流时 Web 静音画面 + 原生/iOS 音频轨）。
+- Android 在线视频统一走 `NativeVideo`（ExoPlayer 合并分离流）。Windows 在线视频走 Hybrid：静音 `<video>` + 第二条代理上的 `<audio>`。iOS Hybrid 仍用原生音频轨。
 
 **核心代码：**
 - `Services/MusicPlayerService.cs`
@@ -45,7 +45,7 @@
 **解决逻辑：**
 - 集成 `YoutubeExplode`：`GetManifestAsync` → 按场景选流。
 - 音频：`.GetAudioOnlyStreams()`，WebM 优先。
-- 视频：muxed 优先；无 muxed 时 video-only (mp4) + audio-only (WebM) 分离流。
+- 在线视频：video-only + audio-only 分离流（播放用）；**不**提供 YouTube 视频本地下载（仅音频可下载，见 `memory-bank/decisionLog.md`）。
 - 分离流画质：`UiPreferencesService.RemoteVideoStreamQuality`（默认最低，Theme 侧边栏可改）。
 - 可选后台预检：`PrefetchRemoteVideo`（默认关）；在线视频确认弹窗**不再**前置 manifest 检测。
 - 流 URL 在用户点击播放时 **JIT** 解析，不长期缓存。

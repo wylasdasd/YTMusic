@@ -12,6 +12,7 @@ namespace YTMusic.Services.Abstractions.Playback
 
         void SetActivePlaybackKind(PlaybackKind kind);
         void UpdateStreamPresentation(string? streamUrl, bool isWebM, bool isVideo);
+        void SetWebCompanionAudioUrl(string? url);
         void ResetPlaybackTiming();
         void NotifyStateChanged();
 

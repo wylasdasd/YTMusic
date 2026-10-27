@@ -83,7 +83,6 @@
                                  TransformOrigin="Origin.TopRight"
                                  aria-label="Download">
                             <MudMenuItem OnClick="@(() => ViewModel.Download(false))">Download Audio</MudMenuItem>
-                            <MudMenuItem OnClick="@(() => ViewModel.Download(true))">Download Video</MudMenuItem>
                         </MudMenu>
                     </div>
 
@@ -320,7 +319,8 @@
             PlayerService.IsCurrentStreamWebM,
             PlayerService.IsUsingHybridWebVideo,
             PlayerService.IsPlaying,
-            PlayerService.CurrentTime);
+            PlayerService.CurrentTime,
+            PlayerService.CurrentCompanionAudioUrl);
     }
 
     protected override void OnAfterRender(bool firstRender)

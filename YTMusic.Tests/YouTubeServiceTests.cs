@@ -40,16 +40,6 @@ namespace YTMusic.Tests
         }
 
         [Fact]
-        public async Task GetMuxedStreamUrlAsync_ReturnsValidUrl()
-        {
-            string videoId = "dQw4w9WgXcQ";
-            var url = await _youTubeService.GetMuxedStreamUrlAsync(videoId);
-
-            Assert.False(string.IsNullOrEmpty(url));
-            Assert.Contains("http", url);
-        }
-
-        [Fact]
         public async Task DownloadAsync_DownloadsFile()
         {
             string videoId = "dQw4w9WgXcQ";
@@ -76,6 +66,7 @@ namespace YTMusic.Tests
 
             public Task DownloadStreamAsync(YoutubeExplode.Videos.Streams.IStreamInfo streamInfo, string filePath, IProgress<double>? progress = null)
                 => throw new NotSupportedException();
+
         }
 
         private sealed class TestDownloadMusicDirectoryProvider : IDownloadMusicDirectoryProvider

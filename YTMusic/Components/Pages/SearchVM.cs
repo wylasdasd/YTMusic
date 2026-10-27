@@ -152,6 +152,12 @@ public sealed partial class SearchVM : ViewModelBase, IDisposable
 
     public void Download(VideoSearchResult video, bool isVideo)
     {
+        if (isVideo)
+        {
+            _notifier.Warning(YTMusic.BLL.AppGlobal.Network.VideoDownloadNotSupported);
+            return;
+        }
+
         _downloadManager.StartDownload(video.Id.Value, video.Title, isVideo);
         _notifier.Info($"Added '{video.Title}' to transfers.");
     }

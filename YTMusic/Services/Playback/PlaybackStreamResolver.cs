@@ -1,4 +1,5 @@
 using YoutubeExplode.Videos.Streams;
+using YTMusic.BLL.Infrastructure.YouTube;
 using YTMusic.BLL.Ports;
 
 namespace YTMusic.Services.Playback;
@@ -17,9 +18,7 @@ public sealed class PlaybackStreamResolver
         => _youTubeApiClient.GetStreamManifestAsync(videoId);
 
     public static IStreamInfo? SelectPreferredAudioStream(StreamManifest manifest)
-        => manifest.GetAudioOnlyStreams()
-            .Where(s => s.Container == Container.WebM)
-            .GetWithHighestBitrate() ?? manifest.GetAudioOnlyStreams().GetWithHighestBitrate();
+        => YouTubeStreamSelection.SelectPreferredAudioStream(manifest);
 
     public async Task<IStreamInfo?> GetPreferredAudioStreamInfoAsync(string videoId, CancellationToken cancellationToken = default)
     {
@@ -33,18 +32,10 @@ public sealed class PlaybackStreamResolver
         bool preferLowestVideo = true)
     {
         var manifest = await GetStreamManifestAsync(videoId, cancellationToken).ConfigureAwait(false);
-        var muxedCount = manifest.GetMuxedStreams().Count();
         var videoOnlyCount = manifest.GetVideoOnlyStreams().Count();
         var audioOnlyCount = manifest.GetAudioOnlyStreams().Count();
         PlaybackDiagnostics.Log(
-            $"ResolveStreams videoId={videoId} muxed={muxedCount} videoOnly={videoOnlyCount} audioOnly={audioOnlyCount} preferLowest={preferLowestVideo}");
-
-        var muxed = manifest.GetMuxedStreams().GetWithHighestVideoQuality();
-        if (muxed != null)
-        {
-            PlaybackDiagnostics.Log($"ResolveStreams using muxed container={muxed.Container}");
-            return new RemoteWebVideoStreams { VideoStream = muxed, CompanionAudioStream = null };
-        }
+            $"ResolveStreams videoId={videoId} videoOnly={videoOnlyCount} audioOnly={audioOnlyCount} preferLowest={preferLowestVideo}");
 
         var videoOnly = preferLowestVideo
             ? SelectLowestVideoOnlyStream(manifest)
@@ -59,6 +50,12 @@ public sealed class PlaybackStreamResolver
         }
 
         var companionAudio = SelectPreferredAudioStream(manifest);
+        if (companionAudio == null)
+        {
+            PlaybackDiagnostics.LogError($"ResolveStreams no audio-only companion videoId={videoId}");
+            return null;
+        }
+
         var videoHeight = videoOnly is IVideoStreamInfo videoStream
             ? videoStream.VideoQuality.MaxHeight
             : 0;

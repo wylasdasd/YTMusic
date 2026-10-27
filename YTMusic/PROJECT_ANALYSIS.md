@@ -167,7 +167,7 @@ MusicPlayerService (IPlaybackHost)
 
 ### 3. Hybrid 与 Windows
 
-分离流在线视频在非 Android 平台走 `Hybrid`（Web 静音视频 + `INativeAudio` 播 companion 音频）。Windows 注入 `NullNativeAudioPlaybackService`，该路径下原生音频为 no-op；实际依赖 muxed 优先或后续改进。
+分离流在线视频在非 Android 平台走 `Hybrid`（Web 静音视频 + 伴音）。iOS 伴音走 `INativeAudio`。Windows 的 `NullNativeAudioPlaybackService` 不播声，伴音改由第二条 `LocalAudioProxy` 供 Web `<audio>` 播放。
 
 ### 4. VM 组织
 

@@ -21,6 +21,8 @@ window.audioPlayer = {
     pendingWebVideoShouldPlay: false,
     pendingWebVideoTime: null,
     webVideoCanPlayHandler: null,
+    webCompanionActive: false,
+    companionAudioUrl: null,
     progressBar: {
         container: null,
         slider: null,
@@ -307,6 +309,10 @@ window.audioPlayer = {
             if (self.isSeeking) return;
             if (self.activePlayer !== player) return;
 
+            if (self.webCompanionActive && player === self.nativeAudio && self.nativeVideo) {
+                self.alignWebVideoToAudio(player);
+            }
+
             self.updateProgressFromPlayer();
             if (typeof player.currentTime === "number") {
                 self.reportTimeToDotNet(player.currentTime);
@@ -399,6 +405,8 @@ window.audioPlayer = {
     stopWebPlayback: function () {
         this.pendingWebVideoShouldPlay = false;
         this.pendingWebVideoTime = null;
+        this.webCompanionActive = false;
+        this.companionAudioUrl = null;
         this.clearWebVideoCanPlayHandler();
         this.stopWebAudio();
         if (this.nativeVideo) {
@@ -456,7 +464,99 @@ window.audioPlayer = {
         video.addEventListener("canplay", this.webVideoCanPlayHandler);
     },
 
-    syncWebVideoState: function (url, isWebM, hybrid, playing, time) {
+    alignWebVideoToAudio: function (audio) {
+        const video = this.nativeVideo;
+        if (!video || !audio || typeof audio.currentTime !== "number") {
+            return;
+        }
+
+        if (video.readyState >= 2) {
+            const drift = Math.abs((video.currentTime || 0) - audio.currentTime);
+            if (drift > 0.4) {
+                try {
+                    video.currentTime = audio.currentTime;
+                } catch {
+                    // Video may not accept a seek until the next canplay.
+                }
+            }
+        }
+
+        if (!audio.paused && video.paused && !video.ended) {
+            video.play().catch(function () { });
+        }
+    },
+
+    syncWebCompanion: function (videoUrl, audioUrl, isWebM, playing, time) {
+        if (!videoUrl || !audioUrl || !this.nativeVideo || !this.nativeAudio) {
+            this.log("syncWebCompanion skipped", {
+                hasVideoUrl: !!videoUrl,
+                hasAudioUrl: !!audioUrl,
+                hasVideo: !!this.nativeVideo,
+                hasAudio: !!this.nativeAudio
+            });
+            return;
+        }
+
+        const video = this.nativeVideo;
+        const audio = this.nativeAudio;
+        const sameVideo = (video.currentSrc || video.src || "") === videoUrl;
+        const sameAudio = (audio.currentSrc || audio.src || "") === audioUrl;
+
+        this.log("syncWebCompanion", {
+            videoUrl: videoUrl,
+            audioUrl: audioUrl,
+            playing: !!playing,
+            time: time,
+            sameVideo: sameVideo,
+            sameAudio: sameAudio
+        });
+
+        this.webCompanionActive = true;
+        this.companionAudioUrl = audioUrl;
+        this.pendingUrl = videoUrl;
+        this.pendingIsWebM = !!isWebM;
+        this.pendingIsVideo = true;
+        this.isVideoActive = true;
+        this.activePlayer = audio;
+        this.pendingWebVideoShouldPlay = !!playing;
+        this.pendingWebVideoTime = Number.isFinite(time) ? time : null;
+        video.muted = true;
+        audio.muted = false;
+        this.updateVideoVisibility();
+
+        if (!sameVideo) {
+            video.pause();
+            video.src = videoUrl;
+            video.load();
+        } else if (!playing) {
+            video.pause();
+        }
+
+        if (!sameAudio) {
+            audio.pause();
+            audio.src = audioUrl;
+            audio.load();
+        } else if (!playing) {
+            audio.pause();
+        }
+
+        this.applyPendingWebVideoPlayback();
+        if (playing) {
+            audio.play().catch(function (e) {
+                window.audioPlayer.reportError("syncWebCompanion", audio, e);
+            });
+        }
+    },
+
+    syncWebVideoState: function (url, isWebM, hybrid, playing, time, companionAudioUrl) {
+        if (companionAudioUrl) {
+            this.syncWebCompanion(url, companionAudioUrl, isWebM, playing, time);
+            return;
+        }
+
+        this.webCompanionActive = false;
+        this.companionAudioUrl = null;
+
         if (!url || !this.nativeVideo) {
             this.log("syncWebVideoState skipped", { hasUrl: !!url, hasVideo: !!this.nativeVideo });
             return;
@@ -663,6 +763,8 @@ window.audioPlayer = {
     loadSource: function (url, isWebM, isVideo) {
         if (!url) return;
 
+        this.webCompanionActive = false;
+        this.companionAudioUrl = null;
         const nextIsVideo = !!isVideo;
         const currentSrc = this.activePlayer && (this.activePlayer.currentSrc || this.activePlayer.src);
         const currentFileKey = this.localProxyFileKey(currentSrc || "");
@@ -732,6 +834,8 @@ window.audioPlayer = {
         }
 
         const nextIsVideo = !!isVideo;
+        this.webCompanionActive = false;
+        this.companionAudioUrl = null;
         this.pendingUrl = url;
         this.pendingIsWebM = !!isWebM;
         this.pendingIsVideo = nextIsVideo;
@@ -780,6 +884,15 @@ window.audioPlayer = {
     },
 
     play: function () {
+        if (this.webCompanionActive) {
+            this.pendingWebVideoShouldPlay = true;
+            this.applyPendingWebVideoPlayback();
+            if (this.nativeAudio) {
+                this.nativeAudio.play().catch(e => this.reportError("play", this.nativeAudio, e));
+            }
+            return;
+        }
+
         if (this.isVideoActive && this.nativeVideo && this.activePlayer === this.nativeVideo) {
             this.pendingWebVideoShouldPlay = true;
             this.applyPendingWebVideoPlayback();
@@ -791,6 +904,17 @@ window.audioPlayer = {
         }
     },
     pause: function () {
+        if (this.webCompanionActive) {
+            this.pendingWebVideoShouldPlay = false;
+            if (this.nativeVideo) {
+                this.nativeVideo.pause();
+            }
+            if (this.nativeAudio) {
+                this.nativeAudio.pause();
+            }
+            return;
+        }
+
         if (this.isVideoActive && this.nativeVideo) {
             this.pendingWebVideoShouldPlay = false;
             this.nativeVideo.pause();
@@ -819,6 +943,14 @@ window.audioPlayer = {
             }
         } catch {
             this.activePlayer.currentTime = clamped;
+        }
+
+        if (this.webCompanionActive && this.nativeVideo && this.activePlayer !== this.nativeVideo) {
+            try {
+                this.nativeVideo.currentTime = clamped;
+            } catch {
+                // Video seek follows the audio clock on the next timeupdate.
+            }
         }
 
         if (this.seekTimer) {

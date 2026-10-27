@@ -168,13 +168,27 @@ namespace YTMusic.Services.Playback
         public PlaybackKind Kind => PlaybackKind.Hybrid;
 
         private IPlaybackHost? _host;
+        private bool _useWebCompanion;
 
         public async Task AttachAsync(IPlaybackHost host, PlaybackSource source, PlaybackOptions options)
         {
             _host = host;
+            _useWebCompanion = source.UseWebCompanionAudio;
             host.SetActivePlaybackKind(Kind);
             host.ResetPlaybackTiming();
             host.UpdateStreamPresentation(source.StreamUrl, source.IsWebM, true);
+            host.SetWebCompanionAudioUrl(_useWebCompanion ? source.CompanionAudioUrl : null);
+
+            if (_useWebCompanion)
+            {
+                host.RequestWebStateSync();
+                if (!options.AutoPlay)
+                {
+                    await host.PauseWebPlaybackAsync();
+                }
+
+                return;
+            }
 
             await host.NativeAudio.PlayAsync(
                 source.CompanionAudioUrl!,
@@ -210,18 +224,36 @@ namespace YTMusic.Services.Playback
 
         public async Task PlayAsync()
         {
+            if (_useWebCompanion)
+            {
+                await _host!.PlayWebPlaybackAsync(videoOnly: false);
+                return;
+            }
+
             await _host!.NativeAudio.ResumeAsync();
             await _host.PlayWebPlaybackAsync(videoOnly: true);
         }
 
         public async Task PauseAsync()
         {
+            if (_useWebCompanion)
+            {
+                await _host!.PauseWebPlaybackAsync();
+                return;
+            }
+
             await _host!.NativeAudio.PauseAsync();
             await _host.PauseWebPlaybackAsync();
         }
 
         public async Task SeekAsync(double positionSeconds)
         {
+            if (_useWebCompanion)
+            {
+                await _host!.SeekWebPlaybackAsync(positionSeconds);
+                return;
+            }
+
             await _host!.NativeAudio.SeekAsync(positionSeconds);
             await _host.SeekWebPlaybackAsync(positionSeconds);
         }

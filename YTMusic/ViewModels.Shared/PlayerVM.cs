@@ -134,6 +134,12 @@ public sealed partial class PlayerVM : ViewModelBase
             return;
         }
 
+        if (isVideo)
+        {
+            _notifier.Warning(YTMusic.BLL.AppGlobal.Network.VideoDownloadNotSupported);
+            return;
+        }
+
         _downloadManager.StartDownload(currentVideo.VideoId, currentVideo.Title, isVideo);
         _notifier.Success($"Started downloading: {currentVideo.Title}");
     }
