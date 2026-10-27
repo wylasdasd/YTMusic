@@ -6,6 +6,7 @@ public interface IDialogHost
     Task<string?> PromptCreateFolderNameAsync();
     Task<string?> PromptRenameFolderNameAsync(string currentName);
     Task<bool> ConfirmDeleteLocalFilesAsync(int count);
+    Task<bool> ConfirmDeleteLocalAndFavoriteAsync(string trackTitle);
     Task<bool> ConfirmDeleteFolderAsync(string folderName);
     Task<bool> ConfirmAppResetAsync();
     Task<bool> ConfirmRemoteVideoPlayAsync(string trackTitle);

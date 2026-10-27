@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
 using YTMusic.BLL.Abstractions;
+using YTMusic.BLL.Models;
 using YTMusic.BLL.Ports;
 using YTMusic.Services;
 using YTMusic.Services.Playback;
@@ -12,6 +13,7 @@ namespace YTMusic.ViewModels.Shared;
 public sealed partial class PlayerVM : ViewModelBase
 {
     private readonly IFavoriteService _favoriteService;
+    private readonly ILocalMusicService _localMusicService;
     private readonly IDownloadManagerService _downloadManager;
     private readonly IDialogHost _dialogHost;
     private readonly IUiNotifier _notifier;
@@ -26,6 +28,7 @@ public sealed partial class PlayerVM : ViewModelBase
 
     public PlayerVM(
         IFavoriteService favoriteService,
+        ILocalMusicService localMusicService,
         IDownloadManagerService downloadManager,
         IDialogHost dialogHost,
         IUiNotifier notifier,
@@ -34,6 +37,7 @@ public sealed partial class PlayerVM : ViewModelBase
         GlobalStateService globalState)
     {
         _favoriteService = favoriteService;
+        _localMusicService = localMusicService;
         _downloadManager = downloadManager;
         _dialogHost = dialogHost;
         _notifier = notifier;
@@ -142,6 +146,116 @@ public sealed partial class PlayerVM : ViewModelBase
 
         _downloadManager.StartDownload(currentVideo.VideoId, currentVideo.Title, isVideo);
         _notifier.Success($"Started downloading: {currentVideo.Title}");
+    }
+
+    [RelayCommand]
+    private async Task DeleteLocalAndUnfavoriteAsync()
+    {
+        var current = _playerService.CurrentVideo;
+        if (current == null || _playerService.IsSwitchingTrack)
+        {
+            return;
+        }
+
+        var path = current.LocalFilePath;
+        var videoId = current.VideoId;
+        var downloaded = !string.IsNullOrWhiteSpace(path)
+            ? await _localMusicService.GetDownloadedTrackByFilePathAsync(path)
+            : null;
+        if (downloaded == null
+            && !string.IsNullOrWhiteSpace(videoId)
+            && !string.Equals(videoId, "local", StringComparison.Ordinal))
+        {
+            downloaded = await _localMusicService.GetDownloadedTrackByVideoIdAsync(videoId);
+        }
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            path = downloaded?.LocalFilePath;
+        }
+
+        var favoriteVideoId = !string.IsNullOrWhiteSpace(downloaded?.VideoId)
+            && !string.Equals(downloaded.VideoId, "local", StringComparison.Ordinal)
+            ? downloaded.VideoId
+            : videoId;
+        var hasFile = !string.IsNullOrWhiteSpace(path) && File.Exists(path);
+        var favorited = IsFavorite;
+        if (!favorited && !string.IsNullOrWhiteSpace(path))
+        {
+            favorited = await _favoriteService.GetTrackByFilePathAsync(path) != null;
+        }
+
+        if (!favorited
+            && !string.IsNullOrWhiteSpace(favoriteVideoId)
+            && !string.Equals(favoriteVideoId, "local", StringComparison.Ordinal))
+        {
+            favorited = await _favoriteService.IsFavoriteInAnyFolderAsync(favoriteVideoId);
+        }
+
+        if (!hasFile && !favorited)
+        {
+            _notifier.Warning("当前曲目没有本地文件，也未收藏。");
+            return;
+        }
+
+        if (!await _dialogHost.ConfirmDeleteLocalAndFavoriteAsync(current.Title))
+        {
+            return;
+        }
+
+        try
+        {
+            var released = await _playerService.ReleaseIfPlayingFileAsync(path);
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                await _favoriteService.RemoveTrackByFilePathAsync(path);
+            }
+
+            if (!string.IsNullOrWhiteSpace(favoriteVideoId)
+                && !string.Equals(favoriteVideoId, "local", StringComparison.Ordinal))
+            {
+                var folderIds = await _favoriteService.GetFavoriteFolderIdsForVideoAsync(favoriteVideoId);
+                foreach (var folderId in folderIds)
+                {
+                    if (FavoriteFolderIds.IsDownloadedCatalog(folderId))
+                    {
+                        continue;
+                    }
+
+                    await _favoriteService.RemoveFromFavoritesAsync(favoriteVideoId, folderId);
+                }
+            }
+
+            if (hasFile)
+            {
+                if (!string.IsNullOrWhiteSpace(downloaded?.VideoId)
+                    && !string.Equals(downloaded.VideoId, "local", StringComparison.Ordinal))
+                {
+                    await _localMusicService.RemoveDownloadedTrackAsync(downloaded.VideoId, path!);
+                }
+                else if (File.Exists(path))
+                {
+                    File.Delete(path!);
+                }
+            }
+
+            if (released)
+            {
+                var removedPath = path;
+                await _playerService.ContinueAfterDroppingAsync(item =>
+                    !string.IsNullOrWhiteSpace(removedPath)
+                    && string.Equals(item.LocalFilePath, removedPath, StringComparison.OrdinalIgnoreCase));
+            }
+
+            _currentCheckedVideoId = null;
+            IsFavorite = false;
+            _notifier.Success($"已删除「{current.Title}」的本地文件和收藏");
+            NotifyChanged();
+        }
+        catch (Exception ex)
+        {
+            _notifier.Error($"删除失败: {ex.Message}");
+        }
     }
 
     [RelayCommand]

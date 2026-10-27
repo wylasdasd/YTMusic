@@ -89,6 +89,24 @@ public sealed class MudDialogHost(IDialogService dialogService) : IDialogHost
         return result is { Canceled: false };
     }
 
+    public async Task<bool> ConfirmDeleteLocalAndFavoriteAsync(string trackTitle)
+    {
+        var parameters = new DialogParameters<ConfirmDeleteLocalAndFavoriteDialog>
+        {
+            { x => x.TrackTitle, trackTitle }
+        };
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.ExtraSmall,
+            FullWidth = true
+        };
+
+        var dialog = await dialogService.ShowAsync<ConfirmDeleteLocalAndFavoriteDialog>("删除", parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false };
+    }
+
     public async Task<bool> ConfirmDeleteFolderAsync(string folderName)
     {
         var parameters = new DialogParameters<ConfirmDeleteFolderDialog>

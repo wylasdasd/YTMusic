@@ -126,6 +126,35 @@ public sealed class PlaylistSession
         return previousIndex;
     }
 
+    public void RemoveWhere(Func<PlayingItem, bool> match)
+    {
+        for (var i = Items.Count - 1; i >= 0; i--)
+        {
+            if (!match(Items[i]))
+            {
+                continue;
+            }
+
+            Items.RemoveAt(i);
+            if (CurrentIndex > i)
+            {
+                CurrentIndex--;
+            }
+            else if (CurrentIndex == i && CurrentIndex >= Items.Count)
+            {
+                CurrentIndex = Items.Count - 1;
+            }
+        }
+
+        if (Items.Count == 0)
+        {
+            CurrentIndex = -1;
+            Name = null;
+        }
+
+        GenerateShuffleIndices();
+    }
+
     public static bool IsMissingLocalFile(PlayingItem item)
         => !string.IsNullOrWhiteSpace(item.LocalFilePath) && !File.Exists(item.LocalFilePath);
 }

@@ -13,11 +13,14 @@ public sealed partial class UploadVM : ViewModelBase, IDisposable
     private readonly IUploadManagerService _uploadManager;
     private readonly IAListRemoteDownloadManagerService _remoteDownloadManager;
     private readonly ILocalMusicService _localMusicService;
+    private readonly IDownloadMusicDirectoryProvider _downloadDirectoryProvider;
+    private readonly IFavoriteService _favoriteService;
     private readonly IUiNotifier _notifier;
     private readonly IFilePickerService _filePicker;
     private readonly HashSet<string> _selectedFilePaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _selectedRemotePaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _remoteDownloadedPaths = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<ImportedLocalGroup> _importedGroups = new();
 
     public UploadVM(
         IAListUploadSettingsService settingsService,
@@ -25,6 +28,8 @@ public sealed partial class UploadVM : ViewModelBase, IDisposable
         IUploadManagerService uploadManager,
         IAListRemoteDownloadManagerService remoteDownloadManager,
         ILocalMusicService localMusicService,
+        IDownloadMusicDirectoryProvider downloadDirectoryProvider,
+        IFavoriteService favoriteService,
         IUiNotifier notifier,
         IFilePickerService filePicker)
     {
@@ -33,6 +38,8 @@ public sealed partial class UploadVM : ViewModelBase, IDisposable
         _uploadManager = uploadManager;
         _remoteDownloadManager = remoteDownloadManager;
         _localMusicService = localMusicService;
+        _downloadDirectoryProvider = downloadDirectoryProvider;
+        _favoriteService = favoriteService;
         _notifier = notifier;
         _filePicker = filePicker;
 
@@ -52,6 +59,7 @@ public sealed partial class UploadVM : ViewModelBase, IDisposable
 
     public int SelectedTabIndex { get; set; } = RemoteTabIndex;
     public List<DownloadedTrack> DownloadedFiles { get; private set; } = new();
+    public IReadOnlyList<LocalDirectoryNode<DownloadedTrack>> DirectoryNodes { get; private set; } = Array.Empty<LocalDirectoryNode<DownloadedTrack>>();
     public List<AListBrowserItem> RemoteFiles { get; private set; } = new();
 
     public IReadOnlyList<DownloadTaskInfo> Uploads => _uploadManager.ActiveUploads;
@@ -180,12 +188,14 @@ public sealed partial class UploadVM : ViewModelBase, IDisposable
 
         try
         {
-            DownloadedFiles = (await _localMusicService.GetDownloadedTracksAsync())
-                .OrderByDescending(file => file.DownloadedDate)
+            var downloads = (await _localMusicService.GetDownloadedTracksAsync())
+                .Where(file => !string.IsNullOrWhiteSpace(file.LocalFilePath))
                 .ToList();
+            await LoadImportedGroupsAsync(downloads);
+            RebuildDirectories(downloads);
 
             _remoteDownloadedPaths.Clear();
-            foreach (var path in DownloadedFiles
+            foreach (var path in downloads
                 .Where(file => !string.IsNullOrWhiteSpace(file.RemoteSourcePath))
                 .Select(file => file.RemoteSourcePath!))
             {
@@ -230,12 +240,14 @@ public sealed partial class UploadVM : ViewModelBase, IDisposable
     {
         try
         {
-            DownloadedFiles = (await _localMusicService.GetDownloadedTracksAsync())
-                .OrderByDescending(file => file.DownloadedDate)
+            var downloads = (await _localMusicService.GetDownloadedTracksAsync())
+                .Where(file => !string.IsNullOrWhiteSpace(file.LocalFilePath))
                 .ToList();
+            await LoadImportedGroupsAsync(downloads);
+            RebuildDirectories(downloads);
 
             _remoteDownloadedPaths.Clear();
-            foreach (var path in DownloadedFiles
+            foreach (var path in downloads
                 .Where(file => !string.IsNullOrWhiteSpace(file.RemoteSourcePath))
                 .Select(file => file.RemoteSourcePath!))
             {
@@ -306,6 +318,106 @@ public sealed partial class UploadVM : ViewModelBase, IDisposable
     }
 
     public bool IsSelected(string localFilePath) => _selectedFilePaths.Contains(localFilePath);
+
+    public bool? GetDirectorySelectionState(LocalDirectoryNode<DownloadedTrack> node)
+    {
+        var tracks = LocalDirectoryTree.Flatten(new[] { node });
+        if (tracks.Count == 0)
+        {
+            return false;
+        }
+
+        var selected = tracks.Count(track => _selectedFilePaths.Contains(track.LocalFilePath));
+        if (selected == 0)
+        {
+            return false;
+        }
+
+        return selected == tracks.Count ? true : null;
+    }
+
+    public Task SetDirectorySelection(LocalDirectoryNode<DownloadedTrack> node, bool? selected)
+    {
+        var turnOn = selected != false;
+        foreach (var track in LocalDirectoryTree.Flatten(new[] { node }))
+        {
+            if (string.IsNullOrWhiteSpace(track.LocalFilePath))
+            {
+                continue;
+            }
+
+            if (turnOn)
+            {
+                _selectedFilePaths.Add(track.LocalFilePath);
+            }
+            else
+            {
+                _selectedFilePaths.Remove(track.LocalFilePath);
+            }
+        }
+
+        NotifyChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadImportedGroupsAsync(IReadOnlyList<DownloadedTrack> downloads)
+    {
+        _importedGroups.Clear();
+        var downloadedPaths = downloads
+            .Select(file => file.LocalFilePath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var folders = await _favoriteService.GetFoldersAsync();
+        foreach (var folder in folders.Where(item => item.IsLocalImport))
+        {
+            var tracks = await _favoriteService.GetTracksAsync(folder.Id, null);
+            var files = tracks
+                .Where(track => !string.IsNullOrWhiteSpace(track.LocalFilePath))
+                .Where(track => !downloadedPaths.Contains(track.LocalFilePath!))
+                .Select(track => new DownloadedTrack
+                {
+                    VideoId = track.VideoId,
+                    Title = track.Title,
+                    Author = track.Author,
+                    ThumbnailUrl = track.ThumbnailUrl,
+                    LocalFilePath = track.LocalFilePath!,
+                    IsVideo = false,
+                    DownloadedDate = track.AddedDate
+                })
+                .ToList();
+            if (files.Count == 0)
+            {
+                continue;
+            }
+
+            _importedGroups.Add(new ImportedLocalGroup(folder.LocalRootPath, files));
+        }
+    }
+
+    private void RebuildDirectories(IReadOnlyList<DownloadedTrack> downloads)
+    {
+        var nodes = new List<LocalDirectoryNode<DownloadedTrack>>();
+        nodes.AddRange(BuildNodes(downloads, _downloadDirectoryProvider.GetDownloadedMusicDirectory()));
+        foreach (var group in _importedGroups)
+        {
+            nodes.AddRange(BuildNodes(group.Files, group.RootPath));
+        }
+
+        DirectoryNodes = nodes;
+        DownloadedFiles = downloads.Concat(_importedGroups.SelectMany(group => group.Files)).ToList();
+    }
+
+    private static IReadOnlyList<LocalDirectoryNode<DownloadedTrack>> BuildNodes(
+        IReadOnlyList<DownloadedTrack> files,
+        string? libraryRoot)
+        => LocalDirectoryTree.Build(
+            files,
+            file => file.LocalFilePath,
+            file => file.Title,
+            file => file.DownloadedDate,
+            libraryRoot,
+            sortByName: false);
+
+    private sealed record ImportedLocalGroup(string? RootPath, List<DownloadedTrack> Files);
 
     public bool IsRemoteSelected(string remotePath) => _selectedRemotePaths.Contains(remotePath);
 

@@ -432,6 +432,46 @@ namespace YTMusic.Services
             await MoveToPlayableAsync(forward: true);
         }
 
+        /// <summary>当前正在播放该本地文件时先卸下播放器，避免删除时文件被占用。</summary>
+        public async Task<bool> ReleaseIfPlayingFileAsync(string? filePath)
+        {
+            var current = CurrentVideo;
+            var holdsFile = current != null
+                && !string.IsNullOrWhiteSpace(filePath)
+                && string.Equals(current.LocalFilePath, filePath, StringComparison.OrdinalIgnoreCase);
+            if (!holdsFile)
+            {
+                return false;
+            }
+
+            await _playbackSwitcher.DetachAllAsync(this).ConfigureAwait(false);
+            IsPlaying = false;
+            CurrentStreamUrl = null;
+            NotifyStateChanged();
+            return true;
+        }
+
+        /// <summary>把已删除的本地曲目移出播放列表，并接着播下一首。</summary>
+        public async Task ContinueAfterDroppingAsync(Func<PlayingItem, bool> drop)
+        {
+            if (Playlist.Count > 0)
+            {
+                _playlist.RemoveWhere(drop);
+            }
+
+            CurrentVideo = null;
+            IsCurrentStreamVideo = false;
+            CurrentStreamUrl = null;
+            if (Playlist.Count == 0 || _playlist.CurrentIndex < 0)
+            {
+                NotifyStateChanged();
+                OnTimeChanged?.Invoke();
+                return;
+            }
+
+            await PlayInternalAsync(Playlist[_playlist.CurrentIndex]);
+        }
+
         private async Task<bool> TryRestartCurrentLocalWebAsync()
         {
             var current = CurrentVideo;

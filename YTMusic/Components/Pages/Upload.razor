@@ -19,7 +19,7 @@
                      BadgeColor="Color.Error"
                      data-page="upload-local">
             <MudPaper Elevation="2" Class="pa-4 mb-4">
-                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">本地下载列表里挑选后上传</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">按本地目录挑选后上传，勾选目录会选中其中的全部文件</MudText>
 
                 <div class="d-flex flex-wrap gap-3 align-center">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!ViewModel.HasSelection)" OnClick="ViewModel.UploadSelectedAsync">
@@ -42,69 +42,77 @@
                     <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
                 </div>
             }
-            else if (!ViewModel.DownloadedFiles.Any())
+            else if (!ViewModel.DirectoryNodes.Any())
             {
-                <MudAlert Severity="Severity.Info" Class="mb-4">No downloaded files found. Download music first, then upload from here.</MudAlert>
+                <MudAlert Severity="Severity.Info" Class="mb-4">还没有本地文件。下载的歌曲和导入的文件夹会显示在这里。</MudAlert>
             }
             else
             {
-                <div class="d-flex flex-column gap-3 mb-4">
-                    @foreach (var file in ViewModel.DownloadedFiles)
+                <div class="local-library d-flex flex-column gap-3 mb-4">
+                    @foreach (var node in ViewModel.DirectoryNodes)
                     {
-                        var uploadTask = ViewModel.GetLatestUploadForFile(file.LocalFilePath);
-                        <MudPaper Elevation="1" Class="pa-3">
-                            <div class="d-flex align-center gap-3 flex-wrap">
-                                <MudCheckBox T="bool"
-                                             Value="@ViewModel.IsSelected(file.LocalFilePath)"
-                                             ValueChanged="@(value => ViewModel.ToggleSelection(file.LocalFilePath, value))" />
-                                @if (!string.IsNullOrWhiteSpace(file.ThumbnailUrl))
-                                {
-                                    <MudImage Src="@file.ThumbnailUrl" Width="56" Height="56" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                        <LocalDirectoryGroup TItem="DownloadedTrack"
+                                             Node="node"
+                                             ShowPlay="false"
+                                             GetSelectionState="ViewModel.GetDirectorySelectionState"
+                                             SelectionChanged="ViewModel.SetDirectorySelection">
+                            <TrackRow Context="file">
+                                @{
+                                    var uploadTask = ViewModel.GetLatestUploadForFile(file.LocalFilePath);
                                 }
-                                else
-                                {
-                                    <MudIcon Icon="@(file.IsVideo ? Icons.Material.Filled.OndemandVideo : Icons.Material.Filled.MusicNote)"
-                                             Size="Size.Large"
-                                             Color="Color.Primary" />
-                                }
-                                <div class="d-flex flex-column flex-grow-1" style="overflow: hidden;">
-                                    <div class="d-flex align-center gap-2 flex-wrap">
-                                        <div style="min-width: 0; flex: 1 1 auto;">
-                                            <MediaTitle Text="@file.Title" Typo="Typo.subtitle2" />
-                                        </div>
-                                        <MudChip T="string"
-                                                 Size="Size.Small"
-                                                 Color="@(ViewModel.ShouldShowUploadedTag(file) ? Color.Success : Color.Default)"
-                                                 Variant="@(ViewModel.ShouldShowUploadedTag(file) ? Variant.Filled : Variant.Outlined)">
-                                            @(ViewModel.ShouldShowUploadedTag(file) ? "Uploaded" : "Not Uploaded")
-                                        </MudChip>
-                                        @if (uploadTask != null)
+                                <MudPaper Elevation="1" Class="pa-3 local-dir__track">
+                                    <div class="d-flex align-center gap-3 flex-wrap">
+                                        <MudCheckBox T="bool"
+                                                     Value="@ViewModel.IsSelected(file.LocalFilePath)"
+                                                     ValueChanged="@(value => ViewModel.ToggleSelection(file.LocalFilePath, value))"
+                                                     Dense="true" />
+                                        @if (!string.IsNullOrWhiteSpace(file.ThumbnailUrl))
                                         {
-                                            <MudChip T="string"
-                                                     Size="Size.Small"
-                                                     Color="@UploadVM.GetStatusColor(uploadTask.Status)"
-                                                     Variant="Variant.Outlined">
-                                                Upload - @uploadTask.Status
-                                            </MudChip>
+                                            <MudImage Src="@file.ThumbnailUrl" Width="56" Height="56" ObjectFit="ObjectFit.Cover" Class="rounded" />
                                         }
+                                        else
+                                        {
+                                            <MudIcon Icon="@(file.IsVideo ? Icons.Material.Filled.OndemandVideo : Icons.Material.Filled.MusicNote)"
+                                                     Size="Size.Large"
+                                                     Color="Color.Primary" />
+                                        }
+                                        <div class="d-flex flex-column flex-grow-1" style="overflow: hidden;">
+                                            <div class="d-flex align-center gap-2 flex-wrap">
+                                                <div style="min-width: 0; flex: 1 1 auto;">
+                                                    <MediaTitle Text="@file.Title" Typo="Typo.subtitle2" />
+                                                </div>
+                                                <MudChip T="string"
+                                                         Size="Size.Small"
+                                                         Color="@(ViewModel.ShouldShowUploadedTag(file) ? Color.Success : Color.Default)"
+                                                         Variant="@(ViewModel.ShouldShowUploadedTag(file) ? Variant.Filled : Variant.Outlined)">
+                                                    @(ViewModel.ShouldShowUploadedTag(file) ? "Uploaded" : "Not Uploaded")
+                                                </MudChip>
+                                                @if (uploadTask != null)
+                                                {
+                                                    <MudChip T="string"
+                                                             Size="Size.Small"
+                                                             Color="@UploadVM.GetStatusColor(uploadTask.Status)"
+                                                             Variant="Variant.Outlined">
+                                                        Upload - @uploadTask.Status
+                                                    </MudChip>
+                                                }
+                                            </div>
+                                            @if (uploadTask?.Status == DownloadStatus.Downloading)
+                                            {
+                                                <MudProgressLinear Color="Color.Primary" Value="@(uploadTask.Progress * 100)" Class="mt-2 mb-1" />
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">@((uploadTask.Progress * 100).ToString("F1"))%</MudText>
+                                            }
+                                            else if (uploadTask?.Status == DownloadStatus.Failed && !string.IsNullOrWhiteSpace(uploadTask.ErrorMessage))
+                                            {
+                                                <MudText Typo="Typo.caption" Color="Color.Error" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                                    @uploadTask.ErrorMessage
+                                                </MudText>
+                                            }
+                                        </div>
                                     </div>
-                                   
-        
-                                    @if (uploadTask?.Status == DownloadStatus.Downloading)
-                                    {
-                                        <MudProgressLinear Color="Color.Primary" Value="@(uploadTask.Progress * 100)" Class="mt-2 mb-1" />
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@((uploadTask.Progress * 100).ToString("F1"))%</MudText>
-                                    }
-                                    else if (uploadTask?.Status == DownloadStatus.Failed && !string.IsNullOrWhiteSpace(uploadTask.ErrorMessage))
-                                    {
-                                        <MudText Typo="Typo.caption" Color="Color.Error" Style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                            @uploadTask.ErrorMessage
-                                        </MudText>
-                                    }
-                        
-                                </div>
-                            </div>
-                        </MudPaper>
+                                </MudPaper>
+                            </TrackRow>
+                        </LocalDirectoryGroup>
                     }
                 </div>
             }

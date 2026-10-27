@@ -8,6 +8,17 @@
         <MudIcon Icon="@(IsExpanded ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)"
                  Class="local-dir__chevron mr-1"
                  aria-hidden="true" />
+        @if (GetSelectionState != null)
+        {
+            <div @onclick:stopPropagation="true">
+                <MudCheckBox T="bool?"
+                             Value="@GetSelectionState(Node)"
+                             ValueChanged="OnSelectionChanged"
+                             Color="Color.Primary"
+                             Dense="true"
+                             aria-label="@($"选择 {Node.Name}")" />
+            </div>
+        }
         <MudIcon Icon="@Icons.Material.Filled.Folder"
                  Color="Color.Primary"
                  Class="mr-3" />
@@ -15,13 +26,16 @@
             <MediaTitle Text="@Node.Name" Typo="Typo.subtitle1" />
             <MudText Typo="Typo.body2" Color="Color.Secondary">@($"{Node.DescendantTrackCount} 首")</MudText>
         </div>
-        <div @onclick:stopPropagation="true">
-            <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
-                           Color="Color.Primary"
-                           Disabled="@(Node.DescendantTrackCount == 0)"
-                           OnClick="Play"
-                           aria-label="@($"播放 {Node.Name}")" />
-        </div>
+        @if (ShowPlay)
+        {
+            <div @onclick:stopPropagation="true">
+                <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
+                               Color="Color.Primary"
+                               Disabled="@(Node.DescendantTrackCount == 0)"
+                               OnClick="Play"
+                               aria-label="@($"播放 {Node.Name}")" />
+            </div>
+        }
     </MudPaper>
 
     @if (IsExpanded)
@@ -33,7 +47,10 @@
                                      Node="child"
                                      Depth="Depth + 1"
                                      TrackRow="TrackRow"
-                                     PlayRequested="PlayRequested" />
+                                     PlayRequested="PlayRequested"
+                                     ShowPlay="ShowPlay"
+                                     GetSelectionState="GetSelectionState"
+                                     SelectionChanged="SelectionChanged" />
             }
             @foreach (var track in Node.Tracks)
             {
@@ -51,6 +68,9 @@
     [Parameter] public int Depth { get; set; }
     [Parameter] public RenderFragment<TItem>? TrackRow { get; set; }
     [Parameter] public EventCallback<LocalDirectoryNode<TItem>> PlayRequested { get; set; }
+    [Parameter] public bool ShowPlay { get; set; } = true;
+    [Parameter] public Func<LocalDirectoryNode<TItem>, bool?>? GetSelectionState { get; set; }
+    [Parameter] public Func<LocalDirectoryNode<TItem>, bool?, Task>? SelectionChanged { get; set; }
 
     private bool _expanded;
 
@@ -59,4 +79,7 @@
     private void Toggle() => _expanded = !_expanded;
 
     private Task Play() => PlayRequested.InvokeAsync(Node);
+
+    private Task OnSelectionChanged(bool? selected)
+        => SelectionChanged == null ? Task.CompletedTask : SelectionChanged(Node, selected);
 }

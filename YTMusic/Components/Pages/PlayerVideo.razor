@@ -77,6 +77,11 @@
                             Color="@(ViewModel.IsFavorite ? Color.Error : Color.Default)"
                             OnClick="@(async () => await ViewModel.OpenFavoriteDialogCommand.ExecuteAsync(null))"
                             aria-label="Toggle Favorite" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                       Color="Color.Error"
+                                       OnClick="@(async () => await ViewModel.DeleteLocalAndUnfavoriteCommand.ExecuteAsync(null))"
+                                       Disabled="@PlayerService.IsSwitchingTrack"
+                                       aria-label="删除本地并取消收藏" />
                         <MudMenu Icon="@Icons.Material.Filled.Download"
                                  Color="Color.Primary"
                                  AnchorOrigin="Origin.BottomRight"
