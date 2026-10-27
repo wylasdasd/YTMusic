@@ -1,23 +1,25 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using CommonHelp;
 
 using YTMusic.BLL.Abstractions;
+using YTMusic.BLL.Infrastructure;
 using YTMusic.BLL.Models;
 
 namespace YTMusic.BLL.Services
 {
     public class DownloadManagerService : IDownloadManagerService
     {
-        // 防止 Transfers 页面无限增长，保留最近 N 条任务记录。
         private const int MaxRetainedTasks = AppGlobal.Transfers.MaxRetainedTasks;
         private readonly IYouTubeService _youTubeService;
-        private readonly IFavoriteService _favoriteService;
         private readonly ILocalMusicService _localMusicService;
         private readonly INetworkErrorService _networkErrorService;
         private readonly object _syncRoot = new();
         private readonly List<DownloadTaskInfo> _activeDownloads = new();
+        private readonly Dictionary<string, CancellationTokenSource> _taskCancellation = new(StringComparer.Ordinal);
 
         public IReadOnlyList<DownloadTaskInfo> ActiveDownloads
         {
@@ -31,29 +33,44 @@ namespace YTMusic.BLL.Services
         }
         public event Action? OnDownloadsChanged;
 
-        public DownloadManagerService(IYouTubeService youTubeService, IFavoriteService favoriteService, ILocalMusicService localMusicService, INetworkErrorService networkErrorService)
+        public DownloadManagerService(IYouTubeService youTubeService, ILocalMusicService localMusicService, INetworkErrorService networkErrorService)
         {
             _youTubeService = youTubeService;
-            _favoriteService = favoriteService;
             _localMusicService = localMusicService;
             _networkErrorService = networkErrorService;
         }
 
         public void StartDownload(string videoId, string title, bool isVideo)
         {
+            if (string.IsNullOrWhiteSpace(videoId))
+            {
+                return;
+            }
+
             DownloadTaskInfo taskInfo;
 
             lock (_syncRoot)
             {
-                // 同一个资源（videoId + 类型）正在排队/下载时不重复入队。
                 bool hasActiveDuplicate = _activeDownloads.Any(d =>
                     d.VideoId == videoId &&
                     d.IsVideo == isVideo &&
-                    (d.Status == DownloadStatus.Pending || d.Status == DownloadStatus.Downloading));
+                    d.Status is DownloadStatus.Pending or DownloadStatus.Downloading or DownloadStatus.Paused);
 
                 if (hasActiveDuplicate)
                 {
                     return;
+                }
+
+                var staleTasks = _activeDownloads
+                    .Where(d =>
+                        d.VideoId == videoId
+                        && d.IsVideo == isVideo
+                        && d.Status is DownloadStatus.Completed or DownloadStatus.Failed or DownloadStatus.Cancelled)
+                    .ToList();
+                foreach (var stale in staleTasks)
+                {
+                    _activeDownloads.Remove(stale);
+                    DisposeTaskCancellation(stale.Id);
                 }
 
                 taskInfo = new DownloadTaskInfo
@@ -63,10 +80,12 @@ namespace YTMusic.BLL.Services
                     VideoId = videoId,
                     Title = title,
                     IsVideo = isVideo,
-                    Status = DownloadStatus.Pending
+                    Status = DownloadStatus.Pending,
+                    Progress = 0
                 };
 
                 _activeDownloads.Add(taskInfo);
+                _taskCancellation[taskInfo.Id] = new CancellationTokenSource();
                 TrimHistory_NoLock();
             }
 
@@ -74,49 +93,131 @@ namespace YTMusic.BLL.Services
             _ = ExecuteDownloadAsync(taskInfo);
         }
 
+        public void CancelDownload(string taskId)
+        {
+            if (string.IsNullOrWhiteSpace(taskId))
+            {
+                return;
+            }
+
+            lock (_syncRoot)
+            {
+                var task = _activeDownloads.FirstOrDefault(item => item.Id == taskId);
+                if (task == null)
+                {
+                    return;
+                }
+
+                if (task.Status is DownloadStatus.Pending or DownloadStatus.Paused)
+                {
+                    task.Status = DownloadStatus.Cancelled;
+                    task.ErrorMessage = "已取消";
+                    DisposeTaskCancellation(taskId);
+                    NotifyDownloadsChanged();
+                    return;
+                }
+
+                if (task.Status == DownloadStatus.Downloading && _taskCancellation.TryGetValue(taskId, out var cts))
+                {
+                    cts.Cancel();
+                }
+            }
+        }
+
+        public void PauseDownload(string taskId)
+        {
+            lock (_syncRoot)
+            {
+                var task = _activeDownloads.FirstOrDefault(item => item.Id == taskId);
+                if (task == null || task.Status is not (DownloadStatus.Downloading or DownloadStatus.Pending))
+                {
+                    return;
+                }
+
+                task.Status = DownloadStatus.Paused;
+            }
+
+            NotifyDownloadsChanged();
+        }
+
+        public void ResumeDownload(string taskId)
+        {
+            lock (_syncRoot)
+            {
+                var task = _activeDownloads.FirstOrDefault(item => item.Id == taskId);
+                if (task == null || task.Status != DownloadStatus.Paused)
+                {
+                    return;
+                }
+
+                task.Status = DownloadStatus.Downloading;
+            }
+
+            NotifyDownloadsChanged();
+        }
+
         private async Task ExecuteDownloadAsync(DownloadTaskInfo taskInfo)
         {
+            CancellationToken cancellationToken;
+            lock (_syncRoot)
+            {
+                if (!_taskCancellation.TryGetValue(taskInfo.Id, out var cts))
+                {
+                    cts = new CancellationTokenSource();
+                    _taskCancellation[taskInfo.Id] = cts;
+                }
+
+                cancellationToken = cts.Token;
+            }
+
+            await WaitUntilCanStartAsync(taskInfo, cancellationToken).ConfigureAwait(false);
+            if (taskInfo.Status == DownloadStatus.Cancelled)
+            {
+                return;
+            }
+
             lock (_syncRoot)
             {
                 taskInfo.Status = DownloadStatus.Downloading;
                 taskInfo.ErrorMessage = null;
+                taskInfo.Progress = 0;
             }
+
             NotifyDownloadsChanged();
 
+            string? targetPath = null;
             try
             {
-                // 进度回调由下载流触发，更新共享任务状态时加锁保证一致性。
-                var progress = new Progress<double>(p =>
+                targetPath = await _youTubeService.ResolveDownloadTargetPathAsync(
+                    taskInfo.VideoId,
+                    taskInfo.Title,
+                    taskInfo.IsVideo).ConfigureAwait(false);
+                lock (_syncRoot)
                 {
-                    bool shouldNotify;
-                    lock (_syncRoot)
-                    {
-                        // 仅在进度有明显变化时刷新 UI，降低高频重绘开销。
-                        shouldNotify = Math.Abs(taskInfo.Progress - p) >= AppGlobal.Transfers.ProgressNotifyThreshold || p >= 1.0;
-                        taskInfo.Progress = p;
-                    }
-                    if (shouldNotify)
-                    {
-                        NotifyDownloadsChanged();
-                    }
-                });
+                    taskInfo.DestinationPath = targetPath;
+                }
 
-                string filePath = await _youTubeService.DownloadAsync(taskInfo.VideoId, taskInfo.Title, taskInfo.IsVideo, progress);
+                NotifyDownloadsChanged();
 
-                // Add to download history database.
-                await _localMusicService.AddDownloadedTrackAsync(new DownloadedTrack
-                {
-                    VideoId = taskInfo.VideoId,
-                    Title = taskInfo.Title,
-                    Author = AppGlobal.AList.UnknownArtist,
-                    ThumbnailUrl = $"https://img.youtube.com/vi/{taskInfo.VideoId}/mqdefault.jpg",
-                    LocalFilePath = filePath,
-                    IsVideo = taskInfo.IsVideo,
-                    DownloadedDate = DateTime.UtcNow
-                });
+                var progress = DownloadTransferControl.CreateProgressReporter(
+                    taskInfo,
+                    _syncRoot,
+                    cancellationToken,
+                    AppGlobal.Transfers.ProgressNotifyThreshold,
+                    NotifyDownloadsChanged);
 
-                // Update favorite local path if present.
-                await _favoriteService.UpdateLocalFilePathAsync(taskInfo.VideoId, filePath);
+                string filePath = await _youTubeService.DownloadAsync(
+                    taskInfo.VideoId,
+                    taskInfo.Title,
+                    taskInfo.IsVideo,
+                    progress,
+                    cancellationToken).ConfigureAwait(false);
+
+                await _localMusicService.SaveCompletedDownloadRecordAsync(
+                    taskInfo.VideoId,
+                    taskInfo.Title,
+                    filePath,
+                    taskInfo.IsVideo).ConfigureAwait(false);
 
                 lock (_syncRoot)
                 {
@@ -125,8 +226,18 @@ namespace YTMusic.BLL.Services
                     taskInfo.Progress = 1.0;
                 }
             }
+            catch (OperationCanceledException)
+            {
+                FileHelp.DeleteIfExists(targetPath);
+                lock (_syncRoot)
+                {
+                    taskInfo.Status = DownloadStatus.Cancelled;
+                    taskInfo.ErrorMessage = "已取消";
+                }
+            }
             catch (Exception ex)
             {
+                FileHelp.DeleteIfExists(targetPath);
                 lock (_syncRoot)
                 {
                     taskInfo.Status = DownloadStatus.Failed;
@@ -140,12 +251,43 @@ namespace YTMusic.BLL.Services
             }
             finally
             {
+                DisposeTaskCancellation(taskInfo.Id);
                 lock (_syncRoot)
                 {
-                    // 每次任务结束后做一次历史裁剪，避免长期运行内存增长。
                     TrimHistory_NoLock();
                 }
+
                 NotifyDownloadsChanged();
+            }
+        }
+
+        private async Task WaitUntilCanStartAsync(DownloadTaskInfo taskInfo, CancellationToken cancellationToken)
+        {
+            while (true)
+            {
+                lock (_syncRoot)
+                {
+                    if (taskInfo.Status == DownloadStatus.Cancelled)
+                    {
+                        return;
+                    }
+
+                    if (taskInfo.Status != DownloadStatus.Paused)
+                    {
+                        return;
+                    }
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                await Task.Delay(150, cancellationToken);
+            }
+        }
+
+        private void DisposeTaskCancellation(string taskId)
+        {
+            if (_taskCancellation.Remove(taskId, out var cts))
+            {
+                cts.Dispose();
             }
         }
 
@@ -163,9 +305,8 @@ namespace YTMusic.BLL.Services
 
             int overflow = _activeDownloads.Count - MaxRetainedTasks;
 
-            // Prefer trimming completed/failed items first.
             var removable = _activeDownloads
-                .Where(d => d.Status is DownloadStatus.Completed or DownloadStatus.Failed)
+                .Where(d => d.Status is DownloadStatus.Completed or DownloadStatus.Failed or DownloadStatus.Cancelled)
                 .OrderBy(d => d.CreatedAtUtc)
                 .Take(overflow)
                 .ToList();
@@ -173,6 +314,7 @@ namespace YTMusic.BLL.Services
             foreach (var item in removable)
             {
                 _activeDownloads.Remove(item);
+                DisposeTaskCancellation(item.Id);
             }
 
             if (_activeDownloads.Count <= MaxRetainedTasks)
@@ -181,7 +323,6 @@ namespace YTMusic.BLL.Services
             }
 
             overflow = _activeDownloads.Count - MaxRetainedTasks;
-            // 如果已完成任务不足以裁剪，再按最老时间兜底裁剪。
             var oldest = _activeDownloads
                 .OrderBy(d => d.CreatedAtUtc)
                 .Take(overflow)
@@ -190,6 +331,7 @@ namespace YTMusic.BLL.Services
             foreach (var item in oldest)
             {
                 _activeDownloads.Remove(item);
+                DisposeTaskCancellation(item.Id);
             }
         }
     }

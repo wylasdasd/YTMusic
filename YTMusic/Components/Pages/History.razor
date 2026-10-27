@@ -50,7 +50,12 @@
                             </div>
                         </div>
 
-                        <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Color="Color.Default" />
+                        <div @onclick:stopPropagation="true">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Color="Color.Error"
+                                           OnClick="@(async () => await ViewModel.RemoveItemAsync(item))"
+                                           aria-label="删除记录" />
+                        </div>
                     </MudPaper>
                 }
             </div>

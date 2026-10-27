@@ -48,6 +48,10 @@ public sealed partial class PlayerVM : ViewModelBase
 
     public MusicPlayerService PlayerService => _playerService;
 
+    public double Volume => _playerService.Volume;
+
+    public Task SetVolumeAsync(double value) => _playerService.SetVolumeAsync(value);
+
     public async Task OnPlayerStateChangedAsync()
     {
         if (_playerService.IsCurrentStreamVideo)
@@ -231,11 +235,19 @@ public sealed partial class PlayerVM : ViewModelBase
                 if (!string.IsNullOrWhiteSpace(downloaded?.VideoId)
                     && !string.Equals(downloaded.VideoId, "local", StringComparison.Ordinal))
                 {
-                    await _localMusicService.RemoveDownloadedTrackAsync(downloaded.VideoId, path!);
+                    await _localMusicService.ClearDownloadedLocalFileAsync(downloaded.VideoId, path!);
                 }
                 else if (File.Exists(path))
                 {
-                    File.Delete(path!);
+                    if (!string.IsNullOrWhiteSpace(favoriteVideoId)
+                        && !string.Equals(favoriteVideoId, "local", StringComparison.Ordinal))
+                    {
+                        await _localMusicService.ClearDownloadedLocalFileAsync(favoriteVideoId, path);
+                    }
+                    else
+                    {
+                        await _localMusicService.DeleteAudioFileAsync(path!, favoriteVideoId);
+                    }
                 }
             }
 

@@ -159,7 +159,7 @@ public sealed partial class SearchVM : ViewModelBase, IDisposable
         }
 
         _downloadManager.StartDownload(video.Id.Value, video.Title, isVideo);
-        _notifier.Info($"Added '{video.Title}' to transfers.");
+        _notifier.Info($"已将「{video.Title}」加入下载任务");
     }
 
     public async Task OpenFavoriteDialogAsync(VideoSearchResult video)

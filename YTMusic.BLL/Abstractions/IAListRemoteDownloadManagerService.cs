@@ -8,4 +8,7 @@ public interface IAListRemoteDownloadManagerService
     event Action? OnRemoteDownloadsChanged;
     void StartRemoteDownload(AListDirectoryItem item);
     void StartRemoteDirectoryDownload(AListDirectoryItem item, string? displayTitle = null);
+    void CancelRemoteDownload(string taskId);
+    void PauseRemoteDownload(string taskId);
+    void ResumeRemoteDownload(string taskId);
 }

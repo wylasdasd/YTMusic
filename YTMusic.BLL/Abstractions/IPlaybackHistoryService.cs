@@ -15,5 +15,9 @@ public interface IPlaybackHistoryService
         bool isVideo,
         double? durationSeconds);
 
+    Task RemoveForTrackAsync(string? videoId, string? localFilePath);
+
+    Task RemoveByIdAsync(long id);
+
     Task ClearAsync();
 }

@@ -16,12 +16,14 @@ namespace YTMusic.Services
         private const string ThemeIndexKey = AppGlobal.Ui.PreferenceKeys.ThemeIndex;
         private const string PrefetchRemoteVideoKey = AppGlobal.Ui.PreferenceKeys.PrefetchRemoteVideo;
         private const string RemoteVideoStreamQualityKey = AppGlobal.Ui.PreferenceKeys.RemoteVideoStreamQuality;
+        private const string PlaybackVolumeKey = AppGlobal.Ui.PreferenceKeys.PlaybackVolume;
 
         public bool ShowFavoriteCardImages { get; private set; } = Preferences.Default.Get(ShowFavoriteCardImagesKey, true);
         public bool MediaTitleTwoLines { get; private set; } = LoadMediaTitleTwoLines();
         public int ThemeIndex { get; private set; } = Preferences.Default.Get(ThemeIndexKey, AppGlobal.Ui.DefaultThemeIndex);
         public bool PrefetchRemoteVideo { get; private set; } = Preferences.Default.Get(PrefetchRemoteVideoKey, false);
         public RemoteVideoStreamQuality RemoteVideoStreamQuality { get; private set; } = LoadRemoteVideoStreamQuality();
+        public double PlaybackVolume { get; private set; } = LoadPlaybackVolume();
 
         public event Action? OnChange;
 
@@ -85,6 +87,19 @@ namespace YTMusic.Services
             OnChange?.Invoke();
         }
 
+        public void SetPlaybackVolume(double value)
+        {
+            value = Math.Clamp(value, 0, 1);
+            if (Math.Abs(PlaybackVolume - value) < 0.001)
+            {
+                return;
+            }
+
+            PlaybackVolume = value;
+            Preferences.Default.Set(PlaybackVolumeKey, value);
+            OnChange?.Invoke();
+        }
+
         public void ResetToDefaults()
         {
             ShowFavoriteCardImages = true;
@@ -98,6 +113,7 @@ namespace YTMusic.Services
             Preferences.Default.Remove(ThemeIndexKey);
             Preferences.Default.Remove(PrefetchRemoteVideoKey);
             Preferences.Default.Remove(RemoteVideoStreamQualityKey);
+            Preferences.Default.Remove(PlaybackVolumeKey);
             Preferences.Default.Remove("ui.scrollMediaTitles");
             Preferences.Default.Remove("ui.preferHighQualityAudio");
             OnChange?.Invoke();
@@ -119,6 +135,12 @@ namespace YTMusic.Services
             return Enum.IsDefined(typeof(RemoteVideoStreamQuality), raw)
                 ? (RemoteVideoStreamQuality)raw
                 : RemoteVideoStreamQuality.Lowest;
+        }
+
+        private static double LoadPlaybackVolume()
+        {
+            var value = Preferences.Default.Get(PlaybackVolumeKey, 1.0);
+            return Math.Clamp(value, 0, 1);
         }
     }
 }

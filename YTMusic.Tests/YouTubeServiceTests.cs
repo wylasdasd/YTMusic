@@ -64,7 +64,11 @@ namespace YTMusic.Tests
             public Task<YoutubeExplode.Videos.Streams.StreamManifest> GetStreamManifestAsync(string videoId)
                 => throw new NotSupportedException();
 
-            public Task DownloadStreamAsync(YoutubeExplode.Videos.Streams.IStreamInfo streamInfo, string filePath, IProgress<double>? progress = null)
+            public Task DownloadStreamAsync(
+                YoutubeExplode.Videos.Streams.IStreamInfo streamInfo,
+                string filePath,
+                IProgress<double>? progress = null,
+                CancellationToken cancellationToken = default)
                 => throw new NotSupportedException();
 
         }

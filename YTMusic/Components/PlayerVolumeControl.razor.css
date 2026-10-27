@@ -1,0 +1,20 @@
+.player-volume-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    width: 92px;
+    flex-shrink: 0;
+    margin-left: 2px;
+}
+
+.player-volume-icon {
+    color: var(--ytm-text-secondary);
+    flex-shrink: 0;
+    font-size: 1.1rem !important;
+}
+
+.player-volume-slider {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+}

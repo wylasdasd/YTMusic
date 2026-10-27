@@ -10,5 +10,9 @@ public interface IYouTubeApiClient
 
     Task<StreamManifest> GetStreamManifestAsync(string videoId);
 
-    Task DownloadStreamAsync(IStreamInfo streamInfo, string filePath, IProgress<double>? progress = null);
+    Task DownloadStreamAsync(
+        IStreamInfo streamInfo,
+        string filePath,
+        IProgress<double>? progress = null,
+        CancellationToken cancellationToken = default);
 }

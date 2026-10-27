@@ -30,17 +30,48 @@ public sealed class YouTubeService : IYouTubeService
         return streamInfo?.Url;
     }
 
-    public async Task<string> DownloadAsync(string videoId, string fileName, bool isVideo, IProgress<double>? progress = null)
+    public Task<string> ResolveDownloadTargetPathAsync(string videoId, string fileName, bool isVideo)
+        => ResolveDownloadTargetPathCoreAsync(videoId, fileName, isVideo);
+
+    public async Task<string> DownloadAsync(
+        string videoId,
+        string fileName,
+        bool isVideo,
+        IProgress<double>? progress = null,
+        CancellationToken cancellationToken = default)
     {
         if (OperatingSystem.IsAndroid())
         {
-            return await Task.Run(() => DownloadCoreAsync(videoId, fileName, isVideo, progress));
+            return await Task.Run(
+                () => DownloadCoreAsync(videoId, fileName, isVideo, progress, cancellationToken),
+                cancellationToken);
         }
 
-        return await DownloadCoreAsync(videoId, fileName, isVideo, progress);
+        return await DownloadCoreAsync(videoId, fileName, isVideo, progress, cancellationToken);
     }
 
-    private async Task<string> DownloadCoreAsync(string videoId, string fileName, bool isVideo, IProgress<double>? progress)
+    private async Task<string> ResolveDownloadTargetPathCoreAsync(string videoId, string fileName, bool isVideo)
+    {
+        var (_, filePath) = await ResolveStreamAndPathAsync(videoId, fileName, isVideo);
+        return filePath;
+    }
+
+    private async Task<string> DownloadCoreAsync(
+        string videoId,
+        string fileName,
+        bool isVideo,
+        IProgress<double>? progress,
+        CancellationToken cancellationToken)
+    {
+        var (streamInfo, filePath) = await ResolveStreamAndPathAsync(videoId, fileName, isVideo);
+        await _youTubeApiClient.DownloadStreamAsync(streamInfo, filePath, progress, cancellationToken);
+        return filePath;
+    }
+
+    private async Task<(IStreamInfo StreamInfo, string FilePath)> ResolveStreamAndPathAsync(
+        string videoId,
+        string fileName,
+        bool isVideo)
     {
         var musicDirectory = _downloadMusicDirectoryProvider.GetDownloadedMusicDirectory();
         FileHelp.EnsureDirectoryExists(musicDirectory + Path.DirectorySeparatorChar);
@@ -61,9 +92,6 @@ public sealed class YouTubeService : IYouTubeService
         }
 
         var filePath = Path.Combine(musicDirectory, $"{safeFileName}.{streamInfo.Container.Name}");
-
-        await _youTubeApiClient.DownloadStreamAsync(streamInfo, filePath, progress);
-
-        return filePath;
+        return (streamInfo, filePath);
     }
 }

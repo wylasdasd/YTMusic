@@ -87,6 +87,41 @@ public sealed class PlaybackHistoryRepository : IPlaybackHistoryRepository
             new { Limit = AppGlobal.Transfers.MaxPlaybackHistoryItems });
     }
 
+    public async Task RemoveForTrackAsync(string? videoId, string? localFilePath)
+    {
+        var path = localFilePath?.Trim() ?? string.Empty;
+        var id = videoId?.Trim() ?? string.Empty;
+        var matchVideo = id.Length > 0 && !id.Equals("local", StringComparison.OrdinalIgnoreCase);
+        if (path.Length == 0 && !matchVideo)
+        {
+            return;
+        }
+
+        using var connection = _connectionFactory.CreateConnection();
+        await connection.ExecuteAsync(@"
+            DELETE FROM PlaybackHistory
+            WHERE (@HasPath = 1 AND LocalFilePath = @LocalFilePath COLLATE NOCASE)
+               OR (@HasVideo = 1 AND VideoId = @VideoId);",
+            new
+            {
+                HasPath = path.Length > 0 ? 1 : 0,
+                LocalFilePath = path,
+                HasVideo = matchVideo ? 1 : 0,
+                VideoId = id
+            });
+    }
+
+    public async Task RemoveByIdAsync(long id)
+    {
+        if (id <= 0)
+        {
+            return;
+        }
+
+        using var connection = _connectionFactory.CreateConnection();
+        await connection.ExecuteAsync("DELETE FROM PlaybackHistory WHERE Id = @Id;", new { Id = id });
+    }
+
     public async Task ClearAsync()
     {
         using var connection = _connectionFactory.CreateConnection();

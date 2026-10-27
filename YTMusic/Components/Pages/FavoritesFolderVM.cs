@@ -265,7 +265,7 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
             var removedFile = !string.IsNullOrWhiteSpace(track.LocalFilePath) && track.IsDownloaded;
             if (removedFile)
             {
-                await _localMusicService.RemoveDownloadedTrackAsync(track.VideoId, track.LocalFilePath!);
+                await _localMusicService.ClearDownloadedLocalFileAsync(track.VideoId, track.LocalFilePath!);
                 await _favoriteService.UpdateLocalFilePathAsync(track.VideoId, null);
             }
 
@@ -293,7 +293,7 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
         try
         {
             await _favoriteService.RemoveTrackByFilePathAsync(track.LocalFilePath);
-            await _localMusicService.RemoveDownloadedTrackAsync(track.VideoId, track.LocalFilePath);
+            await _localMusicService.ClearDownloadedLocalFileAsync(track.VideoId, track.LocalFilePath);
             _rawTracks.Remove(track);
             ApplyTrackOrdering();
             _notifier.Success($"已删除「{track.Title}」");

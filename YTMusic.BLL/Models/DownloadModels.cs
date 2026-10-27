@@ -11,8 +11,10 @@ public enum DownloadStatus
 {
     Pending,
     Downloading,
+    Paused,
     Completed,
-    Failed
+    Failed,
+    Cancelled
 }
 
 public class DownloadTaskInfo

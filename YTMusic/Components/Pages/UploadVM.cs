@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using YTMusic.BLL.Abstractions;
+using YTMusic.BLL.Infrastructure;
 using YTMusic.BLL.Models;
 using YTMusic.BLL.Ports;
 using YTMusic.ViewModels.Shared;
@@ -501,18 +502,6 @@ public sealed partial class UploadVM : ViewModelBase, IDisposable
             file.RemoteSourcePath!.StartsWith(normalized + "/", StringComparison.OrdinalIgnoreCase));
     }
 
-    public void DownloadRemoteFile(AListDirectoryItem item)
-    {
-        _remoteDownloadManager.StartRemoteDownload(item);
-        _notifier.Info($"Added '{item.Name}' to transfers.");
-    }
-
-    public void DownloadRemoteDirectory(AListBrowserItem item)
-    {
-        _remoteDownloadManager.StartRemoteDirectoryDownload(item.Item, item.DisplayName);
-        _notifier.Info($"Added '{item.DisplayName}' to transfers.");
-    }
-
     public void DownloadSelectedRemoteAsync()
     {
         if (!_settingsService.IsConfigured)
@@ -648,7 +637,7 @@ public sealed partial class UploadVM : ViewModelBase, IDisposable
 
             var directoryKey = directoryPath.TrimEnd('/').Split('/').LastOrDefault();
             var mediaItem = children
-                .Where(child => !child.IsDir && IsMediaFile(child.Name))
+                .Where(child => !child.IsDir && MediaFileExtensions.IsMediaFile(child.Name))
                 .OrderByDescending(child =>
                     !string.IsNullOrWhiteSpace(directoryKey) &&
                     string.Equals(Path.GetFileNameWithoutExtension(child.Name), directoryKey, StringComparison.OrdinalIgnoreCase))
@@ -663,23 +652,6 @@ public sealed partial class UploadVM : ViewModelBase, IDisposable
         {
             return (null, null);
         }
-    }
-
-    private static bool IsMediaFile(string fileName)
-    {
-        var extension = Path.GetExtension(fileName);
-        return extension.Equals(".mp3", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".m4a", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".aac", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".wav", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".flac", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".ogg", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".opus", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".mp4", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".mkv", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".webm", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".mov", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".avi", StringComparison.OrdinalIgnoreCase);
     }
 
     private static AListBrowserItem CreateBrowserItem(AListDirectoryItem item, string displayName, string? subtitle, string? thumbnailUrl = null)
@@ -714,23 +686,4 @@ public sealed partial class UploadVM : ViewModelBase, IDisposable
         DownloadStatus.Failed => MudBlazor.Color.Error,
         _ => MudBlazor.Color.Default
     };
-
-    public static string FormatSize(long size)
-    {
-        if (size <= 0)
-        {
-            return "Unknown size";
-        }
-
-        string[] units = ["B", "KB", "MB", "GB"];
-        double value = size;
-        var unitIndex = 0;
-        while (value >= 1024 && unitIndex < units.Length - 1)
-        {
-            value /= 1024;
-            unitIndex++;
-        }
-
-        return $"{value:F1} {units[unitIndex]}";
-    }
 }

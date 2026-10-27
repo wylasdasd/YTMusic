@@ -8,5 +8,9 @@ public interface IPlaybackHistoryRepository
 
     Task RecordPlayAsync(PlaybackHistoryRecord record);
 
+    Task RemoveForTrackAsync(string? videoId, string? localFilePath);
+
+    Task RemoveByIdAsync(long id);
+
     Task ClearAsync();
 }

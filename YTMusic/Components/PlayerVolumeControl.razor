@@ -1,0 +1,23 @@
+<div class="player-volume-inline">
+    <MudIcon Icon="@VolumeIcon" Size="Size.Small" Class="player-volume-icon" aria-hidden="true" />
+    <MudSlider T="double"
+               Min="0"
+               Max="1"
+               Step="0.01"
+               Value="@Volume"
+               ValueChanged="OnVolumeChangedAsync"
+               Class="player-volume-slider"
+               aria-label="音量" />
+</div>
+
+@code {
+    [Parameter] public double Volume { get; set; }
+    [Parameter] public EventCallback<double> VolumeChanged { get; set; }
+
+    private string VolumeIcon =>
+        Volume <= 0.001 ? Icons.Material.Filled.VolumeOff
+        : Volume < 0.45 ? Icons.Material.Filled.VolumeDown
+        : Icons.Material.Filled.VolumeUp;
+
+    private Task OnVolumeChangedAsync(double value) => VolumeChanged.InvokeAsync(value);
+}

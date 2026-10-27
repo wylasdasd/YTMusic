@@ -259,7 +259,7 @@ public sealed partial class FavoritesVM : ViewModelBase
                     await _favoriteService.RemoveTrackByFilePathAsync(file.LocalFilePath);
                 }
 
-                await _localMusicService.RemoveDownloadedTrackAsync(file.VideoId, file.LocalFilePath);
+                await _localMusicService.ClearDownloadedLocalFileAsync(file.VideoId, file.LocalFilePath);
             }
 
             _notifier.Success($"已清空 {downloads.Count} 首，已下载收藏夹仍保留");

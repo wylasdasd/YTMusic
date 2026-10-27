@@ -1,3 +1,5 @@
+using CommonHelp;
+
 namespace YTMusic.BLL.Infrastructure.AList;
 
 /// <summary>AList 上传流程中的本地文件与临时文件工具。</summary>
@@ -30,27 +32,13 @@ internal static class AListFileHelpers
 
     public static MemoryStream CreateDataUriStream(string dataUri)
     {
-        var commaIndex = dataUri.IndexOf(',');
-        if (commaIndex <= 0 || commaIndex == dataUri.Length - 1)
+        if (!MimeHelp.TryParseDataUrl(dataUri, out _, out var base64Part, out _)
+            || !MimeHelp.TryDecodeBase64(base64Part, out var bytes))
         {
             throw new InvalidOperationException("Invalid data URI cover content.");
         }
 
-        var metadata = dataUri[..commaIndex];
-        var payload = dataUri[(commaIndex + 1)..];
-        if (!metadata.Contains(";base64", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException("Only base64 data URI cover content is supported.");
-        }
-
-        try
-        {
-            return new MemoryStream(Convert.FromBase64String(payload), writable: false);
-        }
-        catch (FormatException ex)
-        {
-            throw new InvalidOperationException("Invalid base64 cover content.", ex);
-        }
+        return new MemoryStream(bytes, writable: false);
     }
 
     public static async Task<string> WriteTempFileAsync(Stream sourceStream, string extension, CancellationToken cancellationToken)
@@ -65,18 +53,5 @@ internal static class AListFileHelpers
         return tempPath;
     }
 
-    public static void TryDeleteFile(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-        catch
-        {
-            // Best-effort temp cleanup.
-        }
-    }
+    public static void TryDeleteFile(string path) => FileHelp.DeleteIfExists(path);
 }

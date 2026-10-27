@@ -47,4 +47,16 @@ public sealed partial class HistoryVM : ViewModelBase
         History = Array.Empty<PlaybackHistoryRecord>();
         NotifyChanged();
     }
+
+    public async Task RemoveItemAsync(PlaybackHistoryRecord item)
+    {
+        if (item.Id <= 0)
+        {
+            return;
+        }
+
+        await _historyService.RemoveByIdAsync(item.Id);
+        History = History.Where(row => row.Id != item.Id).ToList();
+        NotifyChanged();
+    }
 }

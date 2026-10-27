@@ -35,6 +35,7 @@ namespace YTMusic.Services
         private TaskCompletionSource<bool>? _webStopTcs;
         
         public event Action? OnChange;
+        public event Action<double>? OnVolumeChanged;
         public event Action? OnTimeChanged;
         public event Action? OnRequestReplay;
         public event Action? OnRequestPause;
@@ -65,6 +66,7 @@ namespace YTMusic.Services
         public bool IsCurrentStreamVideo { get; private set; }
         public double CurrentTime { get; private set; } = 0;
         public double Duration { get; private set; } = 100;
+        public double Volume { get; private set; } = 1;
 
         public List<PlayingItem> Playlist => _playlist.Items;
         public int CurrentPlaylistIndex => _playlist.CurrentIndex;
@@ -89,6 +91,7 @@ namespace YTMusic.Services
             _proxyCoordinator = proxyCoordinator;
             _streamResolver = streamResolver;
             _uiPreferences = uiPreferences;
+            Volume = _uiPreferences.PlaybackVolume;
 
             if (_nativeAudio.IsSupported)
             {
@@ -383,8 +386,6 @@ namespace YTMusic.Services
             NotifyStateChanged();
         }
 
-        public Task ClearPlaybackHistoryAsync() => _playbackHistoryService.ClearAsync();
-
         public async Task<bool> PlayPlaylistAsync(List<PlayingItem> items, int startIndex, string playlistName, PlaybackMode mode = PlaybackMode.Sequential)
         {
             if (items == null || items.Count == 0 || startIndex < 0 || startIndex >= items.Count)
@@ -647,13 +648,8 @@ namespace YTMusic.Services
                 NotifyStateChanged();
                 var options = PlaybackRouteSelector.BuildPlaybackOptions(shouldAutoPlay);
 
-                if (!string.IsNullOrEmpty(video.LocalFilePath))
+                if (!string.IsNullOrEmpty(video.LocalFilePath) && File.Exists(video.LocalFilePath))
                 {
-                    if (!File.Exists(video.LocalFilePath))
-                    {
-                        return false;
-                    }
-
                     await ActivateLocalFilePlaybackAsync(
                         video.LocalFilePath,
                         video.IsVideo == true,
@@ -1059,10 +1055,30 @@ namespace YTMusic.Services
             AddToPlaybackHistory(historyItem, isStreamVideo);
         }
 
+        public Task SetVolumeAsync(double volume)
+        {
+            volume = Math.Clamp(volume, 0, 1);
+            if (Math.Abs(Volume - volume) < 0.001)
+            {
+                return Task.CompletedTask;
+            }
+
+            Volume = volume;
+            _uiPreferences.SetPlaybackVolume(volume);
+            OnVolumeChanged?.Invoke(volume);
+            NotifyStateChanged();
+            return Task.CompletedTask;
+        }
+
         private async Task ActivatePlaybackAsync(PlaybackKind kind, PlaybackSource source, PlaybackOptions options)
         {
             var instance = GetPlaybackInstance(kind);
             await _playbackSwitcher.SwitchAsync(instance, this, source, options).ConfigureAwait(false);
+            if (ActivePlaybackKind.UsesWebSink() || (ActivePlaybackKind == PlaybackKind.Hybrid && UsesWebCompanionAudio))
+            {
+                OnVolumeChanged?.Invoke(Volume);
+            }
+
             NotifyStateChanged();
         }
 

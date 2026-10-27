@@ -32,18 +32,17 @@ public sealed class LocalMusicService : ILocalMusicService
 
         foreach (var track in tracks)
         {
-            if (_fileSystem.FileExists(track.LocalFilePath))
+            if (HasExistingLocalFile(track.LocalFilePath))
             {
                 validTracks.Add(track);
-            }
-            else
-            {
-                await RemoveDownloadedTrackAsync(track.VideoId, string.Empty);
             }
         }
 
         return validTracks;
     }
+
+    public Task<IReadOnlyList<DownloadedTrack>> GetDownloadRecordsAsync()
+        => _repository.GetAllAsync();
 
     public async Task<DownloadedTrack?> GetDownloadedTrackByVideoIdAsync(string videoId)
     {
@@ -58,13 +57,17 @@ public sealed class LocalMusicService : ILocalMusicService
             return null;
         }
 
-        if (_fileSystem.FileExists(track.LocalFilePath))
+        return HasExistingLocalFile(track.LocalFilePath) ? track : null;
+    }
+
+    public Task<DownloadedTrack?> GetDownloadedTrackRecordAsync(string videoId)
+    {
+        if (string.IsNullOrWhiteSpace(videoId))
         {
-            return track;
+            return Task.FromResult<DownloadedTrack?>(null);
         }
 
-        await RemoveDownloadedTrackAsync(videoId, string.Empty);
-        return null;
+        return _repository.GetByVideoIdAsync(videoId);
     }
 
     public async Task<IReadOnlyDictionary<string, DownloadedTrack>> GetDownloadedTracksByVideoIdsAsync(IEnumerable<string> videoIds)
@@ -73,7 +76,7 @@ public sealed class LocalMusicService : ILocalMusicService
         var result = new Dictionary<string, DownloadedTrack>(StringComparer.Ordinal);
         foreach (var track in tracks)
         {
-            if (string.IsNullOrWhiteSpace(track.VideoId) || !_fileSystem.FileExists(track.LocalFilePath))
+            if (string.IsNullOrWhiteSpace(track.VideoId) || !HasExistingLocalFile(track.LocalFilePath))
             {
                 continue;
             }
@@ -97,13 +100,7 @@ public sealed class LocalMusicService : ILocalMusicService
             return null;
         }
 
-        if (_fileSystem.FileExists(track.LocalFilePath))
-        {
-            return track;
-        }
-
-        await RemoveDownloadedTrackAsync(track.VideoId, string.Empty);
-        return null;
+        return HasExistingLocalFile(track.LocalFilePath) ? track : null;
     }
 
     public async Task<DownloadedTrack?> GetDownloadedTrackByRemoteSourcePathAsync(string remoteSourcePath)
@@ -119,16 +116,56 @@ public sealed class LocalMusicService : ILocalMusicService
             return null;
         }
 
-        if (_fileSystem.FileExists(track.LocalFilePath))
-        {
-            return track;
-        }
-
-        await RemoveDownloadedTrackAsync(track.VideoId, string.Empty);
-        return null;
+        return HasExistingLocalFile(track.LocalFilePath) ? track : null;
     }
 
     public Task AddDownloadedTrackAsync(DownloadedTrack track) => _repository.AddOrReplaceAsync(track);
+
+    public async Task SaveCompletedDownloadRecordAsync(
+        string videoId,
+        string title,
+        string localFilePath,
+        bool isVideo,
+        string? remoteSourcePath = null)
+    {
+        if (string.IsNullOrWhiteSpace(videoId))
+        {
+            throw new ArgumentException("VideoId is required.", nameof(videoId));
+        }
+
+        if (string.IsNullOrWhiteSpace(localFilePath))
+        {
+            throw new ArgumentException("Local file path is required.", nameof(localFilePath));
+        }
+
+        var existing = await _repository.GetByVideoIdAsync(videoId);
+        var previousPath = existing?.LocalFilePath;
+
+        await _repository.AddOrReplaceAsync(new DownloadedTrack
+        {
+            VideoId = videoId,
+            Title = title,
+            Author = string.IsNullOrWhiteSpace(existing?.Author)
+                ? AppGlobal.AList.UnknownArtist
+                : existing.Author,
+            ThumbnailUrl = ResolveThumbnailUrl(videoId, existing?.ThumbnailUrl),
+            LocalFilePath = localFilePath,
+            IsVideo = isVideo,
+            DownloadedDate = DateTime.UtcNow,
+            HasUploaded = existing?.HasUploaded ?? false,
+            UploadedDate = existing?.UploadedDate,
+            UploadedRemotePath = existing?.UploadedRemotePath,
+            RemoteSourcePath = remoteSourcePath ?? existing?.RemoteSourcePath
+        });
+
+        await _favoriteService.UpdateLocalFilePathAsync(videoId, localFilePath);
+
+        if (!string.IsNullOrWhiteSpace(previousPath)
+            && !string.Equals(previousPath, localFilePath, StringComparison.OrdinalIgnoreCase))
+        {
+            FileHelp.DeleteIfExists(previousPath);
+        }
+    }
 
     public Task MarkTrackUploadedAsync(string localFilePath, string remotePath)
     {
@@ -146,6 +183,24 @@ public sealed class LocalMusicService : ILocalMusicService
     {
         await _repository.DeleteByVideoIdAsync(videoId);
         FileHelp.DeleteIfExists(filePath);
+    }
+
+    public async Task ClearDownloadedLocalFileAsync(string videoId, string? filePath)
+    {
+        if (string.IsNullOrWhiteSpace(videoId))
+        {
+            return;
+        }
+
+        FileHelp.DeleteIfExists(filePath);
+        var track = await _repository.GetByVideoIdAsync(videoId);
+        if (track == null)
+        {
+            return;
+        }
+
+        track.LocalFilePath = string.Empty;
+        await _repository.AddOrReplaceAsync(track);
     }
 
     public Task<IReadOnlyList<LocalAudioFile>> GetDownloadedAudioFilesAsync()
@@ -174,9 +229,27 @@ public sealed class LocalMusicService : ILocalMusicService
         return Task.FromResult<IReadOnlyList<LocalAudioFile>>(result);
     }
 
-    public async Task DeleteAudioFileAsync(string filePath)
+    public async Task DeleteAudioFileAsync(string filePath, string? videoId = null)
     {
         FileHelp.DeleteIfExists(filePath);
         await _favoriteService.RemoveTrackByFilePathAsync(filePath);
+    }
+
+    private bool HasExistingLocalFile(string? filePath)
+        => !string.IsNullOrWhiteSpace(filePath) && _fileSystem.FileExists(filePath);
+
+    private static string? ResolveThumbnailUrl(string videoId, string? existingThumbnail)
+    {
+        if (!string.IsNullOrWhiteSpace(existingThumbnail))
+        {
+            return existingThumbnail;
+        }
+
+        if (videoId.StartsWith(AppGlobal.AList.RemoteTrackIdPrefix, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return $"https://img.youtube.com/vi/{videoId}/mqdefault.jpg";
     }
 }

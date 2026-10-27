@@ -70,17 +70,6 @@ window.audioPlayer = {
         }
     },
 
-    normalizeStreamUrl: function (url) {
-        if (!url) return "";
-        try {
-            const parsed = new URL(url, window.location.origin);
-            parsed.search = "";
-            return parsed.toString();
-        } catch {
-            return url.split("?")[0];
-        }
-    },
-
     formatTime: function (seconds) {
         if (!Number.isFinite(seconds) || seconds < 0) {
             return "00:00";
@@ -869,10 +858,6 @@ window.audioPlayer = {
         this.play();
     },
 
-    loadVideoOnly: function (url, isWebM, playing, time) {
-        this.syncWebVideoState(url, isWebM, true, !!playing, Number.isFinite(time) ? time : null);
-    },
-
     playVideoOnly: function () {
         if (!this.nativeVideo) {
             this.log("playVideoOnly skipped", { hasVideo: false });
@@ -962,6 +947,26 @@ window.audioPlayer = {
             this.startProgressLoop();
         }
     },
+
+    setVolume: function (level) {
+        const volume = Math.max(0, Math.min(1, Number(level)));
+        if (!Number.isFinite(volume)) {
+            return;
+        }
+
+        if (this.nativeAudio) {
+            this.nativeAudio.volume = volume;
+        }
+
+        if (this.nativeVideo) {
+            this.nativeVideo.volume = volume;
+        }
+
+        if (this.ogvPlayer && typeof this.ogvPlayer.volume === "number") {
+            this.ogvPlayer.volume = volume;
+        }
+    },
+
     dispose: function () {
         this.stopProgressLoop();
         this.exitVideoFullscreen();

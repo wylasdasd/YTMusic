@@ -38,5 +38,10 @@ public sealed class PlaybackHistoryService : IPlaybackHistoryService
         });
     }
 
+    public Task RemoveForTrackAsync(string? videoId, string? localFilePath)
+        => _repository.RemoveForTrackAsync(videoId, localFilePath);
+
+    public Task RemoveByIdAsync(long id) => _repository.RemoveByIdAsync(id);
+
     public Task ClearAsync() => _repository.ClearAsync();
 }

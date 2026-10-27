@@ -31,17 +31,23 @@ public sealed class YoutubeExplodeClient : IYouTubeApiClient
         }
     }
 
-    public async Task DownloadStreamAsync(IStreamInfo streamInfo, string filePath, IProgress<double>? progress = null)
+    public async Task DownloadStreamAsync(
+        IStreamInfo streamInfo,
+        string filePath,
+        IProgress<double>? progress = null,
+        CancellationToken cancellationToken = default)
     {
         try
         {
             if (OperatingSystem.IsAndroid())
             {
-                await Task.Run(async () => await _client.Videos.Streams.DownloadAsync(streamInfo, filePath, progress));
+                await Task.Run(
+                    async () => await _client.Videos.Streams.DownloadAsync(streamInfo, filePath, progress, cancellationToken),
+                    cancellationToken);
                 return;
             }
 
-            await _client.Videos.Streams.DownloadAsync(streamInfo, filePath, progress);
+            await _client.Videos.Streams.DownloadAsync(streamInfo, filePath, progress, cancellationToken);
         }
         catch (Exception ex) when (IsAnonymousStreamBlocked(ex))
         {

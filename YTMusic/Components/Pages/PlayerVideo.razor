@@ -82,13 +82,14 @@
                                        OnClick="@(async () => await ViewModel.DeleteLocalAndUnfavoriteCommand.ExecuteAsync(null))"
                                        Disabled="@PlayerService.IsSwitchingTrack"
                                        aria-label="删除本地并取消收藏" />
-                        <MudMenu Icon="@Icons.Material.Filled.Download"
-                                 Color="Color.Primary"
-                                 AnchorOrigin="Origin.BottomRight"
-                                 TransformOrigin="Origin.TopRight"
-                                 aria-label="Download">
-                            <MudMenuItem OnClick="@(() => ViewModel.Download(false))">Download Audio</MudMenuItem>
-                        </MudMenu>
+                        <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                       Color="Color.Primary"
+                                       OnClick="@(() => ViewModel.Download(false))"
+                                       aria-label="Download" />
+                        @if (!OperatingSystem.IsAndroid())
+                        {
+                            <PlayerVolumeControl Volume="@PlayerService.Volume" VolumeChanged="ViewModel.SetVolumeAsync" />
+                        }
                     </div>
 
                     <MudIconButton Icon="@PlayerVM.GetPlaybackModeIcon(PlayerService.CurrentMode)"

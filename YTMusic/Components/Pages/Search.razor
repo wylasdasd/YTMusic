@@ -47,10 +47,10 @@
                                     OnClick="@(async (e) => await ViewModel.OpenFavoriteDialogAsync(video))"
                                     aria-label="Toggle Favorite" />
                                 <div @onclick:stopPropagation="true">
-                                    <MudMenu Icon="@Icons.Material.Filled.Download" Color="Color.Default"
-                                             AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" aria-label="Download">
-                                        <MudMenuItem OnClick="@(() => ViewModel.Download(video, false))">Download Audio</MudMenuItem>
-                                    </MudMenu>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                                   Color="Color.Default"
+                                                   OnClick="@(() => ViewModel.Download(video, false))"
+                                                   aria-label="Download" />
                                 </div>
                             </MudCardActions>
                         </MudCard>

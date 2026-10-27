@@ -5,7 +5,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using CommonHelp;
 
+using System.Threading;
 using YTMusic.BLL.Abstractions;
+using YTMusic.BLL.Infrastructure;
 using YTMusic.BLL.Models;
 using YTMusic.BLL.Ports;
 
@@ -20,6 +22,7 @@ namespace YTMusic.BLL.Services
         private readonly IDownloadMusicDirectoryProvider _downloadMusicDirectoryProvider;
         private readonly object _syncRoot = new();
         private readonly List<DownloadTaskInfo> _activeRemoteDownloads = new();
+        private readonly Dictionary<string, CancellationTokenSource> _taskCancellation = new(StringComparer.Ordinal);
 
         public AListRemoteDownloadManagerService(
             IAListUploadService aListUploadService,
@@ -62,6 +65,7 @@ namespace YTMusic.BLL.Services
                 };
 
                 _activeRemoteDownloads.Add(taskInfo);
+                _taskCancellation[taskInfo.Id] = new CancellationTokenSource();
                 TrimHistory_NoLock();
             }
 
@@ -91,6 +95,7 @@ namespace YTMusic.BLL.Services
                 };
 
                 _activeRemoteDownloads.Add(taskInfo);
+                _taskCancellation[taskInfo.Id] = new CancellationTokenSource();
                 TrimHistory_NoLock();
             }
 
@@ -98,48 +103,105 @@ namespace YTMusic.BLL.Services
             _ = ExecuteRemoteDirectoryDownloadAsync(item, title, taskInfo);
         }
 
+        public void CancelRemoteDownload(string taskId)
+        {
+            if (string.IsNullOrWhiteSpace(taskId))
+            {
+                return;
+            }
+
+            lock (_syncRoot)
+            {
+                var task = _activeRemoteDownloads.FirstOrDefault(item => item.Id == taskId);
+                if (task == null)
+                {
+                    return;
+                }
+
+                if (task.Status is DownloadStatus.Pending or DownloadStatus.Paused)
+                {
+                    task.Status = DownloadStatus.Cancelled;
+                    task.ErrorMessage = "已取消";
+                    DisposeTaskCancellation(taskId);
+                    NotifyChanged();
+                    return;
+                }
+
+                if (task.Status == DownloadStatus.Downloading && _taskCancellation.TryGetValue(taskId, out var cts))
+                {
+                    cts.Cancel();
+                }
+            }
+        }
+
+        public void PauseRemoteDownload(string taskId)
+        {
+            lock (_syncRoot)
+            {
+                var task = _activeRemoteDownloads.FirstOrDefault(item => item.Id == taskId);
+                if (task == null || task.Status is not (DownloadStatus.Downloading or DownloadStatus.Pending))
+                {
+                    return;
+                }
+
+                task.Status = DownloadStatus.Paused;
+            }
+
+            NotifyChanged();
+        }
+
+        public void ResumeRemoteDownload(string taskId)
+        {
+            lock (_syncRoot)
+            {
+                var task = _activeRemoteDownloads.FirstOrDefault(item => item.Id == taskId);
+                if (task == null || task.Status != DownloadStatus.Paused)
+                {
+                    return;
+                }
+
+                task.Status = DownloadStatus.Downloading;
+            }
+
+            NotifyChanged();
+        }
+
         private async Task ExecuteRemoteDownloadAsync(DownloadTaskInfo taskInfo)
         {
+            var cancellationToken = GetTaskCancellationToken(taskInfo.Id);
+            await WaitUntilCanStartAsync(taskInfo, cancellationToken);
+            if (taskInfo.Status == DownloadStatus.Cancelled)
+            {
+                return;
+            }
+
             lock (_syncRoot)
             {
                 taskInfo.Status = DownloadStatus.Downloading;
                 taskInfo.ErrorMessage = null;
             }
+
             NotifyChanged();
 
+            string? targetPath = null;
             try
             {
-                var progress = new Progress<double>(p =>
-                {
-                    bool shouldNotify;
-                    lock (_syncRoot)
-                    {
-                        shouldNotify = Math.Abs(taskInfo.Progress - p) >= AppGlobal.Transfers.ProgressNotifyThreshold || p >= 1.0;
-                        taskInfo.Progress = p;
-                    }
+                var progress = DownloadTransferControl.CreateProgressReporter(
+                    taskInfo,
+                    _syncRoot,
+                    cancellationToken,
+                    AppGlobal.Transfers.ProgressNotifyThreshold,
+                    NotifyChanged);
 
-                    if (shouldNotify)
-                    {
-                        NotifyChanged();
-                    }
-                });
+                var localFilePath = await _aListUploadService.DownloadFileAsync(taskInfo.SourcePath!, progress, cancellationToken);
+                targetPath = localFilePath;
 
-                var localFilePath = await _aListUploadService.DownloadFileAsync(taskInfo.SourcePath!, progress);
-
-                await _localMusicService.AddDownloadedTrackAsync(new DownloadedTrack
-                {
-                    VideoId = $"{AppGlobal.AList.RemoteTrackIdPrefix}{taskInfo.SourcePath}",
-                    Title = taskInfo.Title,
-                    Author = AppGlobal.AList.RemoteAuthor,
-                    ThumbnailUrl = null,
-                    LocalFilePath = localFilePath,
-                    IsVideo = false,
-                    DownloadedDate = DateTime.UtcNow,
-                    HasUploaded = false,
-                    UploadedDate = null,
-                    UploadedRemotePath = null,
-                    RemoteSourcePath = taskInfo.SourcePath
-                });
+                await _localMusicService.SaveCompletedDownloadRecordAsync(
+                    $"{AppGlobal.AList.RemoteTrackIdPrefix}{taskInfo.SourcePath}",
+                    taskInfo.Title,
+                    localFilePath,
+                    isVideo: false,
+                    remoteSourcePath: taskInfo.SourcePath);
 
                 lock (_syncRoot)
                 {
@@ -148,8 +210,18 @@ namespace YTMusic.BLL.Services
                     taskInfo.Progress = 1.0;
                 }
             }
+            catch (OperationCanceledException)
+            {
+                FileHelp.DeleteIfExists(targetPath);
+                lock (_syncRoot)
+                {
+                    taskInfo.Status = DownloadStatus.Cancelled;
+                    taskInfo.ErrorMessage = "已取消";
+                }
+            }
             catch (Exception ex)
             {
+                FileHelp.DeleteIfExists(targetPath);
                 lock (_syncRoot)
                 {
                     taskInfo.Status = DownloadStatus.Failed;
@@ -158,6 +230,7 @@ namespace YTMusic.BLL.Services
             }
             finally
             {
+                DisposeTaskCancellation(taskInfo.Id);
                 lock (_syncRoot)
                 {
                     TrimHistory_NoLock();
@@ -169,13 +242,22 @@ namespace YTMusic.BLL.Services
 
         private async Task ExecuteRemoteDirectoryDownloadAsync(AListDirectoryItem directoryItem, string title, DownloadTaskInfo taskInfo)
         {
+            var cancellationToken = GetTaskCancellationToken(taskInfo.Id);
+            await WaitUntilCanStartAsync(taskInfo, cancellationToken);
+            if (taskInfo.Status == DownloadStatus.Cancelled)
+            {
+                return;
+            }
+
             lock (_syncRoot)
             {
                 taskInfo.Status = DownloadStatus.Downloading;
                 taskInfo.ErrorMessage = null;
             }
+
             NotifyChanged();
 
+            string? targetPath = null;
             try
             {
                 var directoryKey = directoryItem.Name;
@@ -204,8 +286,14 @@ namespace YTMusic.BLL.Services
                 var mediaFileName = BuildLocalMediaFileName(resolvedTitle, mediaItem.Name);
                 var localMediaPath = Path.Combine(localDirectory, FileHelp.SafeFileName(mediaFileName));
 
-                var mediaProgress = new Progress<double>(p => UpdateProgress(taskInfo, p));
-                await _aListUploadService.DownloadFileToPathAsync(mediaItem.Path, localMediaPath, mediaProgress);
+                targetPath = localMediaPath;
+                var mediaProgress = DownloadTransferControl.CreateProgressReporter(
+                    taskInfo,
+                    _syncRoot,
+                    cancellationToken,
+                    AppGlobal.Transfers.ProgressNotifyThreshold,
+                    NotifyChanged);
+                await _aListUploadService.DownloadFileToPathAsync(mediaItem.Path, localMediaPath, mediaProgress, cancellationToken);
 
                 DownloadedTrack downloadedTrack;
                 if (metadata != null)
@@ -229,7 +317,7 @@ namespace YTMusic.BLL.Services
                     };
                 }
 
-                if (IsVideoFile(mediaItem.Name))
+                if (MediaFileExtensions.IsVideoFile(mediaItem.Name))
                 {
                     downloadedTrack.IsVideo = true;
                 }
@@ -251,8 +339,18 @@ namespace YTMusic.BLL.Services
                     taskInfo.Progress = 1.0;
                 }
             }
+            catch (OperationCanceledException)
+            {
+                FileHelp.DeleteIfExists(targetPath);
+                lock (_syncRoot)
+                {
+                    taskInfo.Status = DownloadStatus.Cancelled;
+                    taskInfo.ErrorMessage = "已取消";
+                }
+            }
             catch (Exception ex)
             {
+                FileHelp.DeleteIfExists(targetPath);
                 lock (_syncRoot)
                 {
                     taskInfo.Status = DownloadStatus.Failed;
@@ -261,12 +359,57 @@ namespace YTMusic.BLL.Services
             }
             finally
             {
+                DisposeTaskCancellation(taskInfo.Id);
                 lock (_syncRoot)
                 {
                     TrimHistory_NoLock();
                 }
 
                 NotifyChanged();
+            }
+        }
+
+        private CancellationToken GetTaskCancellationToken(string taskId)
+        {
+            lock (_syncRoot)
+            {
+                if (!_taskCancellation.TryGetValue(taskId, out var cts))
+                {
+                    cts = new CancellationTokenSource();
+                    _taskCancellation[taskId] = cts;
+                }
+
+                return cts.Token;
+            }
+        }
+
+        private async Task WaitUntilCanStartAsync(DownloadTaskInfo taskInfo, CancellationToken cancellationToken)
+        {
+            while (true)
+            {
+                lock (_syncRoot)
+                {
+                    if (taskInfo.Status == DownloadStatus.Cancelled)
+                    {
+                        return;
+                    }
+
+                    if (taskInfo.Status != DownloadStatus.Paused)
+                    {
+                        return;
+                    }
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                await Task.Delay(150, cancellationToken);
+            }
+        }
+
+        private void DisposeTaskCancellation(string taskId)
+        {
+            if (_taskCancellation.Remove(taskId, out var cts))
+            {
+                cts.Dispose();
             }
         }
 
@@ -306,22 +449,6 @@ namespace YTMusic.BLL.Services
             OnRemoteDownloadsChanged?.Invoke();
         }
 
-        private void UpdateProgress(DownloadTaskInfo taskInfo, double mediaProgress)
-        {
-            bool shouldNotify;
-            var combined = mediaProgress;
-            lock (_syncRoot)
-            {
-                shouldNotify = Math.Abs(taskInfo.Progress - combined) >= AppGlobal.Transfers.ProgressNotifyThreshold || combined >= 1.0;
-                taskInfo.Progress = combined;
-            }
-
-            if (shouldNotify)
-            {
-                NotifyChanged();
-            }
-        }
-
         private async Task<RemoteTrackMetadata?> TryLoadRemoteMetadataAsync(IReadOnlyList<AListDirectoryItem> items, string directoryPath)
         {
             var metadataItem = items.FirstOrDefault(item =>
@@ -340,7 +467,7 @@ namespace YTMusic.BLL.Services
         private static AListDirectoryItem? SelectMediaItem(IReadOnlyList<AListDirectoryItem> items, string? directoryKey = null)
         {
             var mediaItems = items
-                .Where(item => !item.IsDir && IsMediaFile(item.Name))
+                .Where(item => !item.IsDir && MediaFileExtensions.IsMediaFile(item.Name))
                 .ToList();
 
             if (!string.IsNullOrWhiteSpace(directoryKey))
@@ -359,33 +486,6 @@ namespace YTMusic.BLL.Services
         }
 
         // 封面文件下载已停用：SelectCoverItem / IsImageFile / BuildLocalCoverFileName / BuildCoverDataUrl / GetImageMimeType
-
-        private static bool IsMediaFile(string fileName)
-        {
-            var extension = Path.GetExtension(fileName);
-            return extension.Equals(".mp3", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".m4a", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".aac", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".wav", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".flac", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".ogg", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".opus", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".mp4", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".mkv", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".webm", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".mov", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".avi", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool IsVideoFile(string fileName)
-        {
-            var extension = Path.GetExtension(fileName);
-            return extension.Equals(".mp4", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".mkv", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".webm", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".mov", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".avi", StringComparison.OrdinalIgnoreCase);
-        }
 
         private static bool IsLikelyMd5(string? value)
         {
@@ -418,7 +518,7 @@ namespace YTMusic.BLL.Services
 
             var overflow = _activeRemoteDownloads.Count - MaxRetainedTasks;
             var removable = _activeRemoteDownloads
-                .Where(task => task.Status is DownloadStatus.Completed or DownloadStatus.Failed)
+                .Where(task => task.Status is DownloadStatus.Completed or DownloadStatus.Failed or DownloadStatus.Cancelled)
                 .OrderBy(task => task.CreatedAtUtc)
                 .Take(overflow)
                 .ToList();

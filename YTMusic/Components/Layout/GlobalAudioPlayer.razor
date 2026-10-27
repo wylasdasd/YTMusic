@@ -33,6 +33,22 @@
         PlayerService.OnRequestPlay += OnRequestPlay;
         PlayerService.OnRequestSeek += OnRequestSeek;
         PlayerService.OnTimeChanged += OnPlayerTimeChanged;
+        PlayerService.OnVolumeChanged += OnVolumeChanged;
+    }
+
+    private void OnVolumeChanged(double volume)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("audioPlayer.setVolume", volume);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AudioVolumeError] {ex.Message}");
+            }
+        });
     }
 
     private void OnPlaybackNotice(string message)
@@ -153,6 +169,7 @@
         {
             _objRef = DotNetObjectReference.Create(this);
             await JSRuntime.InvokeVoidAsync("audioPlayer.init", _audioElement, _videoElement, _videoHost, _objRef);
+            await JSRuntime.InvokeVoidAsync("audioPlayer.setVolume", PlayerService.Volume);
 
             if (PlayerService.CurrentStreamUrl != null && PlayerService.UsesWebPlaybackSink)
             {
@@ -311,6 +328,7 @@
         PlayerService.OnRequestPlay -= OnRequestPlay;
         PlayerService.OnRequestSeek -= OnRequestSeek;
         PlayerService.OnTimeChanged -= OnPlayerTimeChanged;
+        PlayerService.OnVolumeChanged -= OnVolumeChanged;
         if (_objRef != null)
         {
             _objRef.Dispose();

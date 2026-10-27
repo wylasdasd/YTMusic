@@ -99,9 +99,10 @@ namespace YTMusic
             builder.Services.AddSingleton<INativeAudioPlaybackService, NullNativeAudioPlaybackService>();
             builder.Services.AddSingleton<INativeVideoPlaybackService, NullNativeVideoPlaybackService>();
 #endif
+            builder.Services.AddSingleton<DownloadRecordsSync>();
+
             builder.Services.AddScoped<SearchVM>();
             builder.Services.AddScoped<DownloadsVM>();
-            builder.Services.AddScoped<TransfersVM>();
             builder.Services.AddScoped<FavoritesVM>();
             builder.Services.AddScoped<FavoritesFolderVM>();
             builder.Services.AddScoped<UploadVM>();
