@@ -17,6 +17,12 @@
     margin-top: 10px;
 }
 
+.local-library {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
 .favorites-card__footer {
     align-items: center;
     padding-top: 0;

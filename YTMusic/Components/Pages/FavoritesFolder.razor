@@ -33,7 +33,7 @@
         @if (ViewModel.IsDownloadedCatalog)
         {
             <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
-                已下载目录同步自本地下载列表；可通过爱心按钮收藏到其他收藏夹。
+                已下载按存放目录分组，展开后查看曲目。可通过爱心按钮收藏到其他收藏夹。
             </MudAlert>
         }
     </Header>
@@ -49,6 +49,68 @@
             <MudAlert Severity="Severity.Info" Class="mt-4">
                 @(ViewModel.IsDownloadedCatalog ? "暂无本地下载文件。" : "当前收藏夹没有符合条件的歌曲。")
             </MudAlert>
+        }
+        else if (ViewModel.IsDownloadedCatalog)
+        {
+            <div class="local-library mt-2">
+                @foreach (var node in ViewModel.DirectoryNodes)
+                {
+                    <LocalDirectoryGroup TItem="FavoriteTrack"
+                                         Node="node"
+                                         PlayRequested="ViewModel.PlayDirectoryAsync">
+                        <TrackRow Context="track">
+                            <MudPaper Elevation="0"
+                                      Class="local-dir__track pa-2 d-flex align-center"
+                                      @onclick="@(() => ViewModel.PlayTrackAsync(track))">
+                                @if (UiPreferences.ShowFavoriteCardImages && !string.IsNullOrWhiteSpace(track.ThumbnailUrl))
+                                {
+                                    <MudImage Src="@track.ThumbnailUrl"
+                                              Width="44"
+                                              Height="44"
+                                              ObjectFit="ObjectFit.Cover"
+                                              Class="rounded mr-3" />
+                                }
+                                else
+                                {
+                                    <div class="local-dir__track-icon mr-3">
+                                        <MudIcon Icon="@Icons.Material.Filled.MusicNote" Color="Color.Primary" Size="Size.Small" />
+                                    </div>
+                                }
+
+                                <div class="local-dir__meta flex-grow-1">
+                                    <MediaTitle Text="@track.Title" Typo="Typo.body1" />
+                                    @if (!string.IsNullOrWhiteSpace(track.Author))
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">@track.Author</MudText>
+                                    }
+                                </div>
+
+                                @if (track.HasDownloadedVideo)
+                                {
+                                    <div @onclick:stopPropagation="true">
+                                        <MudIconButton Icon="@Icons.Material.Filled.OndemandVideo"
+                                                       Color="Color.Secondary"
+                                                       OnClick="@(async () => await ViewModel.PlayLocalVideoAsync(track))"
+                                                       aria-label="播放本地视频" />
+                                    </div>
+                                }
+                                <div @onclick:stopPropagation="true">
+                                    <MudIconButton Icon="@(ViewModel.IsTrackFavoritedAnywhere(track) ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                                                   Color="@(ViewModel.IsTrackFavoritedAnywhere(track) ? Color.Error : Color.Default)"
+                                                   OnClick="@(async () => await ViewModel.OpenFavoriteFolderDialogAsync(track))"
+                                                   aria-label="管理收藏夹" />
+                                </div>
+                                <div @onclick:stopPropagation="true">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                   Color="Color.Error"
+                                                   OnClick="@(async () => await ViewModel.DeleteLocalFileAsync(track))"
+                                                   aria-label="删除本地文件" />
+                                </div>
+                            </MudPaper>
+                        </TrackRow>
+                    </LocalDirectoryGroup>
+                }
+            </div>
         }
         else
         {
@@ -93,15 +155,6 @@
                                         OnClick="@(async () => await ViewModel.OpenFavoriteFolderDialogAsync(track))"
                                         aria-label="管理收藏夹" />
                                 </div>
-                                @if (ViewModel.IsDownloadedCatalog)
-                                {
-                                    <div @onclick:stopPropagation="true">
-                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                                       Color="Color.Error"
-                                                       OnClick="@(async () => await ViewModel.DeleteLocalFileAsync(track))"
-                                                       aria-label="删除本地文件" />
-                                    </div>
-                                }
                             </MudCardActions>
                         </MudCard>
                     </MudItem>

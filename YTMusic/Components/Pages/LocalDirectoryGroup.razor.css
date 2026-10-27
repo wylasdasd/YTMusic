@@ -1,0 +1,65 @@
+.local-dir--nested {
+    margin-left: 14px;
+}
+
+.local-dir__row,
+.local-dir__track {
+    cursor: pointer;
+    border: 1px solid var(--ytm-border);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
+}
+
+.local-dir__track {
+    background: transparent;
+}
+
+.local-dir__body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.local-dir__meta {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.local-dir__chevron {
+    flex-shrink: 0;
+}
+
+.local-dir__track-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    border-radius: 8px;
+    border: 1px solid var(--ytm-border);
+}
+
+::deep .local-dir__track {
+    cursor: pointer;
+    border: 1px solid var(--ytm-border);
+    border-radius: 12px;
+    background: transparent;
+}
+
+::deep .local-dir__meta {
+    min-width: 0;
+    overflow: hidden;
+}
+
+::deep .local-dir__track-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    border-radius: 8px;
+    border: 1px solid var(--ytm-border);
+}

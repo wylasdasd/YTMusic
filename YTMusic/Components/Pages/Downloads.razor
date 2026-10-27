@@ -9,59 +9,64 @@
                 <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
             </div>
         }
-        else if (!ViewModel.Files.Any())
+        else if (!ViewModel.DirectoryNodes.Any())
         {
             <MudAlert Severity="Severity.Info" Class="mt-4">No downloaded music found. Go search and download some songs!</MudAlert>
         }
         else
         {
-            <div class="d-flex flex-column gap-4 mt-2">
-                @foreach (var file in ViewModel.Files)
+            <div class="local-library d-flex flex-column gap-3 mt-2">
+                @foreach (var node in ViewModel.DirectoryNodes)
                 {
-                    <MudPaper Elevation="2" Class="pa-4 d-flex align-center" Style="cursor: pointer;" @onclick="@(() => ViewModel.PlayLocalAudioFileAsync(file))">
-                        @if (!string.IsNullOrEmpty(file.ThumbnailUrl))
-                        {
-                            <MudImage Src="@file.ThumbnailUrl" Width="60" Height="60" ObjectFit="ObjectFit.Cover" Class="rounded mr-4" />
-                        }
-                        else
-                        {
-                            <MudIcon Icon="@Icons.Material.Filled.MusicNote" Size="Size.Large" Class="mr-4" Color="Color.Primary" />
-                        }
+                    <LocalDirectoryGroup TItem="DownloadedTrack"
+                                         Node="node"
+                                         PlayRequested="ViewModel.PlayDirectoryAsync">
+                        <TrackRow Context="file">
+                            <MudPaper Elevation="2" Class="pa-4 d-flex align-center" Style="cursor: pointer;" @onclick="@(() => ViewModel.PlayLocalAudioFileAsync(file))">
+                                @if (!string.IsNullOrEmpty(file.ThumbnailUrl))
+                                {
+                                    <MudImage Src="@file.ThumbnailUrl" Width="60" Height="60" ObjectFit="ObjectFit.Cover" Class="rounded mr-4" />
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.MusicNote" Size="Size.Large" Class="mr-4" Color="Color.Primary" />
+                                }
 
-                        <div class="d-flex flex-column flex-grow-1" style="overflow: hidden;">
-                            <MediaTitle Text="@file.Title" Typo="Typo.subtitle1" />
-                        </div>
+                                <div class="d-flex flex-column flex-grow-1" style="overflow: hidden;">
+                                    <MediaTitle Text="@file.Title" Typo="Typo.subtitle1" />
+                                </div>
 
-                        @if (file.IsVideo)
-                        {
-                            <div @onclick:stopPropagation="true">
-                                <MudIconButton Icon="@Icons.Material.Filled.OndemandVideo"
-                                               Color="Color.Secondary"
-                                               OnClick="@(() => ViewModel.PlayLocalVideoFileAsync(file))"
-                                               aria-label="Play video" />
-                            </div>
-                        }
-                        <div @onclick:stopPropagation="true">
-                            <MudIconButton
-                                Icon="@(ViewModel.FavoriteFilePaths.Contains(file.LocalFilePath) ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
-                                Color="@(ViewModel.FavoriteFilePaths.Contains(file.LocalFilePath) ? Color.Error : Color.Default)"
-                                OnClick="@(async () => await ViewModel.OpenFavoriteDialogAsync(file))"
-                                aria-label="Toggle Favorite" />
-                        </div>
-
-                        <div @onclick:stopPropagation="true">
-                            <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
-                                           Color="Color.Primary"
-                                           OnClick="@(() => ViewModel.PlayLocalAudioFileAsync(file))"
-                                           aria-label="Play audio" />
-                        </div>
-                        <div @onclick:stopPropagation="true">
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                           Color="Color.Error"
-                                           OnClick="@(() => ViewModel.DeleteFileAsync(file))"
-                                           aria-label="Delete" />
-                        </div>
-                    </MudPaper>
+                                @if (file.IsVideo)
+                                {
+                                    <div @onclick:stopPropagation="true">
+                                        <MudIconButton Icon="@Icons.Material.Filled.OndemandVideo"
+                                                       Color="Color.Secondary"
+                                                       OnClick="@(() => ViewModel.PlayLocalVideoFileAsync(file))"
+                                                       aria-label="Play video" />
+                                    </div>
+                                }
+                                <div @onclick:stopPropagation="true">
+                                    <MudIconButton
+                                        Icon="@(ViewModel.FavoriteFilePaths.Contains(file.LocalFilePath) ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                                        Color="@(ViewModel.FavoriteFilePaths.Contains(file.LocalFilePath) ? Color.Error : Color.Default)"
+                                        OnClick="@(async () => await ViewModel.OpenFavoriteDialogAsync(file))"
+                                        aria-label="Toggle Favorite" />
+                                </div>
+                                <div @onclick:stopPropagation="true">
+                                    <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
+                                                   Color="Color.Primary"
+                                                   OnClick="@(() => ViewModel.PlayLocalAudioFileAsync(file))"
+                                                   aria-label="Play audio" />
+                                </div>
+                                <div @onclick:stopPropagation="true">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                   Color="Color.Error"
+                                                   OnClick="@(() => ViewModel.DeleteFileAsync(file))"
+                                                   aria-label="Delete" />
+                                </div>
+                            </MudPaper>
+                        </TrackRow>
+                    </LocalDirectoryGroup>
                 }
             </div>
         }

@@ -13,6 +13,7 @@ public sealed partial class FavoritesVM : ViewModelBase
 {
     private readonly IFavoriteService _favoriteService;
     private readonly ILocalMusicService _localMusicService;
+    private readonly IDownloadMusicDirectoryProvider _downloadDirectoryProvider;
     private readonly IUiNotifier _notifier;
     private readonly IDialogHost _dialogHost;
     private readonly MusicPlayerService _playerService;
@@ -27,6 +28,7 @@ public sealed partial class FavoritesVM : ViewModelBase
     public FavoritesVM(
         IFavoriteService favoriteService,
         ILocalMusicService localMusicService,
+        IDownloadMusicDirectoryProvider downloadDirectoryProvider,
         IUiNotifier notifier,
         IDialogHost dialogHost,
         MusicPlayerService playerService,
@@ -35,6 +37,7 @@ public sealed partial class FavoritesVM : ViewModelBase
     {
         _favoriteService = favoriteService;
         _localMusicService = localMusicService;
+        _downloadDirectoryProvider = downloadDirectoryProvider;
         _notifier = notifier;
         _dialogHost = dialogHost;
         _playerService = playerService;
@@ -106,7 +109,12 @@ public sealed partial class FavoritesVM : ViewModelBase
     {
         if (FavoriteFolderIds.IsDownloadedCatalog(folderId))
         {
-            return await LoadDownloadedCatalogTracksAsync();
+            var downloads = await LoadDownloadedCatalogTracksAsync();
+            var nodes = LocalDirectoryTree.Build(
+                downloads,
+                _downloadDirectoryProvider.GetDownloadedMusicDirectory(),
+                sortByName: true);
+            return LocalDirectoryTree.Flatten(nodes);
         }
 
         var tracks = await _favoriteService.GetTracksAsync(folderId, null);

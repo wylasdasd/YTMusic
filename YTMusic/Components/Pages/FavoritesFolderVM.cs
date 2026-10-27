@@ -21,6 +21,7 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
 {
     private readonly IFavoriteService _favoriteService;
     private readonly ILocalMusicService _localMusicService;
+    private readonly IDownloadMusicDirectoryProvider _downloadDirectoryProvider;
     private readonly IUiNotifier _notifier;
     private readonly IDialogHost _dialogHost;
     private readonly MusicPlayerService _playerService;
@@ -31,6 +32,7 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
     public int FolderId { get; private set; }
     public string? FolderName { get; private set; }
     public List<FavoriteTrack> Tracks { get; private set; } = new();
+    public IReadOnlyList<LocalDirectoryNode<FavoriteTrack>> DirectoryNodes { get; private set; } = Array.Empty<LocalDirectoryNode<FavoriteTrack>>();
     public HashSet<string> FavoritedVideoIds { get; private set; } = new(StringComparer.Ordinal);
     public FavoriteTrackSortMode SortMode { get; set; } = FavoriteTrackSortMode.Time;
     public bool IsLoading { get; private set; }
@@ -40,6 +42,7 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
     public FavoritesFolderVM(
         IFavoriteService favoriteService,
         ILocalMusicService localMusicService,
+        IDownloadMusicDirectoryProvider downloadDirectoryProvider,
         IUiNotifier notifier,
         IDialogHost dialogHost,
         MusicPlayerService playerService,
@@ -48,6 +51,7 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
     {
         _favoriteService = favoriteService;
         _localMusicService = localMusicService;
+        _downloadDirectoryProvider = downloadDirectoryProvider;
         _notifier = notifier;
         _dialogHost = dialogHost;
         _playerService = playerService;
@@ -160,8 +164,48 @@ public sealed partial class FavoritesFolderVM : ViewModelBase
         return Task.CompletedTask;
     }
 
+    public async Task PlayDirectoryAsync(LocalDirectoryNode<FavoriteTrack> node)
+    {
+        var tracks = LocalDirectoryTree.Flatten(new[] { node });
+        if (tracks.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _globalState.ShowLoading();
+            NotifyChanged();
+
+            if (await _playerService.PlayPlaylistAsync(
+                    BuildPlaylist(tracks),
+                    0,
+                    node.Name,
+                    MusicPlayerService.PlaybackMode.Sequential))
+            {
+                _navigation.NavigateTo("/player");
+            }
+        }
+        finally
+        {
+            _globalState.HideLoading();
+            NotifyChanged();
+        }
+    }
+
     private void ApplyTrackOrdering()
     {
+        if (IsDownloadedCatalog)
+        {
+            DirectoryNodes = LocalDirectoryTree.Build(
+                _rawTracks,
+                _downloadDirectoryProvider.GetDownloadedMusicDirectory(),
+                SortMode == FavoriteTrackSortMode.Name);
+            Tracks = LocalDirectoryTree.Flatten(DirectoryNodes);
+            return;
+        }
+
+        DirectoryNodes = Array.Empty<LocalDirectoryNode<FavoriteTrack>>();
         IEnumerable<FavoriteTrack> query = _rawTracks;
 
         switch (SortMode)

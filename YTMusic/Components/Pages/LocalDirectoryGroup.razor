@@ -1,0 +1,62 @@
+@using YTMusic.BLL.Models
+@typeparam TItem
+
+<div class="local-dir@(Depth > 0 ? " local-dir--nested" : null)">
+    <MudPaper Elevation="2"
+              Class="local-dir__row pa-3 d-flex align-center"
+              @onclick="Toggle">
+        <MudIcon Icon="@(IsExpanded ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)"
+                 Class="local-dir__chevron mr-1"
+                 aria-hidden="true" />
+        <MudIcon Icon="@Icons.Material.Filled.Folder"
+                 Color="Color.Primary"
+                 Class="mr-3" />
+        <div class="local-dir__meta flex-grow-1">
+            <MediaTitle Text="@Node.Name" Typo="Typo.subtitle1" />
+            <MudText Typo="Typo.body2" Color="Color.Secondary">@($"{Node.DescendantTrackCount} 首")</MudText>
+        </div>
+        <div @onclick:stopPropagation="true">
+            <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
+                           Color="Color.Primary"
+                           Disabled="@(Node.DescendantTrackCount == 0)"
+                           OnClick="Play"
+                           aria-label="@($"播放 {Node.Name}")" />
+        </div>
+    </MudPaper>
+
+    @if (IsExpanded)
+    {
+        <div class="local-dir__body">
+            @foreach (var child in Node.Children)
+            {
+                <LocalDirectoryGroup TItem="TItem"
+                                     Node="child"
+                                     Depth="Depth + 1"
+                                     TrackRow="TrackRow"
+                                     PlayRequested="PlayRequested" />
+            }
+            @foreach (var track in Node.Tracks)
+            {
+                @if (TrackRow != null)
+                {
+                    @TrackRow(track)
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public LocalDirectoryNode<TItem> Node { get; set; } = default!;
+    [Parameter] public int Depth { get; set; }
+    [Parameter] public RenderFragment<TItem>? TrackRow { get; set; }
+    [Parameter] public EventCallback<LocalDirectoryNode<TItem>> PlayRequested { get; set; }
+
+    private bool _expanded;
+
+    private bool IsExpanded => _expanded;
+
+    private void Toggle() => _expanded = !_expanded;
+
+    private Task Play() => PlayRequested.InvokeAsync(Node);
+}

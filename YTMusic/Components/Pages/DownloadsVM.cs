@@ -4,6 +4,7 @@ using YTMusic.BLL.Abstractions;
 using YTMusic.BLL.Models;
 using YTMusic.BLL.Ports;
 using YTMusic.Services;
+using YTMusic.Services.Playback;
 using YTMusic.ViewModels.Shared;
 
 namespace YTMusic.Components.Pages;
@@ -11,6 +12,7 @@ namespace YTMusic.Components.Pages;
 public sealed partial class DownloadsVM : ViewModelBase
 {
     private readonly ILocalMusicService _localMusicService;
+    private readonly IDownloadMusicDirectoryProvider _downloadDirectoryProvider;
     private readonly IUiNotifier _notifier;
     private readonly IFavoriteService _favoriteService;
     private readonly IDialogHost _dialogHost;
@@ -18,6 +20,7 @@ public sealed partial class DownloadsVM : ViewModelBase
     private readonly NavigationManager _navigation;
 
     public List<DownloadedTrack> Files { get; private set; } = new();
+    public IReadOnlyList<LocalDirectoryNode<DownloadedTrack>> DirectoryNodes { get; private set; } = Array.Empty<LocalDirectoryNode<DownloadedTrack>>();
     public HashSet<string> FavoriteFilePaths { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     [ObservableProperty]
@@ -25,6 +28,7 @@ public sealed partial class DownloadsVM : ViewModelBase
 
     public DownloadsVM(
         ILocalMusicService localMusicService,
+        IDownloadMusicDirectoryProvider downloadDirectoryProvider,
         IUiNotifier notifier,
         IFavoriteService favoriteService,
         IDialogHost dialogHost,
@@ -32,6 +36,7 @@ public sealed partial class DownloadsVM : ViewModelBase
         NavigationManager navigation)
     {
         _localMusicService = localMusicService;
+        _downloadDirectoryProvider = downloadDirectoryProvider;
         _notifier = notifier;
         _favoriteService = favoriteService;
         _dialogHost = dialogHost;
@@ -48,6 +53,7 @@ public sealed partial class DownloadsVM : ViewModelBase
         {
             var files = await _localMusicService.GetDownloadedTracksAsync();
             Files = new List<DownloadedTrack>(files);
+            RebuildDirectories();
             FavoriteFilePaths.Clear();
 
             var filePaths = Files
@@ -85,6 +91,7 @@ public sealed partial class DownloadsVM : ViewModelBase
 
             await _localMusicService.RemoveDownloadedTrackAsync(file.VideoId, file.LocalFilePath);
             Files.Remove(file);
+            RebuildDirectories();
 
             _notifier.Success($"{file.Title} deleted");
             NotifyChanged();
@@ -126,6 +133,41 @@ public sealed partial class DownloadsVM : ViewModelBase
         {
             _notifier.Error($"Failed to open favorites: {ex.Message}");
         }
+    }
+
+    public async Task PlayDirectoryAsync(LocalDirectoryNode<DownloadedTrack> node)
+    {
+        var tracks = LocalDirectoryTree.Flatten(new[] { node });
+        if (tracks.Count == 0)
+        {
+            return;
+        }
+
+        var playlist = tracks.Select(file => new PlayingItem
+        {
+            VideoId = file.VideoId,
+            Title = file.Title,
+            Author = file.Author,
+            ThumbnailUrl = file.ThumbnailUrl,
+            LocalFilePath = file.LocalFilePath,
+            IsVideo = false
+        }).ToList();
+
+        if (await _playerService.PlayPlaylistAsync(playlist, 0, node.Name, MusicPlayerService.PlaybackMode.Sequential))
+        {
+            _navigation.NavigateTo("/player");
+        }
+    }
+
+    private void RebuildDirectories()
+    {
+        DirectoryNodes = LocalDirectoryTree.Build(
+            Files,
+            file => file.LocalFilePath,
+            file => file.Title,
+            file => file.DownloadedDate,
+            _downloadDirectoryProvider.GetDownloadedMusicDirectory(),
+            sortByName: false);
     }
 
     public async Task PlayLocalAudioFileAsync(DownloadedTrack file)
