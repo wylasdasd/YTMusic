@@ -29,8 +29,8 @@
         <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
         <ApplicationVersion>1</ApplicationVersion>
 
-        <!-- To develop, package, and publish an app to the Microsoft Store, see: https://aka.ms/MauiTemplateUnpackaged -->
-        <WindowsPackageType>None</WindowsPackageType>
+        <!-- Debug 保持 unpackaged 快速部署；Release 打 MSIX 侧载包，见下方 Release PropertyGroup -->
+        <WindowsPackageType Condition="'$(Configuration)' == 'Debug'">None</WindowsPackageType>
 
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
@@ -46,6 +46,18 @@
     <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
         <DebugSymbols>true</DebugSymbols>
         <AndroidIncludeDebugSymbols>true</AndroidIncludeDebugSymbols>
+    </PropertyGroup>
+
+    <!-- Windows MSIX 侧载打包：发布命令
+         dotnet publish YTMusic/YTMusic.csproj -f net10.0-windows10.0.19041.0 -c Release -p:RuntimeIdentifierOverride=win-x64 -->
+    <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows' and '$(Configuration)' == 'Release'">
+        <WindowsPackageType>MSIX</WindowsPackageType>
+        <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
+        <!-- YTMusic Sideload Signing 自签名证书，有效期至 2027-10-28；换证书后更新指纹 -->
+        <PackageCertificateThumbprint>07D071C3256A70346C90DD44064DCFFEE59B15C3</PackageCertificateThumbprint>
+    </PropertyGroup>
+    <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows' and '$(RuntimeIdentifierOverride)' != ''">
+        <RuntimeIdentifier>$(RuntimeIdentifierOverride)</RuntimeIdentifier>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(Configuration)' == 'Release' and $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
