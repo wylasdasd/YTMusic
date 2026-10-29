@@ -79,6 +79,14 @@ body {
     padding-bottom: var(--ytm-scroll-padding-bottom);
 }
 
+/* 播放页必须落在顶栏和底栏之间的一屏里，封面缩小，不靠页面滚动露出控制按钮 */
+.ytm-page.player-page-scroll > .ytm-page__scroll {
+    overflow: hidden;
+    padding-bottom: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 .ytm-page--tabs {
     flex: 1 1 auto;
     min-height: 0;
@@ -133,6 +141,15 @@ video.player-video {
     background: #000;
     object-fit: contain;
     pointer-events: none;
+}
+
+.player-video-frame video.player-video {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    aspect-ratio: auto;
+    object-fit: contain;
 }
 
 .ytm-player-progress {

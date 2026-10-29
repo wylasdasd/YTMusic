@@ -1,20 +1,29 @@
 .player-volume-inline {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
-    width: 92px;
+    gap: 10px;
+    width: 124px;
     flex-shrink: 0;
-    margin-left: 2px;
+    margin-left: 8px;
 }
 
-.player-volume-icon {
+.player-volume-inline ::deep .player-volume-icon {
     color: var(--ytm-text-secondary);
-    flex-shrink: 0;
-    font-size: 1.1rem !important;
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    margin: 0;
+    padding: 0;
+    font-size: 22px !important;
 }
 
 .player-volume-slider {
-    flex: 1;
+    flex: 1 1 auto;
     min-width: 0;
     margin: 0;
+}
+
+.player-volume-inline ::deep .mud-slider {
+    margin: 0;
+    padding: 0;
 }

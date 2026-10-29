@@ -28,20 +28,22 @@
                  style="@($"background-image: linear-gradient(180deg, color-mix(in srgb, var(--ytm-bg-base) 18%, transparent), color-mix(in srgb, var(--ytm-bg-base) 92%, transparent)), url('{currentVideo.ThumbnailUrl}');")">
             </div>
 
-            <div class="player-content player-content--video">
+            <div class="player-stack">
                 @if (!PlayerService.UseNativeVideoPlayback)
                 {
-                    <div class="player-video-frame">
-                        <div class="player-video-frame__mount" @ref="_videoFrame"></div>
-                        @if (_videoAttached)
-                        {
-                            <button type="button"
-                                    class="player-video-fullscreen-btn"
-                                    @onclick="ToggleFullscreenAsync"
-                                    aria-label="@(_isFullscreen ? "Exit fullscreen" : "Enter fullscreen")">
-                                <MudIcon Icon="@(_isFullscreen ? Icons.Material.Filled.FullscreenExit : Icons.Material.Filled.Fullscreen)" />
-                            </button>
-                        }
+                    <div class="player-art-slot">
+                        <div class="player-video-frame">
+                            <div class="player-video-frame__mount" @ref="_videoFrame"></div>
+                            @if (_videoAttached)
+                            {
+                                <button type="button"
+                                        class="player-video-fullscreen-btn"
+                                        @onclick="ToggleFullscreenAsync"
+                                        aria-label="@(_isFullscreen ? "Exit fullscreen" : "Enter fullscreen")">
+                                    <MudIcon Icon="@(_isFullscreen ? Icons.Material.Filled.FullscreenExit : Icons.Material.Filled.Fullscreen)" />
+                                </button>
+                            }
+                        </div>
                     </div>
                 }
 

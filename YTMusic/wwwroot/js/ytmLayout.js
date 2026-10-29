@@ -1,4 +1,4 @@
-// YTMusic 布局相关 JS（由 index.html 引入，Blazor 通过 IJSRuntime 调用）。
+﻿// YTMusic 布局相关 JS（由 index.html 引入，Blazor 通过 IJSRuntime 调用）。
 window.ytmLayout = window.ytmLayout || {};
 
 // ---------------------------------------------------------------------------
@@ -266,3 +266,4 @@ window.ytmLayout.initBottomNav = function (navId) {
         window.visualViewport.addEventListener("scroll", updateBottom, { passive: true });
     }
 };
+

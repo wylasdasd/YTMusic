@@ -15,9 +15,9 @@
     [Parameter] public EventCallback<double> VolumeChanged { get; set; }
 
     private string VolumeIcon =>
-        Volume <= 0.001 ? Icons.Material.Filled.VolumeOff
-        : Volume < 0.45 ? Icons.Material.Filled.VolumeDown
-        : Icons.Material.Filled.VolumeUp;
+        Volume <= 0.001 ? Icons.Material.Outlined.VolumeOff
+        : Volume < 0.45 ? Icons.Material.Outlined.VolumeDown
+        : Icons.Material.Outlined.VolumeUp;
 
     private Task OnVolumeChangedAsync(double value) => VolumeChanged.InvokeAsync(value);
 }
